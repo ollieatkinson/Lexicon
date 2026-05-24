@@ -113,17 +113,22 @@ struct InteractiveSession {
 					let id = try rest.required(0, named: "id")
 					let type = try rest.required(1, named: "type")
 					try document.updateNode(id) { node in
-						_ = node.type.remove(type)
+						guard node.type.remove(type) != nil else {
+							throw ValidationError("Node '\(id)' does not declare type '\(type)'.")
+						}
 					}
 					try emit(InteractiveMessage(event: "changed", message: "removed type \(type) from \(id)"))
 				case "set-protonym":
 					let id = try rest.required(0, named: "id")
-					let protonym = rest.dropFirst().first
+					let protonym = try rest.required(1, named: "protonym reference or --clear")
 					try document.updateNode(id) { $0.protonym = protonym == "--clear" ? nil : protonym }
 					try emit(InteractiveMessage(event: "changed", message: "updated protonym on \(id)"))
 				case "set-default":
 					let id = try rest.required(0, named: "id")
 					let value = rest.dropFirst().joined(separator: " ")
+					guard !value.isEmpty else {
+						throw ValidationError("Provide a default value or --clear.")
+					}
 					try document.updateNode(id) { node in
 						node.defaultValue = value == "--clear" ? nil : .parseAgentArgument(value)
 					}
@@ -191,10 +196,19 @@ struct InteractiveSession {
 		try document.updateNode(id) { node in
 			switch action {
 				case "add":
+					guard !text.isEmpty else {
+						throw ValidationError("\(label.capitalized) add requires text.")
+					}
 					node[keyPath: keyPath].append(text)
 				case "remove":
+					guard !text.isEmpty else {
+						throw ValidationError("\(label.capitalized) remove requires text.")
+					}
 					node[keyPath: keyPath].removeAll { $0 == text }
 				case "clear":
+					guard text.isEmpty else {
+						throw ValidationError("\(label.capitalized) clear does not take text.")
+					}
 					node[keyPath: keyPath].removeAll()
 				default:
 					throw ValidationError("Unknown \(label) action: \(action)")
@@ -260,4 +274,3 @@ enum InteractiveText {
 		return (["Outgoing:"] + outgoing + ["Incoming:"] + incoming).joined(separator: "\n")
 	}
 }
-

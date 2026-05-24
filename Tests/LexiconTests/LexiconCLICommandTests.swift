@@ -31,6 +31,9 @@ final class LexiconCLICommandTests: Hopes {
 		hope.true(format.contains("\"changed\" : true"))
 
 		_ = try Self.lexicon("rename", source.path, "root.item", "entry", "--output", renamed.path)
+		let renamedOutput = try String(contentsOf: renamed, encoding: .utf8)
+		hope.true(renamedOutput.contains("= entry"))
+		hope.false(renamedOutput.contains("= root.entry"))
 		let diff = try Self.lexicon("diff", source.path, renamed.path).stdout
 		hope.true(diff.contains("\"id\" : \"root.entry\""))
 		hope.true(diff.contains("\"id\" : \"root.item\""))
@@ -67,6 +70,39 @@ final class LexiconCLICommandTests: Hopes {
 		hope.true(json.stdout.contains("\"id\":\"root.item\""))
 	}
 
+	func test_interactive_editing_validation_errors() throws {
+		let directory = FileManager.default.temporaryDirectory
+			.appendingPathComponent(UUID().uuidString, isDirectory: true)
+		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+		defer {
+			try? FileManager.default.removeItem(at: directory)
+		}
+
+		let source = directory.appendingPathComponent("source.taskpaper")
+		try Data(Self.fixture.utf8).write(to: source)
+
+		let result = try Self.lexicon(
+			"interactive",
+			source.path,
+			stdin: """
+			unset-type root.item root.missing
+			set-protonym root.alias
+			set-default root.item
+			note add root.item
+			comment remove root.item
+			note clear root.item extra
+			quit
+
+			"""
+		)
+		hope.true(result.stdout.contains("error: Node 'root.item' does not declare type 'root.missing'."))
+		hope.true(result.stdout.contains("error: Missing required argument: protonym reference or --clear"))
+		hope.true(result.stdout.contains("error: Provide a default value or --clear."))
+		hope.true(result.stdout.contains("error: Note add requires text."))
+		hope.true(result.stdout.contains("error: Comment remove requires text."))
+		hope.true(result.stdout.contains("error: Note clear does not take text."))
+	}
+
 	func test_editing_commands_write_taskpaper() throws {
 		let directory = FileManager.default.temporaryDirectory
 			.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -98,6 +134,31 @@ final class LexiconCLICommandTests: Hopes {
 		let inspect = try Self.lexicon("inspect", noted.path, "root.child").stdout
 		hope.true(inspect.contains("\"notes\" : ["))
 		hope.true(inspect.contains("agent visible"))
+	}
+
+	func test_validation_rejects_absolute_protonym_references() throws {
+		let directory = FileManager.default.temporaryDirectory
+			.appendingPathComponent(UUID().uuidString, isDirectory: true)
+		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+		defer {
+			try? FileManager.default.removeItem(at: directory)
+		}
+
+		let source = directory.appendingPathComponent("source.taskpaper")
+		try Data("""
+		root:
+			item:
+			alias:
+			= root.item
+		""".utf8).write(to: source)
+
+		let output = try Self.lexicon("validate", source.path).stdout
+		hope.true(output.contains("\"valid\" : false"))
+		hope.true(output.contains("\"kind\" : \"unresolvedProtonym\""))
+
+		let refs = try Self.lexicon("refs", source.path, "root.alias").stdout
+		hope.true(refs.contains("\"kind\" : \"protonym\""))
+		hope.true(refs.contains("\"exists\" : false"))
 	}
 }
 

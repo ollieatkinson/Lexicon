@@ -46,7 +46,7 @@ extension Lexicon.Document {
 				))
 			}
 
-			if let protonym = node.protonym, !index.resolves(protonym, fromParentOf: id) {
+			if let protonym = node.protonym, !index.resolvesRelative(protonym, fromParentOf: id) {
 				diagnostics.append(.init(
 					severity: "error",
 					kind: "unresolvedProtonym",
@@ -142,8 +142,7 @@ extension Lexicon.Document {
 			return []
 		}
 		var references: [ReferenceUse] = []
-		func append(kind: String, reference: String) {
-			let resolved = reference.resolved(fromParentOf: id, in: index)
+		func append(kind: String, reference: String, resolved: String?) {
 			references.append(.init(
 				kind: kind,
 				path: id,
@@ -153,13 +152,13 @@ extension Lexicon.Document {
 			))
 		}
 		for type in node.type.sorted() {
-			append(kind: "type", reference: type)
+			append(kind: "type", reference: type, resolved: type.resolved(fromParentOf: id, in: index))
 		}
 		if let protonym = node.protonym {
-			append(kind: "protonym", reference: protonym)
+			append(kind: "protonym", reference: protonym, resolved: protonym.resolvedRelative(fromParentOf: id, in: index))
 		}
 		if case .reference(let reference) = node.defaultValue {
-			append(kind: "default", reference: reference)
+			append(kind: "default", reference: reference, resolved: reference.resolved(fromParentOf: id, in: index))
 		}
 		return references.sorted {
 			($0.kind, $0.reference) < ($1.kind, $1.reference)
@@ -339,7 +338,11 @@ extension Lexicon.Graph.Node {
 
 	mutating func rewriteReferences(path: String, index: Set<String>, from oldID: String, to newID: String) {
 		type = Set(type.map { $0.rewritingReference(from: oldID, to: newID, at: path, index: index) })
-		protonym = protonym?.rewritingReference(from: oldID, to: newID, at: path, index: index)
+		if let reference = protonym {
+			protonym = reference
+				.rewritingReference(from: oldID, to: newID, at: path, index: index)
+				.relativeReference(fromParentOf: path)
+		}
 		if case .reference(let reference) = defaultValue {
 			defaultValue = .reference(reference.rewritingReference(from: oldID, to: newID, at: path, index: index))
 		}
@@ -359,4 +362,3 @@ extension Lexicon.Graph.Node.DefaultValue {
 		return .literal(.parse(trimmed))
 	}
 }
-

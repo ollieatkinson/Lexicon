@@ -91,6 +91,10 @@ extension Set where Element == String {
 		let parent = components.dropLast().joined(separator: ".")
 		return contains("\(parent).\(reference)")
 	}
+
+	func resolvesRelative(_ reference: String, fromParentOf id: String) -> Bool {
+		reference.resolvedRelative(fromParentOf: id, in: self) != nil
+	}
 }
 
 extension String {
@@ -116,6 +120,16 @@ extension String {
 		return index.contains(relative) ? relative : nil
 	}
 
+	func resolvedRelative(fromParentOf id: String, in index: Set<String>) -> String? {
+		let components = id.pathComponents
+		guard components.count > 1 else {
+			return nil
+		}
+		let parent = components.dropLast().joined(separator: ".")
+		let relative = "\(parent).\(self)"
+		return index.contains(relative) ? relative : nil
+	}
+
 	func rewritingReference(from oldID: String, to newID: String, at id: String, index: Set<String>) -> String {
 		if isSameOrDescendant(of: oldID) {
 			return newID + dropFirst(oldID.count)
@@ -124,6 +138,22 @@ extension String {
 			return self
 		}
 		return newID + resolved.dropFirst(oldID.count)
+	}
+
+	func relativeReference(fromParentOf id: String) -> String {
+		let components = id.pathComponents
+		guard components.count > 1 else {
+			return self
+		}
+		let parent = components.dropLast().joined(separator: ".")
+		if self == parent {
+			return ""
+		}
+		let prefix = "\(parent)."
+		guard hasPrefix(prefix) else {
+			return self
+		}
+		return String(dropFirst(prefix.count))
 	}
 
 	func shellWords() throws -> [String] {
