@@ -81,7 +81,7 @@ private extension Lexicon.Graph.Node.Class.JSON {
 					"className": names.className,
 					"baseClass": names.classPrefix,
 					"protocolName": names.protocolName,
-					"classBlock": typeScriptBlock(emptyTypeScriptClassMembers(prefix: prefix, classes: classes, supertype: supertype?.standAloneProtocolInheritanceSuffix(protocolPrefix: names.protocolPrefix))),
+					"classBlock": typeScriptBlock(emptyTypeScriptClassMembers(prefix: prefix, classes: classes)),
 					"protocolAlias": names.protocolBase(supertype: supertype),
 				])
 			]
@@ -113,16 +113,13 @@ private extension Lexicon.Graph.Node.Class.JSON {
 
 	func emptyTypeScriptClassMembers(
 		prefix: (class: String, protocol: String),
-		classes: [Lexicon.Graph.Node.Class.JSON],
-		supertype: Lemma.ID?
+		classes: [Lexicon.Graph.Node.Class.JSON]
 	) -> [String] {
-		guard let supertype else {
-			return []
-		}
-		let superChildren = classes.first { $0.id == supertype }?.children ?? []
-		return superChildren.map { child in
-			"  \(child)!: \(prefix.class)_\(supertype)_\(child);"
-		}
+		standAloneInheritedAccessors(classes: classes)
+			.filter { !$0.isSynonym }
+			.map { accessor in
+				"  \(accessor.name)!: \(prefix.class)_\(accessor.sourceID.standAloneTypeSuffix);"
+			}
 	}
 
 	func typeScriptClassMembers(prefix: (class: String, protocol: String), classes: [Lexicon.Graph.Node.Class.JSON]) -> [String] {
