@@ -9,7 +9,7 @@ public extension Lexicon.Graph {
 	
 	// TODO: array of referenced nodes (i.e. useful protocols/interfaces)
 	
-	struct JSON: Codable {
+	struct JSON: Codable, Sendable {
 		public var date: Date
 		public var name: Lemma.Name
 		public var classes: [Node.Class.JSON]
@@ -20,10 +20,28 @@ public extension Lexicon {
 	
 	func json() -> Graph.JSON {
 		Graph.JSON(
-			date: graph.date,
+			date: document.date,
 			name: graph.root.name,
-			classes: root.classes().values.map(\.json).sortedByLocalizedStandard(by: \.id)
+			classes: classes().values.map(\.json).sorted { $0.id < $1.id }
 		)
+	}
+
+	func classes() -> [Lemma.ID: Graph.Node.Class] {
+
+		var classes: [Lemma.ID: Graph.Node.Class] = [:]
+
+		for root in roots.values {
+			root.graphTraversal(.depthFirst) { lemma in
+				let o = Graph.Node.Class(lemma: lemma)
+				classes[o.json.id] = o
+			}
+		}
+
+		for klass in classes.values {
+			klass.json.supertype = Lemma.supertype(for: klass, in: &classes)
+		}
+
+		return classes
 	}
 }
 
@@ -67,7 +85,7 @@ private extension Sequence where Element == Lemma {
 	}
 }
 
-private extension Lemma {
+fileprivate extension Lemma {
 	
 	typealias Class = Lexicon.Graph.Node.Class
 	
@@ -123,19 +141,17 @@ public extension Lexicon.Graph.Node {
 				protonym: lemma.protonym?.id,
 				type: lemma.ownType
 					.keys
-					.sortedByLocalizedStandard()
-					.unlessEmpty
-					.map(OrderedSet.init),
+					.unlessEmpty,
 				children: lemma.ownChildren
 					.filter(\.value.protonym.isNil)
 					.keys
-					.sortedByLocalizedStandard()
-					.unlessEmpty
-					.map(OrderedSet.init),
+					.unlessEmpty,
 				synonyms: lemma.ownChildren
 					.compactMap{ (name, lemma) in lemma.node.protonym.map{ protonym in (name, protonym)  } }
 					.unlessEmpty
-					.map{ Dictionary($0){ _, last in last }}
+					.map{ Dictionary($0){ _, last in last }},
+				defaultValue: lemma.jsonDefaultValue.map(Lexicon.Graph.Node.DefaultValue.JSON.init),
+				notes: lemma.node.notes.unlessEmpty
 			)
 			
 			self.lemma = lemma
@@ -178,12 +194,14 @@ extension Lexicon.Graph.Node.Class: Encodable {
 	
 	// TODO: replace dictionaries with OrderedDictionary when it's json serialisation is fixed
 	
-	public struct JSON: Codable {
+	public struct JSON: Codable, Sendable {
 		public var id: Lemma.ID
 		public var protonym: Lemma.ID?
 		public var type: OrderedSet<Lemma.ID>?
 		public var children: OrderedSet<Lemma.Name>?
 		public var synonyms: [Lemma.Name: Lemma.Protonym]?
+		public var defaultValue: Lexicon.Graph.Node.DefaultValue.JSON?
+		public var notes: [String]?
 		public var supertype: Lemma.ID?
 		public var mixin: Mixin?
 	}
@@ -195,7 +213,7 @@ extension Lexicon.Graph.Node.Class: Encodable {
 
 public extension Lexicon.Graph.Node.Class.JSON {
 	
-	struct Mixin: Codable {
+	struct Mixin: Codable, Sendable {
 		public var type: Lemma.ID
 		public var children: [Lemma.Name: Lemma.ID]?
 	}
@@ -203,11 +221,62 @@ public extension Lexicon.Graph.Node.Class.JSON {
 
 public extension Lexicon.Graph.Node.Class.JSON {
 	
-	@inlinable var hasProperties: Bool {
+	var hasProperties: Bool {
 		!hasNoProperties
 	}
 	
-	@inlinable var hasNoProperties: Bool {
+	var hasNoProperties: Bool {
 		(children?.isEmpty ?? true) && (synonyms?.isEmpty ?? true) && (mixin?.children?.isEmpty ?? true)
+	}
+}
+
+private extension Lemma {
+
+	var jsonDefaultValue: Lexicon.Graph.Node.DefaultValue? {
+		guard let defaultValue = defaultValue else {
+			return nil
+		}
+
+		switch defaultValue {
+			case .literal(let value):
+				return value.filtered(matching: self).map(Lexicon.Graph.Node.DefaultValue.literal)
+
+			case .reference(let id):
+				guard jsonFields.values.contains(where: { $0.id == id }) else {
+					return nil
+				}
+				return .reference(id)
+		}
+	}
+
+	var jsonFields: Children {
+		children.filter { !$0.value.isSynonym }
+	}
+}
+
+private extension JSONValue {
+
+	@LexiconActor func filtered(matching lemma: Lemma) -> JSONValue? {
+		let fields = lemma.jsonFields
+
+		switch self {
+			case .object(let object) where fields.isNotEmpty:
+				let values = object.reduce(into: [String: JSONValue]()) { values, field in
+					guard
+						let lemma = fields[field.key],
+						let value = field.value.filtered(matching: lemma)
+					else {
+						return
+					}
+					values[field.key] = value
+				}
+				return values.unlessEmpty.map(JSONValue.object)
+
+			case .object:
+				return self
+
+			default:
+				return fields.isEmpty ? self : nil
+		}
 	}
 }

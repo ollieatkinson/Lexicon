@@ -82,6 +82,23 @@ private let expected = """
       ]
     },
     {
+      "children" : [
+        "c"
+      ],
+      "id" : "root.a.b",
+      "supertype" : "root.a",
+      "type" : [
+        "root.a"
+      ]
+    },
+    {
+      "id" : "root.a.b.c",
+      "supertype" : "root",
+      "type" : [
+        "root"
+      ]
+    },
+    {
       "id" : "root.a_&_root.bad",
       "mixin" : {
         "children" : {
@@ -120,23 +137,6 @@ private let expected = """
         "type" : "root.first"
       },
       "supertype" : "root.a"
-    },
-    {
-      "children" : [
-        "c"
-      ],
-      "id" : "root.a.b",
-      "supertype" : "root.a",
-      "type" : [
-        "root.a"
-      ]
-    },
-    {
-      "id" : "root.a.b.c",
-      "supertype" : "root",
-      "type" : [
-        "root"
-      ]
     },
     {
       "children" : [
