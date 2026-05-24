@@ -1,4 +1,4 @@
-@_exported import SwiftLexicon // From https://github.com/screensailor/Lexicon
+@_exported import SwiftLexicon // https://github.com/thousandyears/Lexicon
 import Foundation
 
 public let test = L_test("test")
