@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(CoreFoundation)
+import CoreFoundation
+#endif
 
 public extension JSON {
     init(jsonObject value: Any?) throws {
@@ -146,9 +149,15 @@ private extension JSON {
     }
 
     static func number(_ value: NSNumber) -> JSON {
+        #if canImport(CoreFoundation)
         if CFGetTypeID(value) == CFBooleanGetTypeID() {
             return JSON(value.boolValue)
         }
+        #else
+        if String(cString: value.objCType) == "c" {
+            return JSON(value.boolValue)
+        }
+        #endif
         let double = value.doubleValue
         if double.rounded() == double, let int = Int(exactly: value.int64Value) {
             return JSON(int)
