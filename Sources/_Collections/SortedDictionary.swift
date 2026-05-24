@@ -134,3 +134,5 @@ extension SortedDictionary: Sequence {
 }
 
 extension SortedDictionary: Equatable where Value: Equatable {}
+
+extension SortedDictionary: @unchecked Sendable where Key: Sendable, Value: Sendable {}

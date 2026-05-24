@@ -8,7 +8,7 @@ import _Collections
 
 public extension Lexicon {
 
-	struct Document {
+	struct Document: Sendable {
 		public typealias Roots = _Collections.SortedDictionary<Graph.Node.Name, Graph.Node>
 
 		public var date: Date
@@ -56,8 +56,8 @@ public extension Lexicon {
 		}
 	}
 
-	struct Import: Hashable, Codable, CustomStringConvertible {
-		public enum Location: String, Codable {
+	struct Import: Hashable, Codable, Sendable, CustomStringConvertible {
+		public enum Location: String, Codable, Sendable {
 			case local
 			case remote
 		}

@@ -13,7 +13,7 @@ public extension Lexicon.Graph.Node {
 
 public extension Lexicon.Graph {
 	
-	struct Node {
+	struct Node: Sendable {
 		
 		public var name: Name
 		public var type: Set<ID>
