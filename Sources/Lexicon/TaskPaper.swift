@@ -3,7 +3,9 @@
 //
 
 import Foundation
+#if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
+#endif
 
 public extension UTType {
 	static var lexicon = UTType(importedAs: "com.github.screensailor.lexicon")
@@ -17,12 +19,13 @@ public class TaskPaper {
 	public static let pattern = try! (
 		line: NSRegularExpression(pattern: "^(?<tabs>\\t*)(?<content>.+)"),
 		lemma: NSRegularExpression(pattern: "^(?<lemma>[\\w]+):?\\s*$"), // TODO: Optional colon `:?` allows plain text (tabbed) outlines, but this should be opted into
-		operator: NSRegularExpression(pattern: "^(?<operator>[+=])\\s*(?<content>\\S+)")
+		operator: NSRegularExpression(pattern: "^(?<operator>[+=?])\\s*(?<content>.*\\S)?\\s*$")
 	)
 	
 	public let string: String
 	
 	private var result: Result<Lexicon.Graph, Error>?
+	private var documentResult: Result<Lexicon.Document, Error>?
 	
 	public init(_ string: String) {
 		self.string = string
@@ -41,7 +44,24 @@ public class TaskPaper {
 			return try result.get()
 		}
 		
+		do {
+			let graph = try decodeDocument().graph()
+			result = .success(graph)
+			return graph
+		} catch {
+			result = .failure(error)
+			throw error
+		}
+	}
+
+	public func decodeDocument() throws -> Lexicon.Document {
+
+		if let result = documentResult {
+			return try result.get()
+		}
+
 		var path: [Node] = []
+		var document = Lexicon.Document()
 		var error: Error?
 		
 		string.enumerateLines{ line, stop in
@@ -52,7 +72,7 @@ public class TaskPaper {
 				let range = match.range(withName: "content")
 				let content = line.substring(with: range)
 				let depth = match.range(withName: "tabs").length
-				try self.decode(line: content, depth: depth, path: &path)
+				try self.decode(line: content, depth: depth, path: &path, document: &document)
 			} catch let o {
 				stop = true
 				error = o
@@ -62,21 +82,17 @@ public class TaskPaper {
 		while path.count > 1 {
 			reduce(&path)
 		}
+		if let root = path.popLast() {
+			document.roots[root.name] = root
+		}
 
 		if let error = error {
-			result = .failure(error)
+			documentResult = .failure(error)
 			throw error
 		}
 		
-		guard let root = path.first else {
-			let error = "The taskpaper file does not declare a root lemma"
-			result = .failure(error)
-			throw error
-		}
-		
-		let graph = Lexicon.Graph(root: root)
-		result = .success(graph)
-		return graph
+		documentResult = .success(document)
+		return document
 	}
 	
 	func reduce(_ path: inout [Node]) {
@@ -84,7 +100,40 @@ public class TaskPaper {
 		path[path.endIndex - 1].children[child.name] = child
 	}
 	
-	func decode(line: String, depth: Int, path: inout [Node]) throws {
+	func decode(line: String, depth: Int, path: inout [Node], document: inout Lexicon.Document) throws {
+
+		if line.hasPrefix("@ ") {
+			if path.isEmpty {
+				document.imports.append(.init(String(line.dropFirst(2))))
+			} else if depth == 0 {
+				finishCurrentRoot(path: &path, document: &document)
+				document.imports.append(.init(String(line.dropFirst(2))))
+			} else {
+				try focus(depth: depth, path: &path, line: line)
+				path[path.endIndex - 1].connections.append(.init(String(line.dropFirst(2))))
+			}
+			return
+		}
+
+		if line.hasPrefix("# ") {
+			if path.isEmpty {
+				document.comments.append(String(line.dropFirst(2)))
+			} else {
+				try focus(depth: depth, path: &path, line: line)
+				path[path.endIndex - 1].comments.append(String(line.dropFirst(2)))
+			}
+			return
+		}
+
+		if line.hasPrefix("> ") {
+			if path.isEmpty {
+				document.notes.append(String(line.dropFirst(2)))
+			} else {
+				try focus(depth: depth, path: &path, line: line)
+				path[path.endIndex - 1].notes.append(String(line.dropFirst(2)))
+			}
+			return
+		}
 		
 		let name = TaskPaper.pattern.lemma.first(in: line)?["lemma"]
 		
@@ -96,7 +145,13 @@ public class TaskPaper {
 			return
 		}
 		
-		if let name = name, depth > 0 { // ignore any additional roots... for now :)
+		if let name = name {
+
+			if depth == 0 {
+				finishCurrentRoot(path: &path, document: &document)
+				path = [Node(name: name)]
+				return
+			}
 			
 			let indent = depth - (path.count - 1)
 			
@@ -106,9 +161,6 @@ public class TaskPaper {
 					break
 
 				case 0: // sibling
-					guard path.count > 1 else {
-						throw "Found a second root: \(name)" // TODO: allow multiple roots!
-					}
 					reduce(&path)
 
 				case ..<0: // ancestor
@@ -132,10 +184,35 @@ public class TaskPaper {
 			let content = match["content"]
 		{
 			switch symbol {
-				case "+": path[path.endIndex - 1].type.insert(content)
-				case "=": path[path.endIndex - 1].protonym = content
+				case "+":
+					try focus(depth: depth, path: &path, line: line)
+					path[path.endIndex - 1].type.insert(content)
+				case "=":
+					try focus(depth: depth, path: &path, line: line)
+					path[path.endIndex - 1].protonym = content
+				case "?":
+					try focus(depth: depth, path: &path, line: line)
+					path[path.endIndex - 1].defaultValue = Self.defaultValue(from: content)
 				default: break
 			}
+		}
+	}
+
+	func finishCurrentRoot(path: inout [Node], document: inout Lexicon.Document) {
+		while path.count > 1 {
+			reduce(&path)
+		}
+		if let root = path.popLast() {
+			document.roots[root.name] = root
+		}
+	}
+
+	func focus(depth: Int, path: inout [Node], line: String) throws {
+		guard depth < path.count else {
+			return
+		}
+		while path.count > depth + 1 {
+			reduce(&path)
 		}
 	}
 }
@@ -147,18 +224,46 @@ public extension TaskPaper {
 	}
 	
 	static func encode(_ graph: Lexicon.Graph) -> String {
+		encode(Lexicon.Document(graph))
+	}
+
+	static func encode(_ document: Lexicon.Document) -> String {
 		
 		var lines: [String] = []
 		
-		graph.root.traverse(sorted: true) { id, name, node in
-			let depth = id.reduce(0){ a, e in e == "." ? a + 1 : a }
-			let tabs = "\t" * depth
-			lines.append("\(tabs)\(name):")
-			if let protonym = node.protonym {
-				lines.append("\(tabs)= \(protonym)")
-			} else {
-				for type in node.type.sorted(by: <) { // TODO: consider whether to sort it lexicographically
-					lines.append("\(tabs)+ \(type)")
+		for comment in document.comments {
+			lines.append("# \(comment)")
+		}
+		for note in document.notes {
+			lines.append("> \(note)")
+		}
+		for `import` in document.imports.sortedByLocalizedStandard(by: \.reference) {
+			lines.append("@ \(`import`.reference)")
+		}
+
+		for root in document.roots.values.sortedByLocalizedStandard(by: \.name) {
+			root.traverse(sorted: true) { id, name, node in
+				let depth = id.reduce(0){ a, e in e == "." ? a + 1 : a }
+				let tabs = "\t" * depth
+				lines.append("\(tabs)\(name):")
+				for comment in node.comments {
+					lines.append("\(tabs)# \(comment)")
+				}
+				for note in node.notes {
+					lines.append("\(tabs)> \(note)")
+				}
+				if let defaultValue = node.defaultValue {
+					lines.append("\(tabs)? \(Self.encode(defaultValue))")
+				}
+				for connection in node.connections.sortedByLocalizedStandard(by: \.reference) {
+					lines.append("\(tabs)@ \(connection.reference)")
+				}
+				if let protonym = node.protonym {
+					lines.append("\(tabs)= \(protonym)")
+				} else {
+					for type in node.type.sorted(by: <) { // TODO: consider whether to sort it lexicographically
+						lines.append("\(tabs)+ \(type)")
+					}
 				}
 			}
 		}
@@ -167,4 +272,36 @@ public extension TaskPaper {
 	}
 }
 
+private extension TaskPaper {
 
+	static func defaultValue(from content: String?) -> Lexicon.Graph.Node.DefaultValue {
+		let content = content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+		if content.hasPrefix("@") {
+			let id = content.dropFirst().trimmingCharacters(in: .whitespacesAndNewlines)
+			return .reference(id)
+		} else {
+			return .literal(.parse(content))
+		}
+	}
+
+	static func encode(_ value: Lexicon.Graph.Node.DefaultValue) -> String {
+		switch value {
+			case .reference(let id):
+				return "@ \(id)"
+			case .literal(let value):
+				return encode(value)
+		}
+	}
+
+	static func encode(_ value: JSONValue) -> String {
+		let encoder = JSONEncoder()
+		encoder.outputFormatting = [.sortedKeys]
+		guard
+			let data = try? encoder.encode(value),
+			let string = String(data: data, encoding: .utf8)
+		else {
+			return ""
+		}
+		return string
+	}
+}

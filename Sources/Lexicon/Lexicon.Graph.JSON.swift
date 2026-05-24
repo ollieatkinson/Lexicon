@@ -135,7 +135,9 @@ public extension Lexicon.Graph.Node {
 				synonyms: lemma.ownChildren
 					.compactMap{ (name, lemma) in lemma.node.protonym.map{ protonym in (name, protonym)  } }
 					.unlessEmpty
-					.map{ Dictionary($0){ _, last in last }}
+					.map{ Dictionary($0){ _, last in last }},
+				defaultValue: lemma.defaultValue,
+				notes: lemma.node.notes.unlessEmpty
 			)
 			
 			self.lemma = lemma
@@ -184,6 +186,8 @@ extension Lexicon.Graph.Node.Class: Encodable {
 		public var type: OrderedSet<Lemma.ID>?
 		public var children: OrderedSet<Lemma.Name>?
 		public var synonyms: [Lemma.Name: Lemma.Protonym]?
+		public var defaultValue: Lexicon.Graph.Node.DefaultValue?
+		public var notes: [String]?
 		public var supertype: Lemma.ID?
 		public var mixin: Mixin?
 	}

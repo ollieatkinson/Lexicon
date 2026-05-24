@@ -3,7 +3,9 @@
 //
 
 import Lexicon
+#if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
+#endif
 
 public extension UTType {
 	static var typescript = UTType(filenameExtension: "ts", conformingTo: .sourceCode)!

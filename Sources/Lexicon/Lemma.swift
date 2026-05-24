@@ -70,13 +70,23 @@ public extension Lemma {
 		if let protonym = node.protonym {
 			return Lexicon.Graph.Node(
 				name: node.name,
-				protonym: protonym
+				protonym: protonym,
+				stableID: node.stableID,
+				defaultValue: node.defaultValue,
+				connections: node.connections,
+				notes: node.notes,
+				comments: node.comments
 			)
 		} else {
 			return Lexicon.Graph.Node(
 				name: node.name,
 				children: ownChildren.mapValues{ $0.regenerateNode(ƒ) },
-				type: node.type
+				type: node.type,
+				stableID: node.stableID,
+				defaultValue: node.defaultValue,
+				connections: node.connections,
+				notes: node.notes,
+				comments: node.comments
 			)
 		}
 	}
@@ -124,6 +134,21 @@ public extension Lemma {
 	
 	@inlinable func `is`(_ type: Lemma) -> Bool {
 		self.type.keys.contains(type.id)
+	}
+
+	var defaultValue: Lexicon.Graph.Node.DefaultValue? {
+		if let protonym = protonym {
+			return protonym.defaultValue
+		}
+		if let own = node.defaultValue {
+			return own
+		}
+		for (_, type) in ownType.sorted(by: { $0.key.localizedStandardCompare($1.key) == .orderedAscending }) {
+			if let value = type.unwrapped.defaultValue {
+				return value
+			}
+		}
+		return nil
 	}
 }
 
@@ -333,8 +358,11 @@ extension Lemma {
 		}
 		else {
 			var o = ownChildren
-			for (_, type) in ownType {
+			for (_, type) in ownType.sorted(by: { $0.key.localizedStandardCompare($1.key) == .orderedAscending }) {
 				for (name, lemma) in type.children {
+					guard o[name] == nil else {
+						continue
+					}
 					o[name] = Lemma(name: name, node: lemma.node, parent: self, lexicon: lexicon)
 				}
 			}
@@ -349,7 +377,7 @@ extension Lemma {
 		else {
 			var o = ownType
 			o[id] = self
-			for (_, lemma) in ownType {
+			for (_, lemma) in ownType.sorted(by: { $0.key.localizedStandardCompare($1.key) == .orderedAscending }) {
 				o.merge(lemma.type){ o, _ in o }
 			}
 			return o
@@ -359,12 +387,12 @@ extension Lemma {
 	func lazy_ownType() -> [ID: Unowned<Lemma>] {
 		var o: [ID: Unowned<Lemma>] = [:]
 		if isGraphNode {
-			for id in node.type {
+			for id in node.type.sortedByLocalizedStandard() {
 				o[id] = lexicon.dictionary[id].map(Unowned.init)
 			}
 		} else if let parent = lineage.first(where: \.isGraphNode) {
 			let descendant = id.dotPath(after: parent.id).split(separator: ".").map(Name.init)
-			for id in parent.node.type {
+			for id in parent.node.type.sortedByLocalizedStandard() {
 				guard let node = lexicon.dictionary[id]?[descendant] else { continue }
 				o[node.id] = Unowned(node)
 			}

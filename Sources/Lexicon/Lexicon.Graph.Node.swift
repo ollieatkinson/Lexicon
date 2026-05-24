@@ -13,20 +13,53 @@ public extension Lexicon.Graph {
 	struct Node {
 		
 		public var name: Name
+		public var stableID: ID?
 		public var type: Set<ID>
 		public var protonym: Protonym?
+		public var defaultValue: DefaultValue?
+		public var connections: [Lexicon.Import]
+		public var notes: [String]
+		public var comments: [String]
 		public var children: [Name: Node]
 		
-		public init(name: Name, protonym: Protonym) {
+		public init(
+			name: Name,
+			protonym: Protonym,
+			stableID: ID? = nil,
+			defaultValue: DefaultValue? = nil,
+			connections: [Lexicon.Import] = [],
+			notes: [String] = [],
+			comments: [String] = []
+		) {
 			self.name = name
+			self.stableID = stableID
 			self.type = []
 			self.protonym = protonym
+			self.defaultValue = defaultValue
+			self.connections = connections
+			self.notes = notes
+			self.comments = comments
 			self.children = [:]
 		}
 		
-		public init(name: Name, children: [Name: Node] = [:], type: Set<ID> = []) {
+		public init(
+			name: Name,
+			children: [Name: Node] = [:],
+			type: Set<ID> = [],
+			stableID: ID? = nil,
+			defaultValue: DefaultValue? = nil,
+			connections: [Lexicon.Import] = [],
+			notes: [String] = [],
+			comments: [String] = []
+		) {
 			self.name = name
+			self.stableID = stableID
 			self.type = type
+			self.protonym = nil
+			self.defaultValue = defaultValue
+			self.connections = connections
+			self.notes = notes
+			self.comments = comments
 			self.children = children
 		}
 
