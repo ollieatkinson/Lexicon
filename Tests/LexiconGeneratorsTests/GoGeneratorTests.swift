@@ -108,7 +108,7 @@ private extension GoGeneratorTests {
 	}
 }
 
-private extension String {
+extension String {
 
 	func taskpaper() throws -> String {
 		try "\(self).taskpaper".file().string()
@@ -126,7 +126,7 @@ private extension String {
 	}
 }
 
-private extension Data {
+extension Data {
 
 	func string(encoding: String.Encoding = .utf8) throws -> String {
 		try String(data: self, encoding: encoding).try()

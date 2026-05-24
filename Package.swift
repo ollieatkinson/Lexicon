@@ -11,9 +11,6 @@ let package = Package(
 	products: [
 		.library(name: "Lexicon", targets: ["Lexicon"]),
 		.library(name: "SwiftLexicon", targets: ["SwiftLexicon"]),
-		.library(name: "SwiftStandAlone", targets: ["SwiftStandAlone"]),
-		.library(name: "KotlinStandAlone", targets: ["KotlinStandAlone"]),
-		.library(name: "TypeScriptStandAlone", targets: ["TypeScriptStandAlone"]),
 		.library(name: "LexiconGenerators", targets: ["LexiconGenerators"]),
 		.executable(name: "lexicon-generate", targets: ["lexicon-generate"]),
 		.plugin(name: "SwiftStandAloneGeneratorPlugin", targets: ["SwiftStandAloneGeneratorPlugin"]),
@@ -66,48 +63,6 @@ let package = Package(
 			dependencies: [
 				"Hope",
 				"SwiftLexicon"
-			],
-			resources: [.copy("Resources")]
-		),
-		.target(
-			name: "SwiftStandAlone",
-			dependencies: [
-				"LexiconGenerators",
-			]
-		),
-		.testTarget(
-			name: "SwiftStandAloneTests",
-			dependencies: [
-				"Hope",
-				"SwiftStandAlone"
-			],
-			resources: [.copy("Resources")]
-		),
-		.target(
-			name: "KotlinStandAlone",
-			dependencies: [
-				"LexiconGenerators",
-			]
-		),
-		.testTarget(
-			name: "KotlinStandAloneTests",
-			dependencies: [
-				"Hope",
-				"KotlinStandAlone"
-			],
-			resources: [.copy("Resources")]
-		),
-		.target(
-			name: "TypeScriptStandAlone",
-			dependencies: [
-				"LexiconGenerators",
-			]
-		),
-		.testTarget(
-			name: "TypeScriptStandAloneTests",
-			dependencies: [
-				"Hope",
-				"TypeScriptStandAlone"
 			],
 			resources: [.copy("Resources")]
 		),
