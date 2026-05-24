@@ -6,8 +6,8 @@ on:
   pull_request:
 
 jobs:
-  test:
-    name: SwiftPM
+  macos:
+    name: SwiftPM macOS
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
@@ -17,5 +17,44 @@ jobs:
         run: |
           xcodebuild -version
           swift --version
+      - name: Build Lexicon CLI
+        run: swift build --product lexicon -Xswiftc -warnings-as-errors
       - name: Test
-        run: swift test
+        run: swift test -Xswiftc -warnings-as-errors
+
+  linux:
+    name: SwiftPM Linux
+    runs-on: ubuntu-latest
+    container: swift:6.3.2-noble
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift version
+        run: swift --version
+      - name: Build Lexicon CLI
+        run: swift build --product lexicon -Xswiftc -warnings-as-errors
+      - name: Test
+        run: swift test -Xswiftc -warnings-as-errors
+
+  android:
+    name: SwiftPM Android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test on Android
+        id: android
+        uses: skiptools/swift-android-action@v2
+        with:
+          swift-version: '6.3'
+          swift-build-flags: -Xswiftc -warnings-as-errors
+          android-api-level: 28
+          free-disk-space: true
+      - name: Build Android ARM64
+        run: |
+          TARGET_OS_ANDROID=1 SKIP_BRIDGE=1 \
+            "$SWIFT_INSTALLATION/bin/swift" build \
+            --swift-sdk aarch64-unknown-linux-android28 \
+            -Xswiftc -plugin-path \
+            -Xswiftc "$SWIFT_INSTALLATION/lib/swift/host/plugins/testing" \
+            -Xswiftc -DTARGET_OS_ANDROID \
+            -Xswiftc -DSKIP_BRIDGE \
+            -Xswiftc -warnings-as-errors

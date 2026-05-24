@@ -8,12 +8,12 @@ import Lexicon
 import UniformTypeIdentifiers
 #endif
 
-public enum Generator: CodeGenerator {
+public enum SwiftStandAloneGenerator: CodeGenerator {
 	
 	// TODO: prefixes?
 	
 	public static let utType = UTType.swiftSource
-	public static let command = "swift"
+	public static let command = "swift-standalone"
 
 	public static func generate(_ json: Lexicon.Graph.JSON) throws -> Data {
 		guard let o = json.swift().data(using: .utf8) else {
@@ -28,8 +28,53 @@ private extension Lexicon.Graph.JSON {
 	func swift() -> String {
 		
 		return """
-		@_exported import SwiftLexicon // https://github.com/thousandyears/Lexicon
 		import Foundation
+		
+		// MARK: I
+		
+		public protocol I: Sendable, TypeLocalized, SourceCodeIdentifiable {}
+
+		public protocol TypeLocalized {
+			static var localized: String { get }
+		}
+
+		public protocol SourceCodeIdentifiable: CustomDebugStringConvertible {
+			var __: String { get }
+		}
+
+		public extension SourceCodeIdentifiable {
+			@inlinable var debugDescription: String { __ }
+		}
+
+		public enum CallAsFunctionExtensions<X> {
+			case from
+		}
+
+		public extension I {
+			func callAsFunction<Property>(_ keyPath: KeyPath<CallAsFunctionExtensions<I>, (I) -> Property>) -> Property {
+				CallAsFunctionExtensions.from[keyPath: keyPath](self)
+			}
+		}
+
+		public extension CallAsFunctionExtensions where X == I {
+			var id: (I) -> String {{ $0.__ }}
+			var localizedType: (I) -> String {{ type(of: $0).localized }}
+		}
+		
+		// MARK: L
+		
+		open class L: @unchecked Sendable, Hashable, I {
+			open class var localized: String { "" }
+			public let __: String
+			public required init(_ id: String) { __ = id }
+		}
+		
+		public extension L {
+			static func == (lhs: L, rhs: L) -> Bool { lhs.__ == rhs.__ }
+			func hash(into hasher: inout Hasher) { hasher.combine(__) }
+		}
+		
+		// MARK: generated types
 		
 		public let \(name) = L_\(name)("\(name)")
 		
