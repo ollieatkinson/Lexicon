@@ -59,24 +59,16 @@ private extension Lexicon.Graph.Node.Class.JSON {
 			return []
 		}
 		
-		let T = id.standAloneTypeSuffix
-		let (L, I) = prefix
-		let className = "\(L)_\(T)"
-		let protocolName = "\(I)_\(T)"
+		let names = StandAloneTypeNames(id: id, prefix: prefix)
 		
 		if let protonym = protonym {
 			return [
 				try SourceTemplate("type {{className}} = {{baseClass}}").render([
-					"className": className,
-					"baseClass": "\(L)_\(protonym.standAloneTypeSuffix)",
+					"className": names.className,
+					"baseClass": names.className(for: protonym),
 				])
 			]
 		}
-		
-		let supertype = supertype?
-			.replacingOccurrences(of: "_", with: "__")
-			.replacingOccurrences(of: ".", with: "_")
-			.replacingOccurrences(of: "__&__", with: ", I_")
 		
 		if hasNoProperties {
 			return [
@@ -86,11 +78,11 @@ private extension Lexicon.Graph.Node.Class.JSON {
 					type {{protocolName}} = {{protocolAlias}};
 					"""
 				).render([
-					"className": className,
-					"baseClass": L,
-					"protocolName": protocolName,
-					"classBlock": typeScriptBlock(emptyTypeScriptClassMembers(prefix: prefix, classes: classes, supertype: supertype)),
-					"protocolAlias": supertype.map { "\(I)_\($0)" } ?? I,
+					"className": names.className,
+					"baseClass": names.classPrefix,
+					"protocolName": names.protocolName,
+					"classBlock": typeScriptBlock(emptyTypeScriptClassMembers(prefix: prefix, classes: classes, supertype: supertype?.standAloneProtocolInheritanceSuffix(protocolPrefix: names.protocolPrefix))),
+					"protocolAlias": names.protocolBase(supertype: supertype),
 				])
 			]
 		}
@@ -102,11 +94,11 @@ private extension Lexicon.Graph.Node.Class.JSON {
 				interface {{protocolName}} extends {{protocolBase}} {{protocolBlock}}
 				"""
 			).render([
-				"className": className,
-				"baseClass": L,
-				"protocolName": protocolName,
+				"className": names.className,
+				"baseClass": names.classPrefix,
+				"protocolName": names.protocolName,
 				"classBlock": typeScriptBlock(typeScriptClassMembers(prefix: prefix, classes: classes)),
-				"protocolBase": "\(I)\(supertype.map{ "_\($0)" } ?? "")",
+				"protocolBase": names.protocolBase(supertype: supertype),
 				"protocolBlock": typeScriptBlock(typeScriptProtocolMembers(prefix: prefix)),
 			])
 		]

@@ -43,43 +43,37 @@ private extension Lexicon.Graph.Node.Class.JSON {
 		}
 
 		var lines: [String] = []
-		let T = id.standAloneTypeSuffix
-		let (L, I) = prefix
+		let names = StandAloneTypeNames(id: id, prefix: prefix)
 
 		if let protonym = protonym {
-			lines += "public typealias \(L)_\(T) = \(L)_\(protonym.standAloneTypeSuffix)"
+			lines += "public typealias \(names.className) = \(names.className(for: protonym))"
 			return lines
 		}
 
 		lines += """
-		public final class \(L)_\(T): L, @unchecked Sendable, \(I)_\(T) {
+		public final class \(names.className): \(names.classPrefix), @unchecked Sendable, \(names.protocolName) {
 		\tpublic override class var localized: String { NSLocalizedString("\(id)", comment: "") }
 		}
 		"""
 
-		let supertype = supertype?
-			.replacingOccurrences(of: "_", with: "__")
-			.replacingOccurrences(of: ".", with: "_")
-			.replacingOccurrences(of: "__&__", with: ", I_")
-
-		lines += "public protocol \(I)_\(T): \(I)\(supertype.map{ "_\($0)" } ?? "") {}"
+		lines += "public protocol \(names.protocolName): \(names.protocolBase(supertype: supertype)) {}"
 
 		guard hasProperties else {
 			return lines
 		}
 
-		let line = "public extension \(I)_\(T)"
+		let line = "public extension \(names.protocolName)"
 
 		lines += line + " {"
 
 		for child in children ?? [] {
 			let id = "\(id).\(child)"
-			lines += "\tvar `\(child)`: \(L)_\(id.standAloneTypeSuffix) { .init(\"\\(__).\(child)\") }"
+			lines += "\tvar `\(child)`: \(names.className(for: id)) { .init(\"\\(__).\(child)\") }"
 		}
 
 		for (synonym, protonym) in (synonyms?.sortedByLocalizedStandard(by: \.key) ?? []) {
 			let id = "\(id).\(synonym)"
-			lines += "\tvar `\(synonym)`: \(L)_\(id.standAloneTypeSuffix) { \(protonym) }"
+			lines += "\tvar `\(synonym)`: \(names.className(for: id)) { \(protonym) }"
 		}
 
 		lines += "}"

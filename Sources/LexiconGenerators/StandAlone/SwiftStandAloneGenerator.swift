@@ -90,10 +90,7 @@ private extension Lexicon.Graph.Node.Class.JSON {
 			return []
 		}
 		
-		let T = id.standAloneTypeSuffix
-		let (L, I) = prefix
-		let className = "\(L)_\(T)"
-		let protocolName = "\(I)_\(T)"
+		let names = StandAloneTypeNames(id: id, prefix: prefix)
 		
 		if let protonym = protonym {
 			return [
@@ -101,16 +98,11 @@ private extension Lexicon.Graph.Node.Class.JSON {
 					"public typealias %%className%% = %%baseClass%%",
 					delimiters: .percentSigns
 				).render([
-					"className": className,
-					"baseClass": "\(L)_\(protonym.standAloneTypeSuffix)",
+					"className": names.className,
+					"baseClass": names.className(for: protonym),
 				])
 			]
 		}
-		
-		let supertype = supertype?
-			.replacingOccurrences(of: "_", with: "__")
-			.replacingOccurrences(of: ".", with: "_")
-			.replacingOccurrences(of: "__&__", with: ", I_")
 		
 		var lines = [
 			try SourceTemplate(
@@ -121,17 +113,17 @@ private extension Lexicon.Graph.Node.Class.JSON {
 				""",
 				delimiters: .percentSigns
 			).render([
-				"className": className,
-				"baseClass": L,
-				"protocolName": protocolName,
+				"className": names.className,
+				"baseClass": names.classPrefix,
+				"protocolName": names.protocolName,
 				"localized": id,
 			]),
 			try SourceTemplate(
 				"public protocol %%protocolName%%: %%protocolBase%% {}",
 				delimiters: .percentSigns
 			).render([
-				"protocolName": protocolName,
-				"protocolBase": "\(I)\(supertype.map{ "_\($0)" } ?? "")",
+				"protocolName": names.protocolName,
+				"protocolBase": names.protocolBase(supertype: supertype),
 			])
 		]
 
@@ -146,7 +138,7 @@ private extension Lexicon.Graph.Node.Class.JSON {
 					""",
 					delimiters: .percentSigns
 				).render([
-					"protocolName": protocolName,
+					"protocolName": names.protocolName,
 					"properties": properties.joined(separator: "\n"),
 				])
 			)
@@ -156,7 +148,7 @@ private extension Lexicon.Graph.Node.Class.JSON {
 	}
 
 	func swiftProperties(prefix: (class: String, protocol: String)) throws -> [String] {
-		let L = prefix.class
+		let names = StandAloneTypeNames(id: id, prefix: prefix)
 		var properties: [String] = []
 
 		for child in children ?? [] {
@@ -167,7 +159,7 @@ private extension Lexicon.Graph.Node.Class.JSON {
 					delimiters: .percentSigns
 				).render([
 					"name": child,
-					"className": "\(L)_\(id.standAloneTypeSuffix)",
+					"className": names.className(for: id),
 				])
 			)
 		}
@@ -180,7 +172,7 @@ private extension Lexicon.Graph.Node.Class.JSON {
 					delimiters: .percentSigns
 				).render([
 					"name": synonym,
-					"className": "\(L)_\(id.standAloneTypeSuffix)",
+					"className": names.className(for: id),
 					"protonym": protonym,
 				])
 			)
