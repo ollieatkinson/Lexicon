@@ -100,7 +100,7 @@ private extension Lexicon.Graph.Node.Class.JSON {
 		}
 		
 		lines += """
-		public final class \(L)_\(T): L, \(I)_\(T) {
+		public final class \(L)_\(T): L, @unchecked Sendable, \(I)_\(T) {
 		\tpublic override class var localized: String { NSLocalizedString("\(id)", comment: "") }
 		}
 		"""

@@ -7,7 +7,7 @@ import LexiconGenerators
 @main
 struct CodeGeneratorCommand: AsyncParsableCommand {
 
-	static var configuration = CommandConfiguration(
+	static let configuration = CommandConfiguration(
 		commandName: "lexicon-generate",
 		abstract: "A utility for generating code from lexicon documents.",
 		version: "1.0.0"
@@ -84,6 +84,18 @@ extension Generators {
 	}
 }
 
+#if compiler(>=6.0)
+extension URL: @retroactive ExpressibleByArgument {
+
+	public init?(argument: String) {
+		if argument.hasPrefix("http") {
+			self.init(string: argument)
+		} else {
+			self.init(fileURLWithPath: argument)
+		}
+	}
+}
+#else
 extension URL: ExpressibleByArgument {
 
 	public init?(argument: String) {
@@ -94,7 +106,18 @@ extension URL: ExpressibleByArgument {
 		}
 	}
 }
+#endif
 
+#if compiler(>=6.0)
+extension Array: @retroactive ExpressibleByArgument where Element: ExpressibleByArgument {
+
+	public init?(argument: String) {
+		self = argument.split(separator: ",").compactMap { substring in
+			Element(argument: String(substring))
+		}
+	}
+}
+#else
 extension Array: ExpressibleByArgument where Element: ExpressibleByArgument {
 
 	public init?(argument: String) {
@@ -103,3 +126,4 @@ extension Array: ExpressibleByArgument where Element: ExpressibleByArgument {
 		}
 	}
 }
+#endif
