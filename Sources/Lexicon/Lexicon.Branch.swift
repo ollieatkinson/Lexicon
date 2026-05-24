@@ -39,11 +39,11 @@ public extension Lexicon {
 	}
 
 	struct PasteResult: Sendable {
-		public var lemma: Lemma?
+		public var lemmaID: Lemma.ID?
 		public var diagnostics: [ReferenceDiagnostic]
 
-		public init(lemma: Lemma?, diagnostics: [ReferenceDiagnostic]) {
-			self.lemma = lemma
+		public init(lemmaID: Lemma.ID?, diagnostics: [ReferenceDiagnostic]) {
+			self.lemmaID = lemmaID
 			self.diagnostics = diagnostics
 		}
 	}
@@ -78,7 +78,7 @@ public extension Lexicon {
 		do {
 			graph = try document.graph(root: rootName)
 		} catch {
-			return .init(lemma: nil, diagnostics: [])
+			return .init(lemmaID: nil, diagnostics: [])
 		}
 		let diagnostics = graph.root.referenceDiagnostics(
 			branchID: graph.root.name,
@@ -88,7 +88,7 @@ public extension Lexicon {
 			lemma.isValid(newChildName: graph.root.name),
 			let path = lemma.graphPath
 		else {
-			return .init(lemma: nil, diagnostics: diagnostics)
+			return .init(lemmaID: nil, diagnostics: diagnostics)
 		}
 
 		var current = self.graph
@@ -102,7 +102,7 @@ public extension Lexicon {
 		reset(to: current)
 
 		return .init(
-			lemma: self["\(lemma.id).\(graph.root.name)"] ?? self.root,
+			lemmaID: "\(lemma.id).\(graph.root.name)",
 			diagnostics: diagnostics
 		)
 	}
@@ -110,35 +110,6 @@ public extension Lexicon {
 #endif
 
 private extension Lexicon.Graph.Node {
-
-	func rewritingInternalReferences(
-		from oldRootID: Lemma.ID,
-		to newRootID: Lemma.ID,
-		path: Lemma.ID,
-		parentPath: Lemma.ID?
-	) -> Self {
-		var node = self
-		node.type = Set(node.type.map { $0.rewritingInternalReference(from: oldRootID, to: newRootID) })
-		if case .reference(let reference) = node.defaultValue {
-			node.defaultValue = .reference(reference.rewritingInternalReference(from: oldRootID, to: newRootID))
-		}
-		if let protonym = node.protonym {
-			let rewritten = protonym.rewritingInternalReference(from: oldRootID, to: newRootID)
-			node.protonym = parentPath.map { rewritten.dotPath(after: $0) } ?? rewritten
-		}
-		var children: Lexicon.Graph.Node.Children = [:]
-		for (name, child) in node.children {
-			let childPath = "\(path).\(name)"
-			children[name] = child.rewritingInternalReferences(
-				from: oldRootID,
-				to: newRootID,
-				path: childPath,
-				parentPath: path
-			)
-		}
-		node.children = children
-		return node
-	}
 
 	func referenceDiagnostics(branchID: Lemma.ID, path: Lemma.ID) -> [Lexicon.ReferenceDiagnostic] {
 		var diagnostics: [Lexicon.ReferenceDiagnostic] = []
@@ -165,28 +136,10 @@ private extension Lexicon.Graph.Node {
 
 private extension String {
 
-	func rewritingInternalReference(from oldRootID: String, to newRootID: String) -> String {
-		if self == oldRootID {
-			return newRootID
-		}
-		guard hasPrefix("\(oldRootID).") else {
-			return self
-		}
-		return "\(newRootID)\(dropFirst(oldRootID.count))"
-	}
-
 	func isExternalReference(to branchID: String) -> Bool {
 		guard contains(".") else {
 			return false
 		}
 		return self != branchID && !hasPrefix("\(branchID).")
-	}
-}
-
-private extension Array where Element: Hashable {
-
-	func uniqued() -> [Element] {
-		var seen: Set<Element> = []
-		return filter { seen.insert($0).inserted }
 	}
 }

@@ -63,7 +63,7 @@ final class BranchPasteTests: Hopes {
 		let result = await lexicon.paste(branch, to: anchor)
 		let encoded = await TaskPaper.encode(lexicon.document)
 
-		hope(result.lemma?.id) == "root.anchor.branch"
+		hope(result.lemmaID) == "root.anchor.branch"
 		hope(result.diagnostics) == [
 			.init(kind: .externalType, path: "branch.external", reference: "outside.type"),
 		]
