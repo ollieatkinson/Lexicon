@@ -85,41 +85,22 @@ final class SwiftLexicon™: Hopes {
 	
 	func test_Event_granularity() throws {
 		
-		let events = Events()
-		
-		let promiseTicks = expectation()
-		let promiseAll = expectation()
-		
-		var ticks: [String] = []
-		var all: [String] = []
-		
-		let oTicks = test.one.more.time["✅"].one >> events.then { event in
-			guard let o: String = try? event[test.one.more.time] else {
-				return
-			}
-			ticks.append(o)
-			if ticks == ["✅", "✅"] {
-				promiseTicks.fulfill()
-			}
-		}
-		
-		let oAll = I_test_one.self >> events.then { event in
-			guard let o: String = try? event[test.one.more.time] else {
-				return
-			}
-			all.append(o)
-			if all == ["✅", "❌", "✅"] {
-				promiseAll.fulfill()
-			}
-		}
-		
-		test.one[1].more[1].time["✅"].one[1] >> events
-		test.one[2].more[2].time["❌"].one[2] >> events
-		test.one[3].more[3].time["✅"].one[3] >> events
-		
-		wait(for: 1) // TODO: flakey test
-		oTicks.cancel()
-		oAll.cancel()
+		let events = [
+			Event(test.one[1].more[1].time["✅"].one[1]),
+			Event(test.one[2].more[2].time["❌"].one[2]),
+			Event(test.one[3].more[3].time["✅"].one[3]),
+		]
+
+		let ticks = events
+			.filter { $0.is(test.one.more.time["✅"].one) }
+			.compactMap { try? $0[test.one.more.time, String.self] }
+
+		let all = events
+			.filter { $0.k(\.L) is I_test_one }
+			.compactMap { try? $0[test.one.more.time, String.self] }
+
+		hope(ticks) == ["✅", "✅"]
+		hope(all) == ["✅", "❌", "✅"]
 	}
 }
 

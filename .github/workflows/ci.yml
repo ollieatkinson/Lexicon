@@ -1,0 +1,17 @@
+name: CI
+
+on:
+  push:
+    branches: ["trunk"]
+  pull_request:
+
+jobs:
+  test:
+    name: SwiftPM
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift version
+        run: swift --version
+      - name: Test
+        run: swift test
