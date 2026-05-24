@@ -2,7 +2,6 @@
 // github.com/screensailor 2022
 //
 
-import AsyncAlgorithms
 import Foundation
 import Synchronization
 
@@ -10,7 +9,7 @@ public final class Events: Sendable {
 
 	private struct State: Sendable {
 		var nextID: UInt64 = 0
-		var channels: [UInt64: AsyncChannel<Event>] = [:]
+		var continuations: [UInt64: AsyncStream<Event>.Continuation] = [:]
 		var delivery: Task<Void, Never>?
 	}
 
@@ -19,34 +18,20 @@ public final class Events: Sendable {
 	public init() {}
 
 	public var stream: AsyncStream<Event> {
-		let channel = AsyncChannel<Event>()
-		let id = insert(channel)
-		return AsyncStream { continuation in
-			let task = Task {
-				for await event in channel {
-					continuation.yield(event)
-				}
-				continuation.finish()
-			}
-			continuation.onTermination = { [weak self] _ in
-				task.cancel()
-				channel.finish()
-				self?.remove(channel: id)
-			}
-		}
+		makeStream().stream
 	}
 
 	@discardableResult public func send(_ event: Event) -> Task<Void, Never> {
 		state.withLock { state in
-			let channels = Array(state.channels.values)
+			let continuations = Array(state.continuations.values)
 			let previous = state.delivery
 			let delivery = Task {
 				await previous?.value
 				guard !Task.isCancelled else {
 					return
 				}
-				for channel in channels {
-					await channel.send(event)
+				for continuation in continuations {
+					continuation.yield(event)
 				}
 			}
 			state.delivery = delivery
@@ -55,15 +40,15 @@ public final class Events: Sendable {
 	}
 
 	public func finish() {
-		let (channels, delivery) = state.withLock { state in
-			defer { state.channels.removeAll() }
+		let (continuations, delivery) = state.withLock { state in
+			defer { state.continuations.removeAll() }
 			let delivery = state.delivery
 			state.delivery = nil
-			return (Array(state.channels.values), delivery)
+			return (Array(state.continuations.values), delivery)
 		}
 		delivery?.cancel()
-		for channel in channels {
-			channel.finish()
+		for continuation in continuations {
+			continuation.finish()
 		}
 	}
 
@@ -75,13 +60,12 @@ public final class Events: Sendable {
 		where predicate: @escaping @Sendable (Event) -> Bool = { _ in true },
 		_ action: @escaping @Sendable (Event) async -> Void
 	) -> EventSubscription {
-		let channel = AsyncChannel<Event>()
-		let id = insert(channel)
+		let subscription = makeStream()
 		let task = Task { [weak self] in
 			defer {
-				self?.remove(channel: id)
+				self?.remove(continuation: subscription.id)
 			}
-			for await event in channel {
+			for await event in subscription.stream {
 				guard !Task.isCancelled else {
 					break
 				}
@@ -92,22 +76,31 @@ public final class Events: Sendable {
 			}
 		}
 		return EventSubscription(task) { [weak self] in
-			self?.remove(channel: id)
-			channel.finish()
+			self?.remove(continuation: subscription.id)
+			subscription.continuation.finish()
 		}
 	}
 
-	private func insert(_ channel: AsyncChannel<Event>) -> UInt64 {
+	private func makeStream() -> (id: UInt64, stream: AsyncStream<Event>, continuation: AsyncStream<Event>.Continuation) {
+		let stream = AsyncStream<Event>.makeStream()
+		let id = insert(stream.continuation)
+		stream.continuation.onTermination = { [weak self] _ in
+			self?.remove(continuation: id)
+		}
+		return (id, stream.stream, stream.continuation)
+	}
+
+	private func insert(_ continuation: AsyncStream<Event>.Continuation) -> UInt64 {
 		state.withLock { state in
 			state.nextID += 1
-			state.channels[state.nextID] = channel
+			state.continuations[state.nextID] = continuation
 			return state.nextID
 		}
 	}
 
-	private func remove(channel id: UInt64) {
+	private func remove(continuation id: UInt64) {
 		state.withLock { state in
-			_ = state.channels.removeValue(forKey: id)
+			_ = state.continuations.removeValue(forKey: id)
 		}
 	}
 }

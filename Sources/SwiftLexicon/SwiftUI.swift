@@ -45,9 +45,6 @@ struct OnEvents: ViewModifier {
 		} else {
 			content.task {
 				for await event in events.stream {
-					guard !Task.isCancelled else {
-						break
-					}
 					guard types.contains(where: event.is) else {
 						continue
 					}
