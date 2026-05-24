@@ -106,10 +106,26 @@ final class SwiftLexicon™: Hopes {
 		let event = Event(test.one[payload])
 		let value = try event.snapshot.values["test.one"].try()
 		let decoded: EventPayload = try event[test.one]
+		let decodedUsingDecoder: EventPayload = try event[test.one, as: EventPayload.self, using: JSONDecoder()]
 
 		hope(value.object?["name"]?.string) == payload.name
 		hope(value.object?["count"]?.int) == payload.count
 		hope(decoded) == payload
+		hope(decodedUsingDecoder) == payload
+	}
+
+	func test_Event_typed_String_access_rejects_non_string_values() throws {
+
+		let event = Event(test.one[1])
+		var didThrow = false
+
+		do {
+			let _: String = try event[test.one]
+		} catch {
+			didThrow = true
+		}
+
+		hope(didThrow) == true
 	}
 
 	func test_Event_granularity() async throws {

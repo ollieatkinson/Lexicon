@@ -109,36 +109,15 @@ public extension JSON {
 		return String(describing: any)
 	}
 
-	func value<Output>(as type: Output.Type = Output.self) throws -> Output {
-		if Output.self == JSON.self {
-			return self as! Output
+	func value<Output>(
+		as type: Output.Type = Output.self,
+		using decoder: JSONDecoder = JSONDecoder()
+	) throws -> Output where Output: Decodable {
+		do {
+			return try decoder.decode(Output.self, from: data())
+		} catch {
+			throw JSONError("Could not decode event value '\(eventDescription)' as \(Output.self): \(error)")
 		}
-		if let bool, Output.self == Bool.self {
-			return bool as! Output
-		}
-		if let int, Output.self == Int.self {
-			return int as! Output
-		}
-		if let double, Output.self == Double.self {
-			return double as! Output
-		}
-		if let string, Output.self == String.self {
-			return string as! Output
-		}
-		if let array, Output.self == Array.self {
-			return array as! Output
-		}
-		if let object, Output.self == Object.self {
-			return object as! Output
-		}
-		if let type = Output.self as? any Decodable.Type,
-		   let value = try JSONDecoder().decode(type, from: data()) as? Output {
-			return value
-		}
-		if Output.self == String.self {
-			return eventDescription as! Output
-		}
-		throw JSONError("Could not decode event value '\(eventDescription)' as \(Output.self)")
 	}
 }
 
@@ -160,8 +139,19 @@ private extension Event {
 public extension Event {
 	subscript() -> Any? { k[] }
 	subscript(key: L) -> Any? { k[key] }
-	subscript<Output>(type as: Output.Type = Output.self) -> Output { get throws { try k[as: Output.self] } }
-	subscript<Output>(key: L, as: Output.Type = Output.self) -> Output { get throws { try k[key, as: Output.self] } }
+	subscript<Output>(
+		type as: Output.Type = Output.self,
+		using decoder: JSONDecoder = JSONDecoder()
+	) -> Output where Output: Decodable {
+		get throws { try k[as: Output.self, using: decoder] }
+	}
+	subscript<Output>(
+		key: L,
+		as type: Output.Type = Output.self,
+		using decoder: JSONDecoder = JSONDecoder()
+	) -> Output where Output: Decodable {
+		get throws { try k[key, as: Output.self, using: decoder] }
+	}
 }
 
 public extension Event {

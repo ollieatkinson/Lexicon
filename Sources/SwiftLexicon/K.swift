@@ -2,6 +2,7 @@
 // github.com/screensailor 2022
 //
 
+import Foundation
 import Lexicon
 
 public extension I where Self: L {
@@ -53,12 +54,19 @@ public extension K {
 	
 	subscript(key: L) -> Any? { ____[key]?.base }
 	
-	subscript<Value>(as type: Value.Type = Value.self) -> Value {
-		get throws { try self[___] }
+	subscript<Value>(
+		as type: Value.Type = Value.self,
+		using decoder: JSONDecoder = JSONDecoder()
+	) -> Value where Value: Decodable {
+		get throws { try self[___, as: Value.self, using: decoder] }
 	}
 	
-	subscript<Value>(key: L, as type: Value.Type = Value.self) -> Value {
-		get throws { try ____[key].try().value(as: type) }
+	subscript<Value>(
+		key: L,
+		as type: Value.Type = Value.self,
+		using decoder: JSONDecoder = JSONDecoder()
+	) -> Value where Value: Decodable {
+		get throws { try ____[key].try().value(as: type, using: decoder) }
 	}
 }
 
@@ -67,8 +75,8 @@ public protocol KProtocol: I {
 	var ____: [L: Event.Value] { get }
 	subscript() -> Any? { get }
 	subscript(key: L) -> Any? { get }
-	subscript<A>(as type: A.Type) -> A { get throws }
-	subscript<A>(key: L, as type: A.Type) -> A { get throws }
+	subscript<A>(as type: A.Type, using decoder: JSONDecoder) -> A where A: Decodable { get throws }
+	subscript<A>(key: L, as type: A.Type, using decoder: JSONDecoder) -> A where A: Decodable { get throws }
 	func callAsFunction(_: KeyPath<CallAsFunctionKExtensions, CallAsFunctionKExtensions.GetL>) -> L
 }
 
