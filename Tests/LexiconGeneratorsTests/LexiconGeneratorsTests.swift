@@ -31,7 +31,18 @@ final class LexiconGeneratorsTests: Hopes {
 		hope(json.utType.preferredFilenameExtension) == "json"
 	}
 
+	func test_registry_finds_generators_by_command() throws {
+		let generator = try LexiconSourceGenerators.all.find("swift-standalone").try()
+
+		hope(generator.command) == "swift-standalone"
+		hope(LexiconSourceGenerators.all.commandHelp) == "swift, swift-standalone, kotlin, go, ts, json"
+	}
+
+	func test_json_registry_alias_matches_source_generator_registry() throws {
+		hope(Lexicon.Graph.JSON.generators.keys.map(\.self)) == LexiconSourceGenerators.all.keys.map(\.self)
+	}
+
 	private func generator(_ name: String) throws -> LexiconSourceGenerator {
-		try Lexicon.Graph.JSON.generators[name].try()
+		try LexiconSourceGenerators.all[name].try()
 	}
 }

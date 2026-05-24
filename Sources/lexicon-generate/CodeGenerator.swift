@@ -1,5 +1,4 @@
 import ArgumentParser
-import Collections
 import Foundation
 import Lexicon
 import LexiconGenerators
@@ -29,7 +28,7 @@ struct CodeGeneratorCommand: AsyncParsableCommand {
 		Types of code to generate. Comma separated.
 
 		Generators:
-			\(Lexicon.Graph.JSON.generators.commandHelp)
+			\(LexiconSourceGenerators.all.commandHelp)
 
 		Example:
 			--type swift,kotlin
@@ -52,7 +51,7 @@ struct CodeGeneratorCommand: AsyncParsableCommand {
 		)
 		let json = await lexicon.json()
 		let code = try type.map { command -> (URL, Data) in
-			guard let generator = Lexicon.Graph.JSON.generators.find(command) else {
+			guard let generator = LexiconSourceGenerators.all.find(command) else {
 				fatalError("Unable to find a generator for \(command)")
 			}
 			guard let `extension` = generator.utType.preferredFilenameExtension else {
@@ -70,17 +69,6 @@ struct CodeGeneratorCommand: AsyncParsableCommand {
 			if isLogging { print(file.path) }
 			try data.write(to: file)
 		}
-	}
-}
-
-typealias Generators = OrderedDictionary<String, LexiconSourceGenerator>
-
-extension Generators {
-
-	var commandHelp: String { values.map { $0.command }.joined(separator: ", ") }
-
-	func find(_ command: String) -> LexiconSourceGenerator? {
-		first { _, value in value.command == command }?.value
 	}
 }
 
