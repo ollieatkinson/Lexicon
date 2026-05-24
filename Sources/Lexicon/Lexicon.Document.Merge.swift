@@ -41,14 +41,36 @@ public struct FileLexiconImportResolver: LexiconImportResolving {
 		let url: URL
 		switch `import`.location {
 			case .local:
-				url = URL(fileURLWithPath: `import`.reference, relativeTo: baseURL).standardizedFileURL
+				guard let local = localURL(for: `import`.reference) else {
+					return nil
+				}
+				url = local
 			case .remote:
-				guard allowRemote, let remote = URL(string: `import`.reference) else {
+				guard
+					allowRemote,
+					let remote = URL(string: `import`.reference),
+					let scheme = remote.scheme?.lowercased(),
+					["http", "https"].contains(scheme)
+				else {
 					return nil
 				}
 				url = remote
 		}
 		return try TaskPaper(Data(contentsOf: url)).decodeDocument()
+	}
+
+	private func localURL(for reference: String) -> URL? {
+		let base = baseURL.standardizedFileURL.resolvingSymlinksInPath()
+		let candidate = URL(fileURLWithPath: reference, relativeTo: base)
+			.standardizedFileURL
+			.resolvingSymlinksInPath()
+		guard candidate.isFileURL else {
+			return nil
+		}
+		guard candidate.path == base.path || candidate.path.hasPrefix(base.path + "/") else {
+			return nil
+		}
+		return candidate
 	}
 }
 

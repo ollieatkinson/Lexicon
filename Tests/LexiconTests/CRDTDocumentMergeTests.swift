@@ -56,12 +56,13 @@ final class CRDTDocumentMergeTests: Hopes {
 
 		var replica = Lexicon.CRDT.Replica()
 		replica.apply(.operation(1, "a", .createNode(path: "root", parentPath: nil, name: "root")))
-		replica.apply(.operation(2, "a", .createNode(path: "root.value", parentPath: "root", name: "value")))
 		replica.apply(.operation(3, "a", .setDefaultValue(path: "root.value", value: .literal(.object([
 			"count": .number(2),
 			"enabled": .bool(true),
 		])))))
+		replica.apply(.operation(2, "a", .createNode(path: "root.value", parentPath: "root", name: "value")))
 
+		hope(replica.json.operations.map(\.id.counter)) == [1, 2, 3]
 		let data = try JSONEncoder().encode(replica.json)
 		let decoded = try Lexicon.CRDT.Replica(JSONDecoder().decode(Lexicon.CRDT.Replica.JSON.self, from: data))
 
@@ -160,6 +161,37 @@ final class CRDTDocumentMergeTests: Hopes {
 		hope(composed.conflicts) == []
 		hope(try composed.document.roots["root"].try().children["value"].try().defaultValue) == .literal(.string("local"))
 		hope(try composed.document.roots["root"].try().children["value"].try().children.keys.sorted()) == ["child"]
+	}
+
+	func test_file_import_resolver_restricts_local_imports_to_base_url() throws {
+
+		let temporary = FileManager.default.temporaryDirectory
+			.appendingPathComponent(UUID().uuidString, isDirectory: true)
+		let base = temporary.appendingPathComponent("base", isDirectory: true)
+		let outside = temporary.appendingPathComponent("outside.lexicon")
+		defer { try? FileManager.default.removeItem(at: temporary) }
+
+		try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+		try Data("outside:\n".utf8).write(to: outside)
+		try Data("inside:\n".utf8).write(to: base.appendingPathComponent("inside.lexicon"))
+
+		let resolver = FileLexiconImportResolver(baseURL: base)
+
+		let resolved = try resolver.resolve(.init(reference: "inside.lexicon", location: .local))
+		hope(try resolved.try().roots.keys.first) == "inside"
+		try hope.none(try resolver.resolve(.init(reference: "../outside.lexicon", location: .local)))
+		try hope.none(try resolver.resolve(.init(reference: outside.path, location: .local)))
+	}
+
+	func test_file_import_resolver_rejects_non_http_remote_urls() throws {
+
+		let resolver = FileLexiconImportResolver(
+			baseURL: FileManager.default.temporaryDirectory,
+			allowRemote: true
+		)
+
+		try hope.none(try resolver.resolve(.init(reference: "file:///tmp/import.lexicon", location: .remote)))
+		try hope.none(try resolver.resolve(.init(reference: "ftp://example.com/import.lexicon", location: .remote)))
 	}
 }
 

@@ -235,10 +235,10 @@ public extension Lexicon.CRDT.Kind {
 public extension Lexicon.CRDT.Replica {
 
 	struct JSON: Codable, Sendable {
-		public var operations: Set<Lexicon.CRDT.Operation.JSON>
+		public var operations: [Lexicon.CRDT.Operation.JSON]
 
 		public init(_ replica: Lexicon.CRDT.Replica) {
-			self.operations = Set(replica.operations.map(Lexicon.CRDT.Operation.JSON.init))
+			self.operations = replica.operations.sorted().map(Lexicon.CRDT.Operation.JSON.init)
 		}
 	}
 
