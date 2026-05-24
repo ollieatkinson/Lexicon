@@ -6,32 +6,35 @@ import Foundation
 
 public extension Lexicon.Graph.Node {
 
-	enum DefaultValue: Hashable, Codable {
+	enum DefaultValue: Hashable {
 		case literal(JSONValue)
 		case reference(Lemma.ID)
+	}
+}
 
-		private enum CodingKeys: String, CodingKey {
-			case literal
-			case reference
-		}
+public extension Lexicon.Graph.Node.DefaultValue {
 
-		public init(from decoder: Decoder) throws {
-			let container = try decoder.container(keyedBy: CodingKeys.self)
-			if let reference = try container.decodeIfPresent(Lemma.ID.self, forKey: .reference) {
-				self = .reference(reference)
-			} else {
-				self = .literal(try container.decode(JSONValue.self, forKey: .literal))
-			}
-		}
+	struct JSON: Codable, Hashable {
+		public var literal: JSONValue?
+		public var reference: Lemma.ID?
 
-		public func encode(to encoder: Encoder) throws {
-			var container = encoder.container(keyedBy: CodingKeys.self)
-			switch self {
+		public init(_ value: Lexicon.Graph.Node.DefaultValue) {
+			switch value {
 				case .literal(let value):
-					try container.encode(value, forKey: .literal)
+					self.literal = value
+					self.reference = nil
 				case .reference(let id):
-					try container.encode(id, forKey: .reference)
+					self.literal = nil
+					self.reference = id
 			}
+		}
+	}
+
+	init(_ json: JSON) {
+		if let reference = json.reference {
+			self = .reference(reference)
+		} else {
+			self = .literal(json.literal ?? .null)
 		}
 	}
 }

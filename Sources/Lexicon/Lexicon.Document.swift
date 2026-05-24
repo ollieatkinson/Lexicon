@@ -3,6 +3,7 @@
 //
 
 import Foundation
+import Collections
 
 public extension Lexicon {
 
@@ -35,7 +36,9 @@ public extension Lexicon {
 		}
 
 		public var root: Graph.Node? {
-			roots.sortedByLocalizedStandard(by: \.key).first?.value
+			roots.min { lhs, rhs in
+				lhs.key.localizedStandardCompare(rhs.key) == .orderedAscending
+			}?.value
 		}
 
 		public func graph(root name: Graph.Node.Name? = nil) throws -> Graph {
@@ -77,76 +80,94 @@ public extension Lexicon {
 	}
 }
 
-extension Lexicon.Document: Codable {
+public extension Lexicon.Document {
 
-	private enum CodingKeys: String, CodingKey {
-		case date
-		case roots
-		case imports
-		case notes
-		case comments
+	struct JSON: Codable {
+		public var date: Date
+		public var roots: [Lexicon.Graph.Node.JSON]?
+		public var imports: [Lexicon.Import]?
+		public var notes: [String]?
+		public var comments: [String]?
+
+		public init(_ document: Lexicon.Document) {
+			self.date = document.date
+			self.roots = document.roots.values
+				.sortedByLocalizedStandard(by: \.name)
+				.map(Lexicon.Graph.Node.JSON.init)
+				.unlessEmpty
+			self.imports = document.imports
+				.sortedByLocalizedStandard(by: \.reference)
+				.unlessEmpty
+			self.notes = document.notes.unlessEmpty
+			self.comments = document.comments.unlessEmpty
+		}
 	}
 
-	public init(from decoder: Decoder) throws {
-		let container = try decoder.container(keyedBy: CodingKeys.self)
+	var json: JSON {
+		JSON(self)
+	}
+
+	init(_ json: JSON) {
 		self.init(
-			date: try container.decode(Date.self, forKey: .date),
-			roots: try container.decode([String: Lexicon.Graph.Node].self, forKey: .roots),
-			imports: try container.decodeIfPresent([Lexicon.Import].self, forKey: .imports) ?? [],
-			notes: try container.decodeIfPresent([String].self, forKey: .notes) ?? [],
-			comments: try container.decodeIfPresent([String].self, forKey: .comments) ?? []
+			date: json.date,
+			roots: Dictionary(
+				(json.roots ?? []).map { ($0.name, Lexicon.Graph.Node($0)) },
+				uniquingKeysWith: { _, last in last }
+			),
+			imports: json.imports ?? [],
+			notes: json.notes ?? [],
+			comments: json.comments ?? []
 		)
-	}
-
-	public func encode(to encoder: Encoder) throws {
-		var container = encoder.container(keyedBy: CodingKeys.self)
-		try container.encode(date, forKey: .date)
-		try container.encode(roots, forKey: .roots)
-		try container.encodeIfPresent(imports.unlessEmpty, forKey: .imports)
-		try container.encodeIfPresent(notes.unlessEmpty, forKey: .notes)
-		try container.encodeIfPresent(comments.unlessEmpty, forKey: .comments)
 	}
 }
 
-extension Lexicon.Graph.Node: Codable {
+public extension Lexicon.Graph.Node {
 
-	private enum CodingKeys: String, CodingKey {
-		case name
-		case stableID
-		case type
-		case protonym
-		case defaultValue
-		case connections
-		case notes
-		case comments
-		case children
+	struct JSON: Codable {
+		public var name: Name
+		public var stableID: ID?
+		public var type: OrderedSet<ID>?
+		public var protonym: Protonym?
+		public var defaultValue: DefaultValue.JSON?
+		public var connections: [Lexicon.Import]?
+		public var notes: [String]?
+		public var comments: [String]?
+		public var children: [Self]?
+
+		public init(_ node: Lexicon.Graph.Node) {
+			self.name = node.name
+			self.stableID = node.stableID
+			self.type = node.type
+				.sortedByLocalizedStandard()
+				.unlessEmpty
+				.map(OrderedSet.init)
+			self.protonym = node.protonym
+			self.defaultValue = node.defaultValue.map(DefaultValue.JSON.init)
+			self.connections = node.connections
+				.sortedByLocalizedStandard(by: \.reference)
+				.unlessEmpty
+			self.notes = node.notes.unlessEmpty
+			self.comments = node.comments.unlessEmpty
+			self.children = node.children.values
+				.sortedByLocalizedStandard(by: \.name)
+				.map(Self.init)
+				.unlessEmpty
+		}
 	}
 
-	public init(from decoder: Decoder) throws {
-		let container = try decoder.container(keyedBy: CodingKeys.self)
+	init(_ json: JSON) {
 		self.init(
-			name: try container.decode(Name.self, forKey: .name),
-			children: try container.decodeIfPresent([Name: Self].self, forKey: .children) ?? [:],
-			type: try container.decodeIfPresent(Set<ID>.self, forKey: .type) ?? [],
-			stableID: try container.decodeIfPresent(ID.self, forKey: .stableID),
-			defaultValue: try container.decodeIfPresent(DefaultValue.self, forKey: .defaultValue),
-			connections: try container.decodeIfPresent([Lexicon.Import].self, forKey: .connections) ?? [],
-			notes: try container.decodeIfPresent([String].self, forKey: .notes) ?? [],
-			comments: try container.decodeIfPresent([String].self, forKey: .comments) ?? []
+			name: json.name,
+			children: Dictionary(
+				(json.children ?? []).map { ($0.name, Self($0)) },
+				uniquingKeysWith: { _, last in last }
+			),
+			type: Set(json.type ?? []),
+			stableID: json.stableID,
+			defaultValue: json.defaultValue.map(DefaultValue.init),
+			connections: json.connections ?? [],
+			notes: json.notes ?? [],
+			comments: json.comments ?? []
 		)
-		self.protonym = try container.decodeIfPresent(Protonym.self, forKey: .protonym)
-	}
-
-	public func encode(to encoder: Encoder) throws {
-		var container = encoder.container(keyedBy: CodingKeys.self)
-		try container.encode(name, forKey: .name)
-		try container.encodeIfPresent(stableID, forKey: .stableID)
-		try container.encodeIfPresent(type.unlessEmpty, forKey: .type)
-		try container.encodeIfPresent(protonym, forKey: .protonym)
-		try container.encodeIfPresent(defaultValue, forKey: .defaultValue)
-		try container.encodeIfPresent(connections.unlessEmpty, forKey: .connections)
-		try container.encodeIfPresent(notes.unlessEmpty, forKey: .notes)
-		try container.encodeIfPresent(comments.unlessEmpty, forKey: .comments)
-		try container.encodeIfPresent(children.unlessEmpty, forKey: .children)
 	}
 }

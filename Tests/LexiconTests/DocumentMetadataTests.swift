@@ -92,6 +92,65 @@ final class DocumentMetadataTests: Hopes {
 			"""
 	}
 
+	func test_lexicon_document_loads_multiple_roots() async throws {
+
+		let document = try TaskPaper("""
+			shared:
+				kind:
+			app:
+				item:
+				+ shared.kind
+			zeta:
+				child:
+			""").decodeDocument()
+
+		let lexicon = try await Lexicon.from(document)
+		let rootNames = await lexicon.roots.keys.sorted()
+		let selectedRootName = await lexicon.root.name
+		let sharedKind = try await lexicon["shared.kind"].hopefully()
+		let item = try await lexicon["app.item"].hopefully()
+		let zetaChild = try await lexicon["zeta.child"].hopefully()
+		let itemIsSharedKind = await item.is(sharedKind)
+		let json = await lexicon.json()
+
+		hope(rootNames) == ["app", "shared", "zeta"]
+		hope(selectedRootName) == "app"
+		hope(itemIsSharedKind) == true
+		hope(zetaChild.id) == "zeta.child"
+		hope(json.name) == "app"
+		hope(json.classes.map(\.id)) == [
+			"app",
+			"app.item",
+			"shared",
+			"shared.kind",
+			"zeta",
+			"zeta.child",
+		]
+	}
+
+	func test_multi_root_graph_reset_preserves_sibling_roots() async throws {
+
+		let document = try TaskPaper("""
+			shared:
+				kind:
+			app:
+				item:
+			""").decodeDocument()
+		var graph = try document.graph(root: "app")
+		graph.root.children["new"] = .init(name: "new")
+
+		let lexicon = try await Lexicon.from(document, root: "app")
+		await lexicon.reset(to: graph)
+
+		let rootNames = await lexicon.document.roots.keys.sorted()
+		let sharedKind = try await lexicon["shared.kind"].hopefully()
+		let new = try await lexicon["app.new"].hopefully()
+
+		hope(rootNames) == ["app", "shared"]
+		hope(sharedKind.id) == "shared.kind"
+		hope(new.id) == "app.new"
+	}
+
 	func test_lemma_default_values_resolve_through_types_and_synonyms() async throws {
 
 		let root = try await Lexicon.from(TaskPaper("""
@@ -154,12 +213,39 @@ final class DocumentMetadataTests: Hopes {
 		let root = try json.classes.first { $0.id == "root" }.try()
 		let kind = try json.classes.first { $0.id == "root.kind" }.try()
 
-		hope(root.defaultValue) == .reference("root.kind")
+		hope(root.defaultValue) == DefaultValueJSON(.reference("root.kind"))
 		hope(root.notes) == ["root note"]
-		hope(kind.defaultValue) == .literal(.string("kind default"))
+		hope(kind.defaultValue) == DefaultValueJSON(.literal(.string("kind default")))
 	}
 
-	func test_document_codable_preserves_node_metadata() throws {
+	func test_json_default_values_only_include_matching_fields() async throws {
+
+		let json = try await Lexicon.from(TaskPaper("""
+			root:
+			? {"direct":"kept","kind":{"inherited":"kept","unknown":"drop"},"unknown":"drop"}
+				direct:
+				kind:
+					inherited:
+				instance:
+				+ root.kind
+				? {"inherited":"kept","unknown":"drop"}
+			""").decode()).json()
+
+		let root = try json.classes.first { $0.id == "root" }.try()
+		let instance = try json.classes.first { $0.id == "root.instance" }.try()
+
+		hope(root.defaultValue) == DefaultValueJSON(.literal(.object([
+			"direct": .string("kept"),
+			"kind": .object([
+				"inherited": .string("kept"),
+			]),
+		])))
+		hope(instance.defaultValue) == DefaultValueJSON(.literal(.object([
+			"inherited": .string("kept"),
+		])))
+	}
+
+	func test_document_json_preserves_node_metadata() throws {
 
 		let document = Lexicon.Document(
 			date: Date(timeIntervalSinceReferenceDate: 0),
@@ -185,8 +271,8 @@ final class DocumentMetadataTests: Hopes {
 			comments: ["document comment"]
 		)
 
-		let data = try JSONEncoder().encode(document)
-		let decoded = try JSONDecoder().decode(Lexicon.Document.self, from: data)
+		let data = try JSONEncoder().encode(document.json)
+		let decoded = try Lexicon.Document(JSONDecoder().decode(Lexicon.Document.JSON.self, from: data))
 		let value = try decoded.roots["root"].try().children["value"].try()
 
 		hope(decoded.imports) == [.init("local.lexicon")]
@@ -199,3 +285,5 @@ final class DocumentMetadataTests: Hopes {
 		hope(value.comments) == ["node comment"]
 	}
 }
+
+private typealias DefaultValueJSON = Lexicon.Graph.Node.DefaultValue.JSON
