@@ -92,12 +92,12 @@ extension Lexicon.Graph.Node: CustomStringConvertible {
 public extension Lexicon.Graph.Node {
 	
 	// TODO: rewrite to reflect Node changes
-	func traverse(sorted: Bool = false, parent: ID? = nil, name: Name? = nil, yield: ((id: ID, name: Name, node: Lexicon.Graph.Node)) -> ()) {
+	func traverse(parent: ID? = nil, name: Name? = nil, yield: ((id: ID, name: Name, node: Lexicon.Graph.Node)) -> ()) {
 		let name = name ?? self.name
 		let id = parent.map{ "\($0).\(name)" } ?? name
 		yield((id, name, self))
 		children.forEach { (name, child) in
-			child.traverse(sorted: sorted, parent: id, name: name, yield: yield)
+			child.traverse(parent: id, name: name, yield: yield)
 		}
 	}
 }

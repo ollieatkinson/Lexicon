@@ -242,7 +242,7 @@ public extension TaskPaper {
 		}
 
 		for root in document.roots.values {
-			root.traverse(sorted: true) { id, name, node in
+			root.traverse { id, name, node in
 				let depth = id.reduce(0){ a, e in e == "." ? a + 1 : a }
 				let tabs = "\t" * depth
 				lines.append("\(tabs)\(name):")
@@ -301,7 +301,8 @@ private extension TaskPaper {
 			),
 			let string = String(data: data, encoding: .utf8)
 		else {
-			return ""
+			assertionFailure("JSONValue produced a value that JSONSerialization could not encode")
+			return "null"
 		}
 		return string
 	}
