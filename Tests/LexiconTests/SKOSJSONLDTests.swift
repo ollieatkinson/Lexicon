@@ -24,6 +24,7 @@ final class SKOSJSONLDTests: Hopes {
 		let json = await lexicon.json()
 		let output = try SKOSJSONLD.generate(json).string()
 
+		hope(SKOSJSONLD.utType.preferredFilenameExtension) == "jsonld"
 		hope(output) == """
 			{
 			  "@context" : {
@@ -34,15 +35,6 @@ final class SKOSJSONLDTests: Hopes {
 			    {
 			      "@id" : "root",
 			      "@type" : "skos:Concept",
-			      "lexicon:alias" : [
-			        {
-			          "name" : "kitty",
-			          "protonym" : "cat"
-			        }
-			      ],
-			      "skos:altLabel" : [
-			        "kitty"
-			      ],
 			      "skos:narrower" : [
 			        {
 			          "@id" : "root.animal"
@@ -80,6 +72,12 @@ final class SKOSJSONLDTests: Hopes {
 			    {
 			      "@id" : "root.cat",
 			      "@type" : "skos:Concept",
+			      "lexicon:alias" : [
+			        {
+			          "name" : "kitty",
+			          "protonym" : "root.cat"
+			        }
+			      ],
 			      "lexicon:default" : {
 			        "literal" : {
 			          "object" : {
@@ -93,6 +91,9 @@ final class SKOSJSONLDTests: Hopes {
 			        {
 			          "@id" : "root.animal"
 			        }
+			      ],
+			      "skos:altLabel" : [
+			        "kitty"
 			      ],
 			      "skos:broader" : {
 			        "@id" : "root"

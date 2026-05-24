@@ -9,7 +9,7 @@ import UniformTypeIdentifiers
 
 public enum SKOSJSONLD: CodeGenerator {
 
-	public static let utType: UTType = .json
+	public static let utType = UTType(filenameExtension: "jsonld", conformingTo: .json) ?? .json
 	public static let command = "json-ld"
 
 	public static func generate(_ json: Lexicon.Graph.JSON) throws -> Data {
@@ -27,11 +27,19 @@ private extension SKOSJSONLD {
 
 		init(_ json: Lexicon.Graph.JSON) {
 			let concepts = json.classes.filter { $0.mixin == nil && $0.protonym == nil }
+			let aliases = concepts.reduce(into: [String: [Alias]]()) { aliases, concept in
+				for (name, protonym) in concept.synonyms ?? [:] {
+					let protonymID = "\(concept.id).\(protonym)"
+					aliases[protonymID, default: []].append(
+						Alias(name: name, protonym: protonymID)
+					)
+				}
+			}
 			let narrowerIDs = Dictionary(uniqueKeysWithValues: concepts.map { concept in
 				(concept.id, (concept.children ?? []).map { "\(concept.id).\($0)" })
 			})
 			self.graph = concepts
-				.map { Concept($0, narrower: narrowerIDs[$0.id] ?? []) }
+				.map { Concept($0, narrower: narrowerIDs[$0.id] ?? [], aliases: aliases[$0.id] ?? []) }
 				.sorted { $0.id < $1.id }
 		}
 
@@ -58,7 +66,7 @@ private extension SKOSJSONLD {
 		var note: [String]?
 		var defaultValue: Lexicon.Graph.Node.DefaultValue.JSON?
 
-		init(_ concept: Lexicon.Graph.Node.Class.JSON, narrower: [String]) {
+		init(_ concept: Lexicon.Graph.Node.Class.JSON, narrower: [String], aliases: [Alias]) {
 			self.id = concept.id
 			self.prefLabel = concept.id
 				.split(separator: ".")
@@ -70,13 +78,12 @@ private extension SKOSJSONLD {
 				.sorted()
 				.map(Reference.init)
 				.unlessEmpty
-			self.altLabel = concept.synonyms?
-				.keys
+			self.altLabel = aliases
+				.map(\.name)
 				.sorted()
 				.unlessEmpty
-			self.alias = concept.synonyms?
-				.sorted { $0.key < $1.key }
-				.map { Alias(name: $0.key, protonym: $0.value) }
+			self.alias = aliases
+				.sorted { $0.name < $1.name }
 				.unlessEmpty
 			self.lexiconType = concept.type?
 				.sorted()
