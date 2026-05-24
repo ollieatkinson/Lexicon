@@ -3,7 +3,9 @@
 //
 
 import Foundation
+#if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
+#endif
 
 public enum JSONClasses: CodeGenerator {
 	
