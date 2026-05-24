@@ -13,78 +13,107 @@ public enum KotlinStandAloneGenerator: CodeGenerator {
 	public static let command = "kotlin"
 	
 	public static func generate(_ json: Lexicon.Graph.JSON) throws -> Data {
-		return Data(json.kotlin().utf8)
+		Data(try json.kotlin().utf8)
 	}
 }
 
 private extension Lexicon.Graph.JSON {
 	
-	func kotlin() -> String {
-		return """
-interface I: TypeLocalized, SourceCodeIdentifiable
+	func kotlin() throws -> String {
+		try SourceTemplate(
+			"""
+			interface I: TypeLocalized, SourceCodeIdentifiable
 
-interface TypeLocalized {
-	val localized: String
-}
+			interface TypeLocalized {
+				val localized: String
+			}
 
-interface SourceCodeIdentifiable {
-	val identifier: String
-}
+			interface SourceCodeIdentifiable {
+				val identifier: String
+			}
 
-val SourceCodeIdentifiable.debugDescription get() = identifier
+			val SourceCodeIdentifiable.debugDescription get() = identifier
 
-open class L(override val localized: String = "", override val identifier: String,) : I
+			open class L(override val localized: String = "", override val identifier: String,) : I
 
-// MARK: generated types
+			// MARK: generated types
 
-val \(name) = L_\(name)("\(name)")
+			val {{root}} = L_{{root}}("{{root}}")
 
-\(classes.flatMap{ $0.kotlin(prefix: ("L", "I")) }.joined(separator: "\n"))
+			{{types}}
 
-"""
+			"""
+		).render([
+			"root": name,
+			"types": try classes.flatMap { try $0.kotlin(prefix: ("L", "I")) }.joined(separator: "\n"),
+		])
 	}
 }
 
 private extension Lexicon.Graph.Node.Class.JSON {
 	
-	// TODO: make this more readable
-	
-	func kotlin(prefix: (class: String, protocol: String)) -> [String] {
+	func kotlin(prefix: (class: String, protocol: String)) throws -> [String] {
 		
 		guard mixin == nil else {
 			return []
 		}
 		
-		var lines: [String] = []
 		let T = id.idToClassSuffix
 		let (L, I) = prefix
+		let className = "\(L)_\(T)"
+		let protocolName = "\(I)_\(T)"
 		
 		if let protonym = protonym {
-			lines += "typealias \(L)_\(T) = \(L)_\(protonym.idToClassSuffix)"
-			return lines
+			return [
+				try SourceTemplate("typealias {{className}} = {{baseClass}}").render([
+					"className": className,
+					"baseClass": "\(L)_\(protonym.idToClassSuffix)",
+				])
+			]
 		}
-		
-		lines += "data class \(L)_\(T)(override val identifier: String): L(identifier = identifier), \(I)_\(T)"
 		
 		let supertype = supertype?
 			.replacingOccurrences(of: "_", with: "__")
 			.replacingOccurrences(of: ".", with: "_")
 			.replacingOccurrences(of: "__&__", with: ", I_")
 		
-		lines += "interface \(I)_\(T): \(I)\(supertype.map{ "_\($0)" } ?? "")"
-		
-		guard hasProperties else {
-			return lines
-		}
-		
+		var lines = [
+			try SourceTemplate(
+				"""
+				data class {{className}}(override val identifier: String): {{baseClass}}(identifier = identifier), {{protocolName}}
+				interface {{protocolName}}: {{protocolBase}}
+				"""
+			).render([
+				"className": className,
+				"baseClass": L,
+				"protocolName": protocolName,
+				"protocolBase": "\(I)\(supertype.map{ "_\($0)" } ?? "")",
+			])
+		]
+
 		for child in children ?? [] {
 			let id = "\(id).\(child)"
-			lines += "val \(I)_\(T).`\(child)`: \(L)_\(id.idToClassSuffix) get() = \(L)_\(id.idToClassSuffix)(\"${identifier}.\(child)\")"
+			lines.append(
+				try SourceTemplate("val {{protocolName}}.`{{name}}`: {{className}} get() = {{className}}(\"${identifier}.{{name}}\")")
+					.render([
+						"protocolName": protocolName,
+						"name": child,
+						"className": "\(L)_\(id.idToClassSuffix)",
+					])
+			)
 		}
 		
-		for (synonym, protonym) in (synonyms?.sortedByLocalizedStandard(by: \.key) ?? []) {
+		for (synonym, protonym) in (synonyms?.sorted(by: { $0.key < $1.key }) ?? []) {
 			let id = "\(id).\(synonym)"
-			lines += "val \(I)_\(T).`\(synonym)`: \(L)_\(id.idToClassSuffix) get() = \(protonym)"
+			lines.append(
+				try SourceTemplate("val {{protocolName}}.`{{name}}`: {{className}} get() = {{protonym}}")
+					.render([
+						"protocolName": protocolName,
+						"name": synonym,
+						"className": "\(L)_\(id.idToClassSuffix)",
+						"protonym": protonym,
+					])
+			)
 		}
 		
 		return lines
