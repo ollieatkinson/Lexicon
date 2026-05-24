@@ -10,6 +10,7 @@ let package = Package(
 	],
 	products: [
 		.library(name: "_Collections", targets: ["_Collections"]),
+		.library(name: "_JSON", targets: ["_JSON"]),
 		.library(name: "Lexicon", targets: ["Lexicon"]),
 		.library(name: "SwiftLexicon", targets: ["SwiftLexicon"]),
 		.library(name: "SwiftStandAlone", targets: ["SwiftStandAlone"]),
@@ -33,6 +34,9 @@ let package = Package(
 			]
 		),
 		.target(
+			name: "_JSON"
+		),
+		.target(
 			name: "Lexicon",
 			dependencies: [
 				"_Collections",
@@ -51,6 +55,10 @@ let package = Package(
 		.testTarget(
 			name: "_CollectionsTests",
 			dependencies: ["_Collections"]
+		),
+		.testTarget(
+			name: "_JSONTests",
+			dependencies: ["_JSON"]
 		),
 		.target(
 			name: "LexiconGenerators",
