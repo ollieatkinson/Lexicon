@@ -83,6 +83,12 @@ extension Lexicon.Graph.Node.Class.JSON {
 		return accessors
 	}
 
+	func standAloneTypeAccessors(classes: [Lexicon.Graph.Node.Class.JSON]) -> [StandAloneAccessor] {
+		(type ?? []).flatMap { typeID in
+			classes.first { $0.id == typeID }?.standAloneAccessors() ?? []
+		}
+	}
+
 	func standAloneAllAccessors(classes: [Lexicon.Graph.Node.Class.JSON]) -> [StandAloneAccessor] {
 		var accessors = Dictionary(
 			uniqueKeysWithValues: standAloneInheritedAccessors(classes: classes).map { ($0.name, $0) }
