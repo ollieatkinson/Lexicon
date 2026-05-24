@@ -7,7 +7,7 @@ import LexiconGenerators
 @main
 struct CodeGeneratorCommand: AsyncParsableCommand {
 
-	static var configuration = CommandConfiguration(
+	static let configuration = CommandConfiguration(
 		commandName: "lexicon-generate",
 		abstract: "A utility for generating code from lexicon documents.",
 		version: "1.0.0"
@@ -73,13 +73,13 @@ struct CodeGeneratorCommand: AsyncParsableCommand {
 	}
 }
 
-typealias Generators = OrderedDictionary<String, CodeGenerator.Type>
+typealias Generators = OrderedDictionary<String, LexiconSourceGenerator>
 
 extension Generators {
 
 	var commandHelp: String { values.map { $0.command }.joined(separator: ", ") }
 
-	func find(_ command: String) -> CodeGenerator.Type? {
+	func find(_ command: String) -> LexiconSourceGenerator? {
 		first { _, value in value.command == command }?.value
 	}
 }
