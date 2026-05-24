@@ -4,6 +4,20 @@
 
 import Foundation
 
+#if !canImport(Combine)
+public protocol ObservableObject: AnyObject {}
+
+@propertyWrapper public struct Published<Value> {
+	public var wrappedValue: Value
+
+	public init(wrappedValue: Value) {
+		self.wrappedValue = wrappedValue
+	}
+}
+
+extension Published: Sendable where Value: Sendable {}
+#endif
+
 #if !canImport(UniformTypeIdentifiers)
 public struct UTType: Hashable, Sendable, CustomStringConvertible {
 	public var preferredFilenameExtension: String?

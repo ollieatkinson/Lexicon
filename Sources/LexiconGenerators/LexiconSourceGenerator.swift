@@ -4,7 +4,9 @@
 
 import Foundation
 import Lexicon
+#if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
+#endif
 
 public struct LexiconSourceGenerator: Sendable {
 

@@ -5,6 +5,8 @@ Lexicon is intended to serve as a foundation for ontology led development, seman
 
 While we are working towards a fully featured 1.0 complete with respectable documentation, please consider visiting [mindflare.app](https://mindflare.app) for a quick demo of the basic concepts.
 
+Platform notes live in [docs/platforms.md](docs/platforms.md).
+
 ## To Do
 ### Specification
 - Formal specification
