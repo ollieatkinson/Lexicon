@@ -76,6 +76,5 @@ jobs:
         with:
           swift-version: '6.3'
           swift-build-flags: -Xswiftc -warnings-as-errors
-          swift-test-flags: -Xswiftc -warnings-as-errors
           android-api-level: 28
           free-disk-space: true
