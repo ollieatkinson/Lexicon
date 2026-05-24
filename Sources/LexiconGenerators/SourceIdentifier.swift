@@ -82,4 +82,40 @@ extension Lexicon.Graph.Node.Class.JSON {
 
 		return accessors
 	}
+
+	func standAloneAllAccessors(classes: [Lexicon.Graph.Node.Class.JSON]) -> [StandAloneAccessor] {
+		var accessors = Dictionary(
+			uniqueKeysWithValues: standAloneInheritedAccessors(classes: classes).map { ($0.name, $0) }
+		)
+		for accessor in standAloneAccessors() {
+			accessors[accessor.name] = accessor
+		}
+		return accessors.values.sorted { $0.name < $1.name }
+	}
+
+	func standAloneInheritedAccessors(classes: [Lexicon.Graph.Node.Class.JSON]) -> [StandAloneAccessor] {
+		guard let supertype else {
+			return []
+		}
+		guard let type = classes.first(where: { $0.id == supertype }) else {
+			return []
+		}
+		guard let mixin = type.mixin else {
+			return type.standAloneAllAccessors(classes: classes)
+		}
+
+		var accessors = Dictionary(
+			uniqueKeysWithValues: type.standAloneInheritedAccessors(classes: classes).map { ($0.name, $0) }
+		)
+		for (name, id) in mixin.children?.sorted(by: { $0.key < $1.key }) ?? [] {
+			accessors[name] = .init(
+				name: name,
+				sourceID: id,
+				targetID: id,
+				pathSuffix: name,
+				isSynonym: false
+			)
+		}
+		return accessors.values.sorted { $0.name < $1.name }
+	}
 }
