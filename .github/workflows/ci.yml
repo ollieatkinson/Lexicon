@@ -56,8 +56,9 @@ jobs:
       - name: Configure Swift SDK for Android
         run: |
           export ANDROID_NDK_HOME=/tmp/android-ndk-r27d
-          ANDROID_SWIFT_SDK_DIR="$HOME/.swiftpm/swift-sdks/swift-6.3.2-RELEASE_android.artifactbundle/swift-android"
-          "$ANDROID_SWIFT_SDK_DIR/scripts/setup-android-sdk.sh"
+          ANDROID_SETUP_SCRIPT="$(find "$HOME/.swiftpm/swift-sdks" -name setup-android-sdk.sh -print -quit)"
+          test -n "$ANDROID_SETUP_SCRIPT"
+          "$ANDROID_SETUP_SCRIPT"
       - name: Build for Android
         run: |
           swift build --swift-sdk aarch64-unknown-linux-android28 --static-swift-stdlib -Xswiftc -warnings-as-errors
