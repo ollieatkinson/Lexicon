@@ -14,7 +14,7 @@ public extension Lexicon.Graph.Node {
 
 public extension Lexicon.Graph.Node.DefaultValue {
 
-	struct JSON: Codable, Hashable {
+	struct JSON: Codable, Hashable, Sendable {
 		public var literal: JSONValue?
 		public var reference: Lemma.ID?
 

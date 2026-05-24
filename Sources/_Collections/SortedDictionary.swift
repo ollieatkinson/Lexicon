@@ -3,6 +3,7 @@
 //
 
 import Collections
+import OrderedCollections
 
 /// A dictionary that preserves keys in ascending order.
 ///
@@ -135,4 +136,4 @@ extension SortedDictionary: Sequence {
 
 extension SortedDictionary: Equatable where Value: Equatable {}
 
-extension SortedDictionary: @unchecked Sendable where Key: Sendable, Value: Sendable {}
+extension SortedDictionary: Sendable where Key: Sendable, Value: Sendable {}

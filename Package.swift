@@ -1,4 +1,4 @@
-// swift-tools-version: 5.6
+// swift-tools-version: 6.3
 
 import PackageDescription
 
@@ -22,7 +22,7 @@ let package = Package(
 	],
 	dependencies: [
 		.package(url: "https://github.com/screensailor/Hope", branch: "trunk"),
-		.package(url: "https://github.com/apple/swift-collections", from: "1.0.0"),
+		.package(url: "https://github.com/apple/swift-collections", from: "1.5.1"),
 		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.1.2")
 	],
 	targets: [
@@ -136,5 +136,6 @@ let package = Package(
 			capability: .buildTool(),
 			dependencies: ["lexicon-generate"]
 		)
-	]
+	],
+	swiftLanguageModes: [.v5]
 )

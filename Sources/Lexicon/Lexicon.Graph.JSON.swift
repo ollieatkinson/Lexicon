@@ -9,7 +9,7 @@ public extension Lexicon.Graph {
 	
 	// TODO: array of referenced nodes (i.e. useful protocols/interfaces)
 	
-	struct JSON: Codable {
+	struct JSON: Codable, Sendable {
 		public var date: Date
 		public var name: Lemma.Name
 		public var classes: [Node.Class.JSON]
@@ -194,7 +194,7 @@ extension Lexicon.Graph.Node.Class: Encodable {
 	
 	// TODO: replace dictionaries with OrderedDictionary when it's json serialisation is fixed
 	
-	public struct JSON: Codable {
+	public struct JSON: Codable, Sendable {
 		public var id: Lemma.ID
 		public var protonym: Lemma.ID?
 		public var type: OrderedSet<Lemma.ID>?
@@ -213,7 +213,7 @@ extension Lexicon.Graph.Node.Class: Encodable {
 
 public extension Lexicon.Graph.Node.Class.JSON {
 	
-	struct Mixin: Codable {
+	struct Mixin: Codable, Sendable {
 		public var type: Lemma.ID
 		public var children: [Lemma.Name: Lemma.ID]?
 	}
@@ -221,11 +221,11 @@ public extension Lexicon.Graph.Node.Class.JSON {
 
 public extension Lexicon.Graph.Node.Class.JSON {
 	
-	@inlinable var hasProperties: Bool {
+	var hasProperties: Bool {
 		!hasNoProperties
 	}
 	
-	@inlinable var hasNoProperties: Bool {
+	var hasNoProperties: Bool {
 		(children?.isEmpty ?? true) && (synonyms?.isEmpty ?? true) && (mixin?.children?.isEmpty ?? true)
 	}
 }

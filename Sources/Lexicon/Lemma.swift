@@ -134,7 +134,7 @@ public extension Lemma {
 		sequence(first: self, next: \.parent)
 	}
 	
-	@inlinable func `is`(_ type: Lemma) -> Bool {
+	func `is`(_ type: Lemma) -> Bool {
 		self.type.keys.contains(type.id)
 	}
 
