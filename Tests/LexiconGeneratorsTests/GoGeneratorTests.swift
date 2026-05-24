@@ -46,7 +46,7 @@ final class GoGeneratorTests: Hopes {
 		defer { try? FileManager.default.removeItem(at: directory) }
 
 		try code.write(to: directory.appendingPathComponent("lexicon.go"))
-		try Data("module lexicon.test\n\ngo 1.21\n".utf8)
+		try Data("module lexicon.test\n\ngo 1.18\n".utf8)
 			.write(to: directory.appendingPathComponent("go.mod"))
 		try Data(Self.goTest.utf8)
 			.write(to: directory.appendingPathComponent("lexicon_test.go"))
@@ -85,13 +85,25 @@ private extension GoGeneratorTests {
 
 	static func run(_ command: String, in directory: URL? = nil) throws {
 		let process = Process()
+		let standardOutput = Pipe()
+		let standardError = Pipe()
 		process.executableURL = URL(fileURLWithPath: "/bin/sh")
 		process.arguments = ["-lc", command]
 		process.currentDirectoryURL = directory
+		process.standardOutput = standardOutput
+		process.standardError = standardError
 		try process.run()
 		process.waitUntilExit()
+		let output = String(data: standardOutput.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+		let error = String(data: standardError.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
 		if process.terminationStatus != 0 {
-			throw "Command failed: \(command)"
+			throw """
+			Command failed (\(process.terminationStatus)): \(command)
+			stdout:
+			\(output)
+			stderr:
+			\(error)
+			"""
 		}
 	}
 }
