@@ -137,5 +137,6 @@ let package = Package(
 			dependencies: ["lexicon-generate"]
 		)
 	],
+	// TODO: switch to Swift 6 language mode after porting SwiftLexicon events off Combine.
 	swiftLanguageModes: [.v5]
 )
