@@ -4,6 +4,18 @@
 
 import Foundation
 
+final class SwiftLexiconGeneratorTests: Hopes {
+
+	func test_generator() async throws {
+		var json = try await "test".taskpaper().lexicon().json()
+		json.date = Date(timeIntervalSinceReferenceDate: 0)
+
+		let code = try SwiftLexiconGenerator.generate(json).string()
+
+		try hope(code) == "swift-lexicon.swift".file().string()
+	}
+}
+
 final class SwiftStandAloneGeneratorTests: Hopes {
 
 	func test_generator() async throws {

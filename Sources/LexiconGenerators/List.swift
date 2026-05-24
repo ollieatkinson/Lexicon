@@ -4,13 +4,12 @@
 
 import Lexicon
 import Collections
-import SwiftLexicon
 
 public extension Lexicon.Graph.JSON {
 	
 	static let generators: OrderedDictionary<String, LexiconSourceGenerator> = [
 		
-		"Swift": .init(SwiftLexicon.Generator.self),
+		"Swift": .init(SwiftLexiconGenerator.self),
 		
 		"Swift Stand-Alone": .init(SwiftStandAloneGenerator.self),
 		

@@ -56,7 +56,12 @@ public extension K {
 	}
 	
 	subscript<Value>(key: L, as type: Value.Type = Value.self) -> Value {
-		get throws { try (self[key] as? Value).try() }
+		get throws {
+			guard let value = self[key] as? Value else {
+				throw CastError(value: self[key], to: Value.self)
+			}
+			return value
+		}
 	}
 }
 
@@ -68,6 +73,20 @@ public protocol KProtocol: I {
 	subscript<A>(as type: A.Type) -> A { get throws }
 	subscript<A>(key: L, as type: A.Type) -> A { get throws }
 	func callAsFunction(_: KeyPath<CallAsFunctionKExtensions, CallAsFunctionKExtensions.GetL>) -> L
+}
+
+private struct CastError: Error, CustomStringConvertible {
+	let value: Any?
+	let type: Any.Type
+
+	init<Value>(value: Any?, to type: Value.Type) {
+		self.value = value
+		self.type = type
+	}
+
+	var description: String {
+		"Could not cast \(String(describing: value)) to \(type)"
+	}
 }
 
 public extension K {

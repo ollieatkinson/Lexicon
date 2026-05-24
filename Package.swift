@@ -40,8 +40,7 @@ let package = Package(
 		.target(
 			name: "LexiconGenerators",
 			dependencies: [
-				"Lexicon",
-				"SwiftLexicon"
+				"Lexicon"
 			]
 		),
 		.testTarget(
@@ -53,15 +52,13 @@ let package = Package(
 			resources: [.copy("Resources")]
 		),
 		.target(
-			name: "SwiftLexicon",
-			dependencies: [
-				"Lexicon"
-			]
+			name: "SwiftLexicon"
 		),
 		.testTarget(
 			name: "SwiftLexiconTests",
 			dependencies: [
 				"Hope",
+				"Lexicon",
 				"SwiftLexicon"
 			],
 			resources: [.copy("Resources")]
