@@ -210,7 +210,7 @@ private extension Lexicon.Document {
 	var connections: [(path: String, import: Lexicon.Import)] {
 		roots.values.flatMap { root in
 			var connections: [(path: String, import: Lexicon.Import)] = []
-			root.traverse(sorted: true) { id, _, node in
+			root.traverse { id, _, node in
 				for `import` in node.connections.sorted(by: { $0.reference < $1.reference }) {
 					connections.append((id, `import`))
 				}
