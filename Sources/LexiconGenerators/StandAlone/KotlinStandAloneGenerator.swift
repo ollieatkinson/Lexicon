@@ -83,27 +83,17 @@ private extension Lexicon.Graph.Node.Class.JSON {
 			])
 		]
 
-		for child in children ?? [] {
-			let id = "\(id).\(child)"
+		for accessor in standAloneAccessors() {
+			let template = accessor.isSynonym
+				? "val {{protocolName}}.`{{name}}`: {{className}} get() = {{protonym}}"
+				: "val {{protocolName}}.`{{name}}`: {{className}} get() = {{className}}(\"${identifier}.{{name}}\")"
 			lines.append(
-				try SourceTemplate("val {{protocolName}}.`{{name}}`: {{className}} get() = {{className}}(\"${identifier}.{{name}}\")")
+				try SourceTemplate(template)
 					.render([
 						"protocolName": names.protocolName,
-						"name": child,
-						"className": names.className(for: id),
-					])
-			)
-		}
-		
-		for (synonym, protonym) in (synonyms?.sorted(by: { $0.key < $1.key }) ?? []) {
-			let id = "\(id).\(synonym)"
-			lines.append(
-				try SourceTemplate("val {{protocolName}}.`{{name}}`: {{className}} get() = {{protonym}}")
-					.render([
-						"protocolName": names.protocolName,
-						"name": synonym,
-						"className": names.className(for: id),
-						"protonym": protonym,
+						"name": accessor.name,
+						"className": names.className(for: accessor.sourceID),
+						"protonym": accessor.pathSuffix,
 					])
 			)
 		}

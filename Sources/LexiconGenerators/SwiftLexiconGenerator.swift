@@ -66,14 +66,9 @@ private extension Lexicon.Graph.Node.Class.JSON {
 
 		lines += line + " {"
 
-		for child in children ?? [] {
-			let id = "\(id).\(child)"
-			lines += "\tvar `\(child)`: \(names.className(for: id)) { .init(\"\\(__).\(child)\") }"
-		}
-
-		for (synonym, protonym) in (synonyms?.sortedByLocalizedStandard(by: \.key) ?? []) {
-			let id = "\(id).\(synonym)"
-			lines += "\tvar `\(synonym)`: \(names.className(for: id)) { \(protonym) }"
+		for accessor in standAloneAccessors() {
+			let body = accessor.isSynonym ? accessor.pathSuffix : ".init(\"\\(__).\(accessor.name)\")"
+			lines += "\tvar `\(accessor.name)`: \(names.className(for: accessor.sourceID)) { \(body) }"
 		}
 
 		lines += "}"

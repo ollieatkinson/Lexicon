@@ -129,31 +129,25 @@ private extension Lexicon.Graph.Node.Class.JSON {
 		var members: [String] = []
 		for t in type ?? [] {
 			let subClass = classes.first { $0.id == t }
-			for child in subClass?.children ?? [] {
-				let id = "L.\(t).\(child)"
-				members.append("  \(child)!: \(id.standAloneTypeSuffix);")
-			}
-			for synonym in subClass?.synonyms?.keys.sorted() ?? [] {
-				let id = "L.\(t).\(synonym)"
-				members.append("  \(synonym)!: \(id.standAloneTypeSuffix);")
+			for accessor in subClass?.standAloneAccessors() ?? [] {
+				let id = "\(prefix.class).\(accessor.sourceID)"
+				members.append("  \(accessor.name)!: \(id.standAloneTypeSuffix);")
 			}
 		}
 
-		for child in children ?? [] {
-			let id = "\(id).\(child)"
-			members.append("  \(child) = new \(prefix.class)_\(id.standAloneTypeSuffix)(`${this.__}.\(child)`);")
-		}
-
-		for (synonym, protonym) in (synonyms?.sorted(by: { $0.key < $1.key }) ?? []) {
-			members.append("  \(synonym) = this.\(protonym);")
+		for accessor in standAloneAccessors() {
+			if accessor.isSynonym {
+				members.append("  \(accessor.name) = this.\(accessor.pathSuffix);")
+			} else {
+				members.append("  \(accessor.name) = new \(prefix.class)_\(accessor.sourceID.standAloneTypeSuffix)(`${this.__}.\(accessor.name)`);")
+			}
 		}
 		return members
 	}
 
 	func typeScriptProtocolMembers(prefix: (class: String, protocol: String)) -> [String] {
-		(children ?? []).map { child in
-			let id = "\(id).\(child)"
-			return "  \(child): \(prefix.protocol)_\(id.standAloneTypeSuffix);"
+		standAloneAccessors().filter { !$0.isSynonym }.map { accessor in
+			"  \(accessor.name): \(prefix.protocol)_\(accessor.sourceID.standAloneTypeSuffix);"
 		}
 	}
 }

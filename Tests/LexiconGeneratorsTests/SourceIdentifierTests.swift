@@ -2,6 +2,7 @@
 // github.com/screensailor 2026
 //
 
+import Foundation
 @_exported import Hope
 @testable import LexiconGenerators
 
@@ -21,5 +22,26 @@ final class SourceIdentifierTests: Hopes {
 		hope(names.className(for: "root.some_type.child")) == "L_root_some__type_child"
 		hope(names.protocolBase(supertype: nil)) == "I"
 		hope(names.protocolBase(supertype: "root.a_&_root.bad")) == "I_root_a, I_root_bad"
+	}
+
+	func test_stand_alone_accessors_preserve_child_then_synonym_order() throws {
+		let json = try JSONDecoder().decode(
+			Lexicon.Graph.Node.Class.JSON.self,
+			from: Data("""
+			{
+				"id": "root",
+				"children": ["child"],
+				"synonyms": { "alias": "child" }
+			}
+			""".utf8)
+		)
+
+		let accessors = json.standAloneAccessors()
+
+		hope(accessors.map(\.name)) == ["child", "alias"]
+		hope(accessors.map(\.sourceID)) == ["root.child", "root.alias"]
+		hope(accessors.map(\.targetID)) == ["root.child", "root.child"]
+		hope(accessors.map(\.pathSuffix)) == ["child", "child"]
+		hope(accessors.map(\.isSynonym)) == [false, true]
 	}
 }
