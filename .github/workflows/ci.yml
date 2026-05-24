@@ -47,10 +47,10 @@ jobs:
       - name: Build Android ARM64
         run: |
           TARGET_OS_ANDROID=1 SKIP_BRIDGE=1 \
-            "${{ steps.android.outputs.swift-install }}/bin/swift" build \
+            "${{ steps.android.outputs.swiftroot }}/bin/swift" build \
             --swift-sdk aarch64-unknown-linux-android28 \
             -Xswiftc -plugin-path \
-            -Xswiftc "${{ steps.android.outputs.swift-install }}/lib/swift/host/plugins/testing" \
+            -Xswiftc "${{ steps.android.outputs.swiftroot }}/lib/swift/host/plugins/testing" \
             -Xswiftc -DTARGET_OS_ANDROID \
             -Xswiftc -DSKIP_BRIDGE \
             -Xswiftc -warnings-as-errors
