@@ -15,6 +15,8 @@ public extension Lexicon.Graph.JSON {
 		"Swift Stand-Alone": .init(SwiftStandAloneGenerator.self),
 		
 		"Kotlin Stand-Alone": .init(KotlinStandAloneGenerator.self),
+
+		"Go Stand-Alone": .init(GoStandAloneGenerator.self),
 		
 		"TypeScript Stand-Alone": .init(TypeScriptStandAloneGenerator.self),
 		

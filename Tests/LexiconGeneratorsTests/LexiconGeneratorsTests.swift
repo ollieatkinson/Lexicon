@@ -12,13 +12,16 @@ final class LexiconGeneratorsTests: Hopes {
 
 		let swift = try generator("Swift Stand-Alone")
 		let kotlin = try generator("Kotlin Stand-Alone")
+		let go = try generator("Go Stand-Alone")
 		let typeScript = try generator("TypeScript Stand-Alone")
 
 		hope(swift.command) == "swift-standalone"
 		hope(kotlin.command) == "kotlin"
+		hope(go.command) == "go"
 		hope(typeScript.command) == "ts"
 		hope(swift.utType.preferredFilenameExtension) == "swift"
 		hope(kotlin.utType.preferredFilenameExtension) == "kt"
+		hope(go.utType.preferredFilenameExtension) == "go"
 		hope(typeScript.utType.preferredFilenameExtension) == "ts"
 	}
 
