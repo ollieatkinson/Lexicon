@@ -13,14 +13,15 @@ public enum GoStandAloneGenerator: CodeGenerator {
 	public static let command = "go"
 
 	public static func generate(_ json: Lexicon.Graph.JSON) throws -> Data {
-		Data(json.go().utf8)
+		Data(try json.go().utf8)
 	}
 }
 
 private extension Lexicon.Graph.JSON {
 
-	func go() -> String {
-		"""
+	func go() throws -> String {
+		try SourceTemplate(
+			"""
 		package lexicon
 
 		type I interface {
@@ -40,17 +41,22 @@ private extension Lexicon.Graph.JSON {
 			return l.id
 		}
 
-		var \(name.goIdentifier) = new_L_\(name.goTypeSuffix)("\(name)")
+		var {{rootVariable}} = new_L_{{rootType}}("{{rootID}}")
 
-		\(classes.flatMap { $0.go(classes: classes) }.joined(separator: "\n\n"))
+		{{types}}
 		"""
-		+ "\n"
+		).render([
+			"rootVariable": name.goIdentifier,
+			"rootType": name.goTypeSuffix,
+			"rootID": name,
+			"types": try classes.flatMap { try $0.go(classes: classes) }.joined(separator: "\n\n"),
+		]) + "\n"
 	}
 }
 
 private extension Lexicon.Graph.Node.Class.JSON {
 
-	func go(classes: [Lexicon.Graph.Node.Class.JSON]) -> [String] {
+	func go(classes: [Lexicon.Graph.Node.Class.JSON]) throws -> [String] {
 		guard mixin == nil else {
 			return []
 		}
@@ -58,49 +64,46 @@ private extension Lexicon.Graph.Node.Class.JSON {
 		let type = "L_\(id.goTypeSuffix)"
 
 		if let protonym = protonym {
-			return ["type \(type) = L_\(protonym.goTypeSuffix)"]
-		}
-
-		var lines: [String] = [
-			"type \(type) struct {",
-			"\tL",
-		]
-
-		let ownAccessors = ownAccessors()
-		for accessor in ownAccessors {
-			lines += "\t\(accessor.name.goIdentifier) L_\(accessor.sourceID.goTypeSuffix)"
-		}
-
-		lines += [
-			"}",
-			"",
-			"func new_\(type)(id string) \(type) {",
-			"\tl := \(type){L: L{id}}",
-		]
-
-		for accessor in ownAccessors {
-			lines += "\tl.\(accessor.name.goIdentifier) = \(accessor.factory(receiver: "id"))"
-		}
-
-		lines += [
-			"\treturn l",
-			"}",
-			"",
-			"func (l \(type)) Localized() string {",
-			"\treturn \"\(id)\"",
-			"}",
-		]
-
-		for accessor in inheritedAccessors(classes: classes) where !ownAccessors.contains(where: { $0.name == accessor.name }) {
-			lines += [
-				"",
-				"func (l \(type)) \(accessor.name.goIdentifier)() L_\(accessor.sourceID.goTypeSuffix) {",
-				"\treturn \(accessor.factory(receiver: "l.id"))",
-				"}",
+			return [
+				try SourceTemplate("type {{type}} = L_{{protonym}}").render([
+					"type": type,
+					"protonym": protonym.goTypeSuffix,
+				])
 			]
 		}
 
-		return [lines.joined(separator: "\n")]
+		let ownAccessors = ownAccessors()
+		return [
+			try SourceTemplate(
+				"""
+				type {{type}} struct {
+					L{{fields}}
+				}
+
+				func new_{{type}}(id string) {{type}} {
+					l := {{type}}{L: L{id}}{{initializers}}
+					return l
+				}
+
+				func (l {{type}}) Localized() string {
+					return "{{localized}}"
+				}{{inherited}}
+				"""
+			).render([
+				"type": type,
+				"localized": id,
+				"fields": ownAccessors
+					.map { "\n\t\($0.name.goIdentifier) L_\($0.sourceID.goTypeSuffix)" }
+					.joined(),
+				"initializers": ownAccessors
+					.map { "\n\tl.\($0.name.goIdentifier) = \($0.factory(receiver: "id"))" }
+					.joined(),
+				"inherited": try inheritedAccessors(classes: classes)
+					.filter { inherited in !ownAccessors.contains(where: { $0.name == inherited.name }) }
+					.map { try $0.method(receiverType: type) }
+					.joined(),
+			])
+		]
 	}
 }
 
@@ -115,6 +118,21 @@ private extension Lexicon.Graph.Node.Class.JSON {
 
 		func factory(receiver: String) -> String {
 			"new_L_\(targetID.goTypeSuffix)(\(receiver) + \".\(pathSuffix)\")"
+		}
+
+		func method(receiverType: String) throws -> String {
+			"\n\n" + (try SourceTemplate(
+				"""
+				func (l {{receiverType}}) {{name}}() L_{{sourceType}} {
+					return {{factory}}
+				}
+				"""
+			).render([
+				"receiverType": receiverType,
+				"name": name.goIdentifier,
+				"sourceType": sourceID.goTypeSuffix,
+				"factory": factory(receiver: "l.id"),
+			]))
 		}
 	}
 
@@ -131,7 +149,7 @@ private extension Lexicon.Graph.Node.Class.JSON {
 			)
 		}
 
-		for (synonym, protonym) in (synonyms?.sortedByLocalizedStandard(by: \.key) ?? []) {
+		for (synonym, protonym) in (synonyms?.sorted(by: { $0.key < $1.key }) ?? []) {
 			let synonymID = "\(id).\(synonym)"
 			let targetID = "\(id).\(protonym)"
 			accessors[synonym] = .init(
@@ -147,7 +165,7 @@ private extension Lexicon.Graph.Node.Class.JSON {
 			if lhs.isSynonym != rhs.isSynonym {
 				return !lhs.isSynonym
 			}
-			return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+			return lhs.name < rhs.name
 		}
 	}
 
@@ -156,7 +174,7 @@ private extension Lexicon.Graph.Node.Class.JSON {
 		for accessor in ownAccessors() {
 			accessors[accessor.name] = accessor
 		}
-		return accessors.values.sortedByLocalizedStandard(by: \.name)
+		return accessors.values.sorted { $0.name < $1.name }
 	}
 
 	func inheritedAccessors(classes: [Lexicon.Graph.Node.Class.JSON]) -> [Accessor] {
@@ -168,7 +186,7 @@ private extension Lexicon.Graph.Node.Class.JSON {
 		}
 		if let mixin = klass.mixin {
 			var accessors = Dictionary(uniqueKeysWithValues: klass.inheritedAccessors(classes: classes).map { ($0.name, $0) })
-			for (name, id) in mixin.children?.sortedByLocalizedStandard(by: \.key) ?? [] {
+			for (name, id) in mixin.children?.sorted(by: { $0.key < $1.key }) ?? [] {
 				accessors[name] = .init(
 					name: name,
 					sourceID: id,
@@ -177,7 +195,7 @@ private extension Lexicon.Graph.Node.Class.JSON {
 					isSynonym: false
 				)
 			}
-			return accessors.values.sortedByLocalizedStandard(by: \.name)
+			return accessors.values.sorted { $0.name < $1.name }
 		} else {
 			return klass.allAccessors(classes: classes)
 		}
