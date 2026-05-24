@@ -13,6 +13,13 @@ final class SourceTemplateTests: XCTestCase {
 		XCTAssertEqual(source, "hello world")
 	}
 
+	func test_render_supports_alternateDelimiters() throws {
+		let source = try SourceTemplate("public var body: String { %%value%% }", delimiters: .percentSigns)
+			.render(["value": "\"ok\""])
+
+		XCTAssertEqual(source, "public var body: String { \"ok\" }")
+	}
+
 	func test_render_does_not_parse_replacement_values() throws {
 		let source = try SourceTemplate("let value = \"{{value}}\"").render(["value": "literal {{braces}}"])
 

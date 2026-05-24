@@ -16,18 +16,15 @@ public enum SwiftStandAloneGenerator: CodeGenerator {
 	public static let command = "swift-standalone"
 
 	public static func generate(_ json: Lexicon.Graph.JSON) throws -> Data {
-		guard let o = json.swift().data(using: .utf8) else {
-			throw "Failed to generate Swift file"
-		}
-		return o
+		Data(try json.swift().utf8)
 	}
 }
 
 private extension Lexicon.Graph.JSON {
 	
-	func swift() -> String {
-		
-		return """
+	func swift() throws -> String {
+		try SourceTemplate(
+			"""
 		import Foundation
 		
 		// MARK: I
@@ -76,132 +73,122 @@ private extension Lexicon.Graph.JSON {
 		
 		// MARK: generated types
 		
-		public let \(name) = L_\(name)("\(name)")
+		public let %%root%% = L_%%root%%("%%root%%")
 		
-		\(classes.flatMap{ $0.swift(prefix: ("L", "I")) }.joined(separator: "\n"))
-		"""
+		%%types%%
+		""",
+			delimiters: .percentSigns
+		).render([
+			"root": name,
+			"types": try classes.flatMap { try $0.swift(prefix: ("L", "I")) }.joined(separator: "\n"),
+		])
 	}
 }
 
 private extension Lexicon.Graph.Node.Class.JSON {
 	
-	// TODO: make this more readable
-	
-	func swift(prefix: (class: String, protocol: String)) -> [String] {
+	func swift(prefix: (class: String, protocol: String)) throws -> [String] {
 		
 		guard mixin == nil else {
 			return []
 		}
 		
-		var lines: [String] = []
 		let T = id.idToClassSuffix
 		let (L, I) = prefix
+		let className = "\(L)_\(T)"
+		let protocolName = "\(I)_\(T)"
 		
 		if let protonym = protonym {
-			lines += "public typealias \(L)_\(T) = \(L)_\(protonym.idToClassSuffix)"
-			return lines
+			return [
+				try SourceTemplate(
+					"public typealias %%className%% = %%baseClass%%",
+					delimiters: .percentSigns
+				).render([
+					"className": className,
+					"baseClass": "\(L)_\(protonym.idToClassSuffix)",
+				])
+			]
 		}
-		
-		lines += """
-		public final class \(L)_\(T): L, @unchecked Sendable, \(I)_\(T) {
-		\tpublic override class var localized: String { NSLocalizedString("\(id)", comment: "") }
-		}
-		"""
 		
 		let supertype = supertype?
 			.replacingOccurrences(of: "_", with: "__")
 			.replacingOccurrences(of: ".", with: "_")
 			.replacingOccurrences(of: "__&__", with: ", I_")
 		
-		lines += "public protocol \(I)_\(T): \(I)\(supertype.map{ "_\($0)" } ?? "") {}"
-		
-		guard hasProperties else {
-			return lines
+		var lines = [
+			try SourceTemplate(
+				"""
+				public final class %%className%%: %%baseClass%%, @unchecked Sendable, %%protocolName%% {
+					public override class var localized: String { NSLocalizedString("%%localized%%", comment: "") }
+				}
+				""",
+				delimiters: .percentSigns
+			).render([
+				"className": className,
+				"baseClass": L,
+				"protocolName": protocolName,
+				"localized": id,
+			]),
+			try SourceTemplate(
+				"public protocol %%protocolName%%: %%protocolBase%% {}",
+				delimiters: .percentSigns
+			).render([
+				"protocolName": protocolName,
+				"protocolBase": "\(I)\(supertype.map{ "_\($0)" } ?? "")",
+			])
+		]
+
+		let properties = try swiftProperties(prefix: prefix)
+		if !properties.isEmpty {
+			lines.append(
+				try SourceTemplate(
+					"""
+					public extension %%protocolName%% {
+					%%properties%%
+					}
+					""",
+					delimiters: .percentSigns
+				).render([
+					"protocolName": protocolName,
+					"properties": properties.joined(separator: "\n"),
+				])
+			)
 		}
-		
-		let line = "public extension \(I)_\(T)"
-		
-		lines += line + " {"
-		
-		for child in children ?? [] {
-			let id = "\(id).\(child)"
-			lines += "\tvar `\(child)`: \(L)_\(id.idToClassSuffix) { .init(\"\\(__).\(child)\") }"
-		}
-		
-		for (synonym, protonym) in (synonyms?.sortedByLocalizedStandard(by: \.key) ?? []) {
-			let id = "\(id).\(synonym)"
-			lines += "\tvar `\(synonym)`: \(L)_\(id.idToClassSuffix) { \(protonym) }"
-		}
-		
-		lines += "}"
 		
 		return lines
 	}
-	
-}
 
-private extension Lexicon.Graph.Node.Class.JSON {
-	
-	func swift_with_mixins(prefix: (class: String, protocol: String)) -> [String] {
-		
-		var lines: [String] = []
-		let T = id.idToClassSuffix
-		let (L, I) = prefix
-		
-		if let protonym = protonym {
-			lines += "public typealias \(L)_\(T) = \(L)_\(protonym.idToClassSuffix)"
-			return lines
-		}
-		
-		if mixin == nil {
-			let S = type?.map{ "\(I)_\($0.idToClassSuffix)" }.unlessEmpty?.joined(separator: ", ") ?? "\(I)"
-			let line = "public protocol \(I)_\(T): \(S) {"
-			if hasProperties {
-				lines += line
-				
-				for child in children ?? [] {
-					let id = "\(id).\(child)"
-					lines += "\tvar `\(child)`: \(L)_\(id.idToClassSuffix) { get }"
-				}
-				
-				for (synonym, _) in (synonyms?.sortedByLocalizedStandard(by: \.key) ?? []) {
-					let id = "\(id).\(synonym)"
-					lines += "\tvar `\(synonym)`: \(L)_\(id.idToClassSuffix) { get }"
-				}
-				
-				lines += "}"
-			}
-			else {
-				lines += line + "}"
-			}
-		}
-		
-		let line = "public class \(L)_\(T): \(L)\(supertype.map{ "_\($0.idToClassSuffix)" } ?? "")\(mixin == nil ? ", \(I)_\(T)" : "")"
-		
-		guard hasProperties else {
-			lines += line + " {}"
-			return lines
-		}
-		
-		lines += line + " {"
-		
+	func swiftProperties(prefix: (class: String, protocol: String)) throws -> [String] {
+		let L = prefix.class
+		var properties: [String] = []
+
 		for child in children ?? [] {
 			let id = "\(id).\(child)"
-			lines += "\tpublic lazy var `\(child)` = \(L)_\(id.idToClassSuffix)(\"\\(__).\(child)\")"
+			properties.append(
+				try SourceTemplate(
+					"\tvar `%%name%%`: %%className%% { .init(\"\\(__).%%name%%\") }",
+					delimiters: .percentSigns
+				).render([
+					"name": child,
+					"className": "\(L)_\(id.idToClassSuffix)",
+				])
+			)
 		}
-		
-		for (synonym, protonym) in (synonyms?.sortedByLocalizedStandard(by: \.key) ?? []) {
+
+		for (synonym, protonym) in (synonyms?.sorted(by: { $0.key < $1.key }) ?? []) {
 			let id = "\(id).\(synonym)"
-			lines += "\tpublic var `\(synonym)`: \(L)_\(id.idToClassSuffix) { \(protonym) }"
+			properties.append(
+				try SourceTemplate(
+					"\tvar `%%name%%`: %%className%% { %%protonym%% }",
+					delimiters: .percentSigns
+				).render([
+					"name": synonym,
+					"className": "\(L)_\(id.idToClassSuffix)",
+					"protonym": protonym,
+				])
+			)
 		}
-		
-		for (name, id) in mixin?.children?.sortedByLocalizedStandard(by: \.key) ?? [] {
-			lines += "\tpublic lazy var `\(name)` = \(L)_\(id.idToClassSuffix)(\"\\(__).\(name)\")"
-		}
-		
-		lines += "}"
-		
-		return lines
+		return properties
 	}
 }
 

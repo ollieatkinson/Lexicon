@@ -4,21 +4,31 @@
 
 struct SourceTemplate: Sendable {
 
-	private let template: String
+	struct Delimiters: Sendable {
+		let opening: String
+		let closing: String
 
-	init(_ template: String) {
+		static let doubleBraces = Self(opening: "{{", closing: "}}")
+		static let percentSigns = Self(opening: "%%", closing: "%%")
+	}
+
+	private let template: String
+	private let delimiters: Delimiters
+
+	init(_ template: String, delimiters: Delimiters = .doubleBraces) {
 		self.template = template
+		self.delimiters = delimiters
 	}
 
 	func render(_ values: [String: String]) throws -> String {
 		var output = ""
 		var index = template.startIndex
 
-		while let openingRange = template[index...].range(of: "{{") {
+		while let openingRange = template[index...].range(of: delimiters.opening) {
 			output += template[index..<openingRange.lowerBound]
 
 			let nameStart = openingRange.upperBound
-			guard let closingRange = template[nameStart...].range(of: "}}") else {
+			guard let closingRange = template[nameStart...].range(of: delimiters.closing) else {
 				output += template[openingRange.lowerBound...]
 				return output
 			}
