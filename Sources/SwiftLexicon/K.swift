@@ -2,30 +2,32 @@
 // github.com/screensailor 2022
 //
 
+import Lexicon
+
 public extension I where Self: L {
 	
-	subscript<Value>(value: Value) -> K<Self> where Value: Sendable, Value: Hashable {
-		K(self, [self: value])
+	subscript<Value>(value: Value) -> K<Self> where Value: Sendable, Value: Hashable, Value: Codable {
+		K(self, [self: Event.Value(value)])
 	}
 }
 
-@dynamicMemberLookup public struct K<A: L>: @unchecked Sendable, Hashable, KProtocol {
+@dynamicMemberLookup public struct K<A: L>: Hashable, KProtocol {
 	
 	public let __: String
 	public let ___: A
-	public let ____: [L: AnyHashable]
+	public let ____: [L: Event.Value]
 	
 	public init(_ a: A) {
 		self.init(a, [:])
 	}
 	
-	internal init(_ l: A, _ d: [L: AnyHashable]) {
+	internal init(_ l: A, _ d: [L: Event.Value]) {
 		self.____ = d
 		self.___ = l
 		self.__ = d.sorted(by: { $0.key.__.count > $1.key.__.count }).reduce(into: l.__) { (o, e) in
 			assert(o.starts(with: e.key.__))
 			let i = o.index(o.startIndex, offsetBy: e.key.__.count)
-			o.insert(contentsOf: "[\(e.value)]", at: i) // TODO: measure performance
+			o.insert(contentsOf: "[\(e.value.eventDescription)]", at: i) // TODO: measure performance
 		}
 	}
 }
@@ -40,8 +42,8 @@ public extension K {
 		K<B>(___[keyPath: keyPath], ____)
 	}
 	
-	subscript<Value>(value: Value) -> K<A> where Value: Sendable, Value: Hashable {
-		K(___, ____.merging([___: value], uniquingKeysWith: { _, last in last }))
+	subscript<Value>(value: Value) -> K<A> where Value: Sendable, Value: Hashable, Value: Codable {
+		K(___, ____.merging([___: Event.Value(value)], uniquingKeysWith: { _, last in last }))
 	}
 }
 
@@ -56,13 +58,13 @@ public extension K {
 	}
 	
 	subscript<Value>(key: L, as type: Value.Type = Value.self) -> Value {
-		get throws { try (self[key] as? Value).try() }
+		get throws { try ____[key].try().value(as: type) }
 	}
 }
 
 public protocol KProtocol: I {
 	var __: String { get }
-	var ____: [L: AnyHashable] { get }
+	var ____: [L: Event.Value] { get }
 	subscript() -> Any? { get }
 	subscript(key: L) -> Any? { get }
 	subscript<A>(as type: A.Type) -> A { get throws }

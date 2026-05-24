@@ -75,6 +75,7 @@ let package = Package(
 			name: "SwiftLexicon",
 			dependencies: [
 				"Lexicon",
+				"_JSON",
 				.product(name: "AsyncAlgorithms", package: "swift-async-algorithms")
 			]
 		),

@@ -87,6 +87,19 @@ final class SwiftLexicon™: Hopes {
 		try hope(x[test.one.more.time]) == "3"
 	}
 
+	func test_Event_snapshot_Codable() throws {
+
+		let event = Event(test.one[1].more["two"])
+		let data = try JSONEncoder().encode(event.snapshot)
+		let snapshot = try JSONDecoder().decode(Event.Snapshot.self, from: data)
+
+		hope(snapshot.id) == event.id
+		hope(snapshot.description) == "test.one[1].more[two]"
+		hope(snapshot.lemma) == "test.one.more"
+		hope(snapshot.values["test.one"]?.int) == 1
+		hope(snapshot.values["test.one.more"]?.string) == "two"
+	}
+
 	func test_Event_granularity() async throws {
 
 		let events = Events()
