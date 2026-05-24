@@ -5,8 +5,8 @@ import PackageDescription
 let package = Package(
 	name: "Lexicon",
 	platforms: [
-		.macOS(.v11),
-		.iOS(.v14)
+		.macOS(.v15),
+		.iOS(.v18)
 	],
 	products: [
 		.library(name: "_Collections", targets: ["_Collections"]),
