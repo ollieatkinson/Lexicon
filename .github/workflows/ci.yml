@@ -6,8 +6,8 @@ on:
   pull_request:
 
 jobs:
-  test:
-    name: SwiftPM
+  macos:
+    name: SwiftPM macOS
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
@@ -18,4 +18,47 @@ jobs:
           xcodebuild -version
           swift --version
       - name: Test
-        run: swift test
+        run: swift test -Xswiftc -warnings-as-errors
+
+  linux:
+    name: SwiftPM Linux
+    runs-on: ubuntu-latest
+    container: swift:6.3.2-noble
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift version
+        run: swift --version
+      - name: Test
+        run: swift test -Xswiftc -warnings-as-errors
+
+  android:
+    name: SwiftPM Android
+    runs-on: ubuntu-latest
+    container: swift:6.3.2-noble
+    env:
+      ANDROID_SWIFT_SDK_URL: https://download.swift.org/swift-6.3.2-release/android-sdk/swift-6.3.2-RELEASE/swift-6.3.2-RELEASE_android.artifactbundle.tar.gz
+      ANDROID_SWIFT_SDK_CHECKSUM: 939e933549d12d28f2e0bf71019d734d309859e9773c572657ce565a81f85d68
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install host tools
+        run: |
+          apt-get update
+          apt-get install -y curl unzip
+      - name: Swift version
+        run: swift --version
+      - name: Install Swift SDK for Android
+        run: swift sdk install "$ANDROID_SWIFT_SDK_URL" --checksum "$ANDROID_SWIFT_SDK_CHECKSUM"
+      - name: Install Android NDK
+        run: |
+          curl -fSL -o /tmp/android-ndk-r27d-linux.zip https://dl.google.com/android/repository/android-ndk-r27d-linux.zip
+          unzip -qo /tmp/android-ndk-r27d-linux.zip -d /tmp
+          echo "ANDROID_NDK_HOME=/tmp/android-ndk-r27d" >> "$GITHUB_ENV"
+      - name: Configure Swift SDK for Android
+        run: |
+          export ANDROID_NDK_HOME=/tmp/android-ndk-r27d
+          ANDROID_SWIFT_SDK_DIR="$HOME/.swiftpm/swift-sdks/swift-6.3.2-RELEASE_android.artifactbundle/swift-android"
+          "$ANDROID_SWIFT_SDK_DIR/scripts/setup-android-sdk.sh"
+      - name: Build for Android
+        run: |
+          swift build --swift-sdk aarch64-unknown-linux-android28 --static-swift-stdlib -Xswiftc -warnings-as-errors
+          swift build --swift-sdk x86_64-unknown-linux-android28 --static-swift-stdlib -Xswiftc -warnings-as-errors
