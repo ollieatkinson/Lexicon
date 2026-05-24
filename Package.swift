@@ -52,7 +52,8 @@ let package = Package(
 			dependencies: [
 				"Hope",
 				"LexiconGenerators"
-			]
+			],
+			resources: [.copy("Resources")]
 		),
 		.target(
 			name: "SwiftLexicon",
