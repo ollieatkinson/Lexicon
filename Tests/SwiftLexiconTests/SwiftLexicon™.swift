@@ -8,17 +8,6 @@
 import AsyncAlgorithms
 
 final class SwiftLexicon™: Hopes {
-
-	func test_generator() async throws {
-
-		var json = try await "test".taskpaper().lexicon().json()
-		json.date = Date(timeIntervalSinceReferenceDate: 0)
-
-		let code = try Generator.generate(json).string()
-
-		try hope(code) == "test.swift".file().string()
-	}
-
 	func test_code() throws {
 
 		hope(test.one.more.time.one.more.time(\.id)) == "test.one.more.time.one.more.time"

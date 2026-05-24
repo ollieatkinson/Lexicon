@@ -62,8 +62,7 @@ let package = Package(
 		.target(
 			name: "LexiconGenerators",
 			dependencies: [
-				"Lexicon",
-				"SwiftLexicon"
+				"Lexicon"
 			]
 		),
 		.testTarget(
