@@ -274,7 +274,10 @@ final class DocumentMetadataTests: Hopes {
 						"value": .init(
 							name: "value",
 							type: ["root.type"],
-							defaultValue: .reference("root.default"),
+							defaultValue: .literal(.object([
+								"count": .number(2),
+								"enabled": .bool(true),
+							])),
 							connections: [.init("https://example.com/remote.lexicon")],
 							notes: ["node note"],
 							comments: ["node comment"]
@@ -295,7 +298,10 @@ final class DocumentMetadataTests: Hopes {
 		hope(decoded.imports) == [.init("local.lexicon")]
 		hope(decoded.notes) == ["document note"]
 		hope(try decoded.roots["root"].try().notes) == ["root note"]
-		hope(value.defaultValue) == .reference("root.default")
+		hope(value.defaultValue) == .literal(.object([
+			"count": .number(2),
+			"enabled": .bool(true),
+		]))
 		hope(value.connections) == [.init("https://example.com/remote.lexicon")]
 		hope(value.notes) == ["node note"]
 		hope(value.comments) == ["node comment"]

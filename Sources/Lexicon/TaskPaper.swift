@@ -294,10 +294,11 @@ private extension TaskPaper {
 	}
 
 	static func encode(_ value: JSONValue) -> String {
-		let encoder = JSONEncoder()
-		encoder.outputFormatting = [.sortedKeys]
 		guard
-			let data = try? encoder.encode(value),
+			let data = try? JSONSerialization.data(
+				withJSONObject: value.jsonObject,
+				options: [.fragmentsAllowed, .sortedKeys]
+			),
 			let string = String(data: data, encoding: .utf8)
 		else {
 			return ""
