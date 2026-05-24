@@ -2,11 +2,14 @@
 // github.com/screensailor 2022
 //
 
+import Foundation
 import Lexicon
+#if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
+#endif
 
 public extension UTType {
-	static var typescript = UTType(filenameExtension: "ts", conformingTo: .sourceCode)!
+	static let typescript = UTType(filenameExtension: "ts", conformingTo: .sourceCode)!
 }
 
 public enum TypeScriptStandAloneGenerator: SourceCodeGenerator {
@@ -75,14 +78,15 @@ private extension Lexicon.Graph.Node.Class.JSON {
 				try SourceTemplate(
 					"""
 					class {{className}} extends {{baseClass}} implements {{protocolName}} {{classBlock}}
-					type {{protocolName}} = {{protocolAlias}};
+					interface {{protocolName}} extends {{protocolBase}} {{protocolBlock}}
 					"""
 				).render([
 					"className": names.className,
 					"baseClass": names.classPrefix,
 					"protocolName": names.protocolName,
-					"classBlock": typeScriptBlock(emptyTypeScriptClassMembers(prefix: prefix, classes: classes, supertype: supertype?.standAloneProtocolInheritanceSuffix(protocolPrefix: names.protocolPrefix))),
-					"protocolAlias": names.protocolBase(supertype: supertype),
+					"classBlock": typeScriptBlock(emptyTypeScriptClassMembers(prefix: prefix, classes: classes, supertype: supertype)),
+					"protocolBase": names.protocolBase(supertype: supertype),
+					"protocolBlock": typeScriptBlock([]),
 				])
 			]
 		}
@@ -111,19 +115,42 @@ private extension Lexicon.Graph.Node.Class.JSON {
 		return "{\n\(members.joined(separator: "\n"))\n}"
 	}
 
-	func emptyTypeScriptClassMembers(
-		prefix: (class: String, protocol: String),
-		classes: [Lexicon.Graph.Node.Class.JSON],
-		supertype: Lemma.ID?
-	) -> [String] {
-		guard let supertype else {
-			return []
+		func emptyTypeScriptClassMembers(
+			prefix: (class: String, protocol: String),
+			classes: [Lexicon.Graph.Node.Class.JSON],
+			supertype: Lemma.ID?
+		) -> [String] {
+			guard let supertype else {
+				return []
+			}
+			return inheritedTypeScriptChildren(classes: classes, supertype: supertype).map { child in
+				"  \(child.name)!: \(prefix.class)_\(child.id.standAloneTypeSuffix);"
+			}
 		}
-		let superChildren = classes.first { $0.id == supertype }?.children ?? []
-		return superChildren.map { child in
-			"  \(child)!: \(prefix.class)_\(supertype)_\(child);"
+
+		func inheritedTypeScriptChildren(
+			classes: [Lexicon.Graph.Node.Class.JSON],
+			supertype: Lemma.ID
+		) -> [(name: Lemma.Name, id: Lemma.ID)] {
+			guard let superclass = classes.first(where: { $0.id == supertype }) else {
+				return []
+			}
+
+			var children = superclass.supertype.map {
+				inheritedTypeScriptChildren(classes: classes, supertype: $0)
+			} ?? []
+
+			children += (superclass.children ?? []).map { child in
+				(child, "\(superclass.id).\(child)")
+			}
+
+			let mixinChildren = superclass.mixin?.children ?? [:]
+			children += mixinChildren.keys.sorted().map { child in
+				(child, mixinChildren[child] ?? "\(superclass.id).\(child)")
+			}
+
+			return children
 		}
-	}
 
 	func typeScriptClassMembers(prefix: (class: String, protocol: String), classes: [Lexicon.Graph.Node.Class.JSON]) -> [String] {
 		var members: [String] = []
