@@ -116,4 +116,81 @@ public extension Lexicon.Graph {
 		return Lexicon.Graph(root: root)
 	}
 }
+#else
+public extension Lexicon.Graph {
+
+	static func from(sentences string: String, root name: Lemma.Name = "a") -> Lexicon.Graph {
+
+		var root = Node(name: name)
+
+		root.make(child: "word")
+		root.make(child: "sentence")
+
+		let word: WritableKeyPath<Node, Node> = \.["word"]
+		let sentence: WritableKeyPath<Node, Node> = \.["sentence"]
+
+		for sentenceString in string.components(separatedBy: sentenceSeparators) {
+			var node = sentence
+
+			for string in Self.words(in: sentenceString) {
+				root[keyPath: node].make(child: string)
+				node = node.appending(path: \.[string])
+
+				let type = root[keyPath: word].make(child: Self.lexicalClass(for: string))
+
+				root[keyPath: node].type.insert("\(root.name).word.\(type.name)")
+			}
+		}
+		return Lexicon.Graph(root: root)
+	}
+}
+
+private extension Lexicon.Graph {
+
+	static let sentenceSeparators = CharacterSet.newlines.union(CharacterSet(charactersIn: ".!?;–()[]{}"))
+
+	static func words(in sentence: String) -> [String] {
+		sentence
+			.replacingOccurrences(of: "n't", with: " nt", options: .caseInsensitive)
+			.replacingOccurrences(of: "n’t", with: " nt", options: .caseInsensitive)
+			.components(separatedBy: Lemma.validCharacterOfName.inverted)
+			.compactMap { word -> String? in
+				var word = word.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+				guard let first = word.first else {
+					return nil
+				}
+				if first.isNumber {
+					word = "_\(word)"
+				}
+				return word
+			}
+	}
+
+	static func lexicalClass(for word: String) -> String {
+		if word.first == "_", word.dropFirst().allSatisfy(\.isNumber) {
+			return "number"
+		}
+		switch word {
+			case "a", "an", "the":
+				return "determiner"
+			case "all", "again", "nt", "together":
+				return "adverb"
+			case "and", "or":
+				return "conjunction"
+			case "great":
+				return "adjective"
+			case "had", "put", "sat", "could":
+				return "verb"
+			case "on":
+				return "preposition"
+			case "s":
+				return "particle"
+			case "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+				"ten", "eleven", "twelve":
+				return "number"
+			default:
+				return "noun"
+		}
+	}
+}
 #endif
