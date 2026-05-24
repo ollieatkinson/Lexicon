@@ -6,7 +6,11 @@ import Foundation
 
 // TODO: sort, document & refactor!
 
+#if compiler(>=6.0)
+extension String: @retroactive Error {} // TODO: dedicated error types
+#else
 extension String: Error {} // TODO: dedicated error types
+#endif
 
 extension String {
 	

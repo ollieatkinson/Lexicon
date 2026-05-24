@@ -3,16 +3,20 @@
 //
 
 import Foundation
+import _Collections
 
 @LexiconActor public final class Lexicon: ObservableObject {
 	
 	@Published public private(set) var graph: Graph
+	@Published public private(set) var document: Document
 	
 	public internal(set) var dictionary: [Lemma.ID: Lemma] = [:]
+	public internal(set) var roots: SortedDictionary<Lemma.Name, Lemma> = [:]
 	
 	private var lemma: Lemma! // TODO: serioulsy?
 	
-	private init(_ graph: Graph) {
+	private init(document: Document, graph: Graph) {
+		self.document = document
 		self.graph = graph
 	}
 	
@@ -29,11 +33,7 @@ public extension Lexicon {
 		if let o = dictionary[id] {
 			return o
 		}
-		guard
-			id.starts(with: root.name),
-			id.count > root.name.count,
-			id[id.index(id.startIndex, offsetBy: root.name.count)] == "."
-		else {
+		guard let rootName = id.split(separator: ".", maxSplits: 1).first.map(String.init), let root = roots[rootName] else {
 			return nil
 		}
 		return root[id.components(separatedBy: ".").dropFirst()]
@@ -43,15 +43,31 @@ public extension Lexicon {
 public extension Lexicon {
 	
 	static func from(_ graph: Graph) -> Lexicon {
-		let o = Lexicon(graph)
+		let document = Document(graph)
+		let o = Lexicon(document: document, graph: graph)
 		connect(lexicon: o, with: graph)
+		all.append(o) // TODO: hard rethink
+		return o
+	}
+
+	static func from(_ document: Document, root name: Graph.Node.Name? = nil) throws -> Lexicon {
+		let graph = try document.graph(root: name)
+		let o = Lexicon(document: document, graph: graph)
+		try connect(lexicon: o, with: document, root: graph.root.name)
 		all.append(o) // TODO: hard rethink
 		return o
 	}
 
 	#if EDITOR
 	func reset(to graph: Graph) {
-		Lexicon.connect(lexicon: self, with: graph)
+		var document = document
+		document.date = graph.date
+		document.roots[graph.root.name] = graph.root
+		Lexicon.connect(lexicon: self, with: document, graph: graph)
+	}
+
+	func reset(to document: Document, root name: Graph.Node.Name? = nil) throws {
+		try Lexicon.connect(lexicon: self, with: document, root: name)
 	}
 	#endif
 }
@@ -62,8 +78,21 @@ private extension Lexicon {
 	
 	static func connect(lexicon: Lexicon, with new: Graph? = nil) {
 		let graph = new ?? lexicon.graph
+		connect(lexicon: lexicon, with: Document(graph), graph: graph)
+	}
+
+	static func connect(lexicon: Lexicon, with document: Document, root name: Graph.Node.Name? = nil) throws {
+		try connect(lexicon: lexicon, with: document, graph: document.graph(root: name))
+	}
+
+	static func connect(lexicon: Lexicon, with document: Document, graph: Graph) {
 		lexicon.dictionary.removeAll(keepingCapacity: true)
-		lexicon.lemma = Lemma(name: graph.root.name, node: graph.root, parent: nil, lexicon: lexicon)
+		lexicon.roots.removeAll(keepingCapacity: true)
+		for (name, root) in document.roots {
+			lexicon.roots[name] = Lemma(name: name, node: root, parent: nil, lexicon: lexicon)
+		}
+		lexicon.lemma = lexicon.roots[graph.root.name]!
+		lexicon.document = document
 		lexicon.graph = graph
 	}
 
@@ -176,7 +205,7 @@ public extension Lexicon { // MARK: non-additive mutations
 			return nil
 		}
 		
-		let children = Array(parent.ownChildren.keys.sortedByLocalizedStandard(by: \.self))
+		let children = Array(parent.ownChildren.keys)
 		
 		let sibling: Lemma.Name? = children
 			.firstIndex(of: lemma.name)

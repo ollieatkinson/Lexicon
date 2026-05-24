@@ -3,7 +3,9 @@
 //
 
 import Foundation
+#if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
+#endif
 
 public enum JSONClasses: CodeGenerator {
 	
@@ -16,21 +18,21 @@ public enum JSONClasses: CodeGenerator {
 		return try encoder.encode(json)
 	}
 	
-	public class Encoder: JSONEncoder {
+	public class Encoder: JSONEncoder, @unchecked Sendable {
 		public override init() {
 			super.init()
 			self.dateEncodingStrategy = .formatted(DateFormatter.shared)
 		}
 	}
 	
-	public class Decoder: JSONDecoder {
+	public class Decoder: JSONDecoder, @unchecked Sendable {
 		public override init() {
 			super.init()
 			self.dateDecodingStrategy = .formatted(DateFormatter.shared)
 		}
 	}
 	
-	public class DateFormatter: Foundation.DateFormatter {
+	public class DateFormatter: Foundation.DateFormatter, @unchecked Sendable {
 		
 		public static let shared = DateFormatter()
 		

@@ -2,7 +2,10 @@
 // github.com/screensailor 2022
 //
 
+import Foundation
+#if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
+#endif
 
 public protocol CodeGenerator {
 	static var utType: UTType { get }

@@ -6,7 +6,7 @@ import Foundation
 
 public extension Lexicon {
 	
-	struct Graph {
+	struct Graph: Sendable {
 		
 		public var date: Date
 		public var root: Node

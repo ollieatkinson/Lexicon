@@ -51,12 +51,12 @@ public extension K {
 	
 	subscript(key: L) -> Any? { ____[key]?.base }
 	
-	@inlinable subscript<A>(as type: A.Type = A.self) -> A {
+	subscript<Value>(as type: Value.Type = Value.self) -> Value {
 		get throws { try self[___] }
 	}
 	
-	@inlinable subscript<A>(key: L, as type: A.Type = A.self) -> A {
-		get throws { try (self[key] as? A).try() }
+	subscript<Value>(key: L, as type: Value.Type = Value.self) -> Value {
+		get throws { try (self[key] as? Value).try() }
 	}
 }
 
