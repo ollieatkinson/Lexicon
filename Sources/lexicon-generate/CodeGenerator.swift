@@ -7,7 +7,7 @@ import LexiconGenerators
 @main
 struct CodeGeneratorCommand: AsyncParsableCommand {
 
-	static var configuration = CommandConfiguration(
+	static let configuration = CommandConfiguration(
 		commandName: "lexicon-generate",
 		abstract: "A utility for generating code from lexicon documents.",
 		version: "1.0.0"

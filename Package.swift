@@ -24,7 +24,8 @@ let package = Package(
 	dependencies: [
 		.package(url: "https://github.com/screensailor/Hope", branch: "trunk"),
 		.package(url: "https://github.com/apple/swift-collections", from: "1.5.1"),
-		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.1.2")
+		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.7.1"),
+		.package(url: "https://github.com/apple/swift-async-algorithms", from: "1.1.3")
 	],
 	targets: [
 		.target(
@@ -73,14 +74,16 @@ let package = Package(
 		.target(
 			name: "SwiftLexicon",
 			dependencies: [
-				"Lexicon"
+				"Lexicon",
+				.product(name: "AsyncAlgorithms", package: "swift-async-algorithms")
 			]
 		),
 		.testTarget(
 			name: "SwiftLexiconTests",
 			dependencies: [
 				"Hope",
-				"SwiftLexicon"
+				"SwiftLexicon",
+				.product(name: "AsyncAlgorithms", package: "swift-async-algorithms")
 			],
 			resources: [.copy("Resources")]
 		),
@@ -145,6 +148,5 @@ let package = Package(
 			dependencies: ["lexicon-generate"]
 		)
 	],
-	// TODO: switch to Swift 6 language mode after porting SwiftLexicon events off Combine.
-	swiftLanguageModes: [.v5]
+	swiftLanguageModes: [.v6]
 )

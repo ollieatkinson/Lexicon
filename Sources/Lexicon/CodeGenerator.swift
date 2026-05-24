@@ -7,7 +7,7 @@ import Foundation
 import UniformTypeIdentifiers
 #endif
 
-public protocol CodeGenerator {
+public protocol CodeGenerator: Sendable {
 	static var utType: UTType { get }
 	static var command: String { get }
 	static func generate(_ json: Lexicon.Graph.JSON) throws -> Data
