@@ -8,15 +8,15 @@ import Lexicon
 import UniformTypeIdentifiers
 #endif
 
-public enum SwiftStandAloneGenerator: CodeGenerator {
+public enum SwiftStandAloneGenerator: SourceCodeGenerator {
 	
 	// TODO: prefixes?
 	
 	public static let utType = UTType.swiftSource
 	public static let command = "swift-standalone"
 
-	public static func generate(_ json: Lexicon.Graph.JSON) throws -> Data {
-		Data(try json.swift().utf8)
+	public static func generateSource(_ json: Lexicon.Graph.JSON) throws -> String {
+		try json.swift()
 	}
 }
 
