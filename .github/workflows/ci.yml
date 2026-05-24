@@ -31,8 +31,8 @@ jobs:
       - name: Test
         run: swift test -Xswiftc -warnings-as-errors
 
-  android:
-    name: SwiftPM Android
+  android-build:
+    name: SwiftPM Android Build
     runs-on: ubuntu-latest
     container: swift:6.3.2-noble
     env:
@@ -65,3 +65,17 @@ jobs:
         run: |
           swift build --swift-sdk aarch64-unknown-linux-android28 --static-swift-stdlib -Xswiftc -warnings-as-errors
           swift build --swift-sdk x86_64-unknown-linux-android28 --static-swift-stdlib -Xswiftc -warnings-as-errors
+
+  android-test:
+    name: SwiftPM Android Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test on Android
+        uses: skiptools/swift-android-action@v2
+        with:
+          swift-version: '6.3'
+          swift-build-flags: -Xswiftc -warnings-as-errors
+          swift-test-flags: -Xswiftc -warnings-as-errors
+          android-api-level: 28
+          free-disk-space: true
