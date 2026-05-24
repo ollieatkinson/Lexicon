@@ -35,50 +35,26 @@ jobs:
       - name: Test
         run: swift test -Xswiftc -warnings-as-errors
 
-  android-build:
-    name: SwiftPM Android Build
-    runs-on: ubuntu-latest
-    container: swift:6.3.2-noble
-    env:
-      ANDROID_SWIFT_SDK_URL: https://download.swift.org/swift-6.3.2-release/android-sdk/swift-6.3.2-RELEASE/swift-6.3.2-RELEASE_android.artifactbundle.tar.gz
-      ANDROID_SWIFT_SDK_CHECKSUM: 939e933549d12d28f2e0bf71019d734d309859e9773c572657ce565a81f85d68
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install host tools
-        run: |
-          apt-get update
-          apt-get install -y curl unzip
-      - name: Swift version
-        run: swift --version
-      - name: Install Swift SDK for Android
-        run: swift sdk install "$ANDROID_SWIFT_SDK_URL" --checksum "$ANDROID_SWIFT_SDK_CHECKSUM"
-      - name: Install Android NDK
-        run: |
-          curl -fSL -o /tmp/android-ndk-r27d-linux.zip https://dl.google.com/android/repository/android-ndk-r27d-linux.zip
-          unzip -qo /tmp/android-ndk-r27d-linux.zip -d /tmp
-          echo "ANDROID_NDK_HOME=/tmp/android-ndk-r27d" >> "$GITHUB_ENV"
-      - name: Configure Swift SDK for Android
-        run: |
-          export ANDROID_NDK_HOME=/tmp/android-ndk-r27d
-          export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
-          swift sdk list
-          ANDROID_SETUP_SCRIPT="$(find /github /root /__w /tmp -name setup-android-sdk.sh -print -quit 2>/dev/null)"
-          test -n "$ANDROID_SETUP_SCRIPT"
-          "$ANDROID_SETUP_SCRIPT"
-      - name: Build for Android
-        run: |
-          swift build --swift-sdk aarch64-unknown-linux-android28 --static-swift-stdlib -Xswiftc -warnings-as-errors
-          swift build --swift-sdk x86_64-unknown-linux-android28 --static-swift-stdlib -Xswiftc -warnings-as-errors
-
-  android-test:
-    name: SwiftPM Android Tests
+  android:
+    name: SwiftPM Android
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Test on Android
+      - name: Build and test on Android
+        id: android
         uses: skiptools/swift-android-action@v2
         with:
           swift-version: '6.3'
           swift-build-flags: -Xswiftc -warnings-as-errors
           android-api-level: 28
           free-disk-space: true
+      - name: Build Android ARM64
+        run: |
+          TARGET_OS_ANDROID=1 SKIP_BRIDGE=1 \
+            "$SWIFT_INSTALLATION/bin/swift" build \
+            --swift-sdk aarch64-unknown-linux-android28 \
+            -Xswiftc -plugin-path \
+            -Xswiftc "$SWIFT_INSTALLATION/lib/swift/host/plugins/testing" \
+            -Xswiftc -DTARGET_OS_ANDROID \
+            -Xswiftc -DSKIP_BRIDGE \
+            -Xswiftc -warnings-as-errors
