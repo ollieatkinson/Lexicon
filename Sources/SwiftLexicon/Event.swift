@@ -81,7 +81,7 @@ public extension Event {
 public extension JSON {
 
 	var base: Any {
-		rawValue
+		any
 	}
 
 	var eventDescription: String {
@@ -106,11 +106,33 @@ public extension JSON {
 		if let object {
 			return "{" + object.sortedEntries.map { "\($0.key): \($0.value.eventDescription)" }.joined(separator: ", ") + "}"
 		}
-		return String(describing: rawValue)
+		return String(describing: any)
 	}
 
 	func value<Output>(as type: Output.Type = Output.self) throws -> Output {
-		if let value = rawValue as? Output {
+		if Output.self == JSON.self {
+			return self as! Output
+		}
+		if let bool, Output.self == Bool.self {
+			return bool as! Output
+		}
+		if let int, Output.self == Int.self {
+			return int as! Output
+		}
+		if let double, Output.self == Double.self {
+			return double as! Output
+		}
+		if let string, Output.self == String.self {
+			return string as! Output
+		}
+		if let array, Output.self == Array.self {
+			return array as! Output
+		}
+		if let object, Output.self == Object.self {
+			return object as! Output
+		}
+		if let type = Output.self as? any Decodable.Type,
+		   let value = try JSONDecoder().decode(type, from: data()) as? Output {
 			return value
 		}
 		if Output.self == String.self {

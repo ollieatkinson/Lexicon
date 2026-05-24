@@ -100,6 +100,18 @@ final class SwiftLexicon™: Hopes {
 		hope(snapshot.values["test.one.more"]?.string) == "two"
 	}
 
+	func test_Event_snapshot_encodes_Codable_payloads_as_JSON() throws {
+
+		let payload = EventPayload(name: "lexicon", count: 2)
+		let event = Event(test.one[payload])
+		let value = try event.snapshot.values["test.one"].try()
+		let decoded: EventPayload = try event[test.one]
+
+		hope(value.object?["name"]?.string) == payload.name
+		hope(value.object?["count"]?.int) == payload.count
+		hope(decoded) == payload
+	}
+
 	func test_Event_granularity() async throws {
 
 		let events = Events()
@@ -153,6 +165,11 @@ private func collect<Value>(_ count: Int, from channel: AsyncChannel<Value>) asy
 		}
 	}
 	return values
+}
+
+private struct EventPayload: Codable, Hashable, Sendable {
+	var name: String
+	var count: Int
 }
 
 // MARK: ↓ demonstrating the limitations of purely static type constraints

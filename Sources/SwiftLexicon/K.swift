@@ -7,7 +7,7 @@ import Lexicon
 public extension I where Self: L {
 	
 	subscript<Value>(value: Value) -> K<Self> where Value: Sendable, Value: Hashable, Value: Codable {
-		K(self, [self: Event.Value(value)])
+		K(self, [self: eventValue(value)])
 	}
 }
 
@@ -43,7 +43,7 @@ public extension K {
 	}
 	
 	subscript<Value>(value: Value) -> K<A> where Value: Sendable, Value: Hashable, Value: Codable {
-		K(___, ____.merging([___: Event.Value(value)], uniquingKeysWith: { _, last in last }))
+		K(___, ____.merging([___: eventValue(value)], uniquingKeysWith: { _, last in last }))
 	}
 }
 
@@ -100,4 +100,12 @@ extension K { // TODO: ↓
 	//        id = substrings.enumerated().filter{ $0.offset.isMultiple(of: 2) }.map(\.element).joined()
 	//        return (id, data)
 	//    }
+}
+
+private func eventValue<Value>(_ value: Value) -> Event.Value where Value: Encodable {
+	do {
+		return try Event.Value.encoded(value)
+	} catch {
+		preconditionFailure("Could not encode \(Value.self) as an event JSON value: \(error)")
+	}
 }
