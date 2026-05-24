@@ -6,6 +6,7 @@ import Foundation
 #if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
 #endif
+import Lexicon
 
 public enum SKOSJSONLD: CodeGenerator {
 

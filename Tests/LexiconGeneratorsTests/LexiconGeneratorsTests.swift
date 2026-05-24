@@ -15,17 +15,23 @@ final class LexiconGeneratorsTests: Hopes {
 		let kotlin = try generator("Kotlin Stand-Alone")
 		let go = try generator("Go Stand-Alone")
 		let typeScript = try generator("TypeScript Stand-Alone")
+		let json = try generator("JSON Classes & Mixins")
+		let skos = try generator("SKOS JSON-LD")
 
 		hope(swift.command) == "swift"
 		hope(swiftStandAlone.command) == "swift-standalone"
 		hope(kotlin.command) == "kotlin"
 		hope(go.command) == "go"
 		hope(typeScript.command) == "ts"
+		hope(json.command) == "json"
+		hope(skos.command) == "json-ld"
 		hope(swift.utType.preferredFilenameExtension) == "swift"
 		hope(swiftStandAlone.utType.preferredFilenameExtension) == "swift"
 		hope(kotlin.utType.preferredFilenameExtension) == "kt"
 		hope(go.utType.preferredFilenameExtension) == "go"
 		hope(typeScript.utType.preferredFilenameExtension) == "ts"
+		hope(json.utType.preferredFilenameExtension) == "json"
+		hope(skos.utType.preferredFilenameExtension) == "jsonld"
 	}
 
 	private func generator(_ name: String) throws -> LexiconSourceGenerator {

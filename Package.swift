@@ -102,6 +102,7 @@ let package = Package(
 			name: "lexicon-cli",
 			dependencies: [
 				"Lexicon",
+				"LexiconGenerators",
 				.product(name: "ArgumentParser", package: "swift-argument-parser")
 			]
 		),

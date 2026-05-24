@@ -1,6 +1,7 @@
 import ArgumentParser
 import Foundation
 import Lexicon
+import LexiconGenerators
 
 enum AgentJSON {
 
