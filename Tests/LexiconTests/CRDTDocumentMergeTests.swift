@@ -52,6 +52,26 @@ final class CRDTDocumentMergeTests: Hopes {
 			"""
 	}
 
+	func test_crdt_replica_json_round_trip() throws {
+
+		var replica = Lexicon.CRDT.Replica()
+		replica.apply(.operation(1, "a", .createNode(path: "root", parentPath: nil, name: "root")))
+		replica.apply(.operation(2, "a", .createNode(path: "root.value", parentPath: "root", name: "value")))
+		replica.apply(.operation(3, "a", .setDefaultValue(path: "root.value", value: .literal(.object([
+			"count": .number(2),
+			"enabled": .bool(true),
+		])))))
+
+		let data = try JSONEncoder().encode(replica.json)
+		let decoded = try Lexicon.CRDT.Replica(JSONDecoder().decode(Lexicon.CRDT.Replica.JSON.self, from: data))
+
+		hope(TaskPaper.encode(decoded.materialized())) == """
+			root:
+				value:
+				? {"count":2,"enabled":true}
+			"""
+	}
+
 	func test_document_merge_and_composition_are_deterministic() throws {
 
 		let imported = try TaskPaper("""

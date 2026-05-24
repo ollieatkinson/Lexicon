@@ -6,7 +6,7 @@ import Foundation
 
 public extension Lexicon.Graph.Node {
 
-	enum DefaultValue: Hashable, Codable, Sendable {
+	enum DefaultValue: Hashable, Sendable {
 		case literal(JSONValue)
 		case reference(Lemma.ID)
 	}

@@ -29,7 +29,7 @@ public extension Lexicon.CRDT {
 		}
 	}
 
-	struct Operation: Hashable, Codable, Comparable, Sendable {
+	struct Operation: Hashable, Comparable, Sendable {
 		public var id: OperationID
 		public var kind: Kind
 
@@ -43,7 +43,7 @@ public extension Lexicon.CRDT {
 		}
 	}
 
-	enum Kind: Hashable, Codable, Sendable {
+	enum Kind: Hashable, Sendable {
 		case setDocumentDate(Date)
 		case addDocumentNote(noteID: String, text: String)
 		case removeDocumentNote(noteID: String)
@@ -68,7 +68,7 @@ public extension Lexicon.CRDT {
 		case removeImport(Lexicon.Import)
 	}
 
-	struct Replica: Codable, Sendable {
+	struct Replica: Sendable {
 		public var operations: Set<Operation>
 
 		public init(operations: Set<Operation> = []) {
@@ -86,6 +86,168 @@ public extension Lexicon.CRDT {
 		public func materialized() -> Lexicon.Document {
 			State(operations: operations).document()
 		}
+	}
+}
+
+public extension Lexicon.CRDT.Operation {
+
+	struct JSON: Hashable, Codable, Sendable {
+		public var id: Lexicon.CRDT.OperationID
+		public var kind: Lexicon.CRDT.Kind.JSON
+
+		public init(_ operation: Lexicon.CRDT.Operation) {
+			self.id = operation.id
+			self.kind = Lexicon.CRDT.Kind.JSON(operation.kind)
+		}
+	}
+
+	init(_ json: JSON) {
+		self.init(Lexicon.CRDT.Kind(json.kind), id: json.id)
+	}
+}
+
+public extension Lexicon.CRDT.Kind {
+
+	enum JSON: Hashable, Codable, Sendable {
+		case setDocumentDate(Date)
+		case addDocumentNote(noteID: String, text: String)
+		case removeDocumentNote(noteID: String)
+		case addDocumentComment(commentID: String, text: String)
+		case removeDocumentComment(commentID: String)
+		case createNode(path: String, parentPath: String?, name: String)
+		case renameNode(path: String, name: String)
+		case deleteNode(path: String)
+		case addTypeReference(path: String, type: String)
+		case removeTypeReference(path: String, type: String)
+		case setProtonym(path: String, protonym: String)
+		case removeProtonym(path: String)
+		case setDefaultValue(path: String, value: Lexicon.Graph.Node.DefaultValue.JSON)
+		case removeDefaultValue(path: String)
+		case addConnection(path: String, Lexicon.Import)
+		case removeConnection(path: String, Lexicon.Import)
+		case addNote(path: String, noteID: String, text: String)
+		case removeNote(path: String, noteID: String)
+		case addComment(path: String, commentID: String, text: String)
+		case removeComment(path: String, commentID: String)
+		case addImport(Lexicon.Import)
+		case removeImport(Lexicon.Import)
+
+		public init(_ kind: Lexicon.CRDT.Kind) {
+			switch kind {
+				case .setDocumentDate(let value):
+					self = .setDocumentDate(value)
+				case .addDocumentNote(let noteID, let text):
+					self = .addDocumentNote(noteID: noteID, text: text)
+				case .removeDocumentNote(let noteID):
+					self = .removeDocumentNote(noteID: noteID)
+				case .addDocumentComment(let commentID, let text):
+					self = .addDocumentComment(commentID: commentID, text: text)
+				case .removeDocumentComment(let commentID):
+					self = .removeDocumentComment(commentID: commentID)
+				case .createNode(let path, let parentPath, let name):
+					self = .createNode(path: path, parentPath: parentPath, name: name)
+				case .renameNode(let path, let name):
+					self = .renameNode(path: path, name: name)
+				case .deleteNode(let path):
+					self = .deleteNode(path: path)
+				case .addTypeReference(let path, let type):
+					self = .addTypeReference(path: path, type: type)
+				case .removeTypeReference(let path, let type):
+					self = .removeTypeReference(path: path, type: type)
+				case .setProtonym(let path, let protonym):
+					self = .setProtonym(path: path, protonym: protonym)
+				case .removeProtonym(let path):
+					self = .removeProtonym(path: path)
+				case .setDefaultValue(let path, let value):
+					self = .setDefaultValue(path: path, value: .init(value))
+				case .removeDefaultValue(let path):
+					self = .removeDefaultValue(path: path)
+				case .addConnection(let path, let value):
+					self = .addConnection(path: path, value)
+				case .removeConnection(let path, let value):
+					self = .removeConnection(path: path, value)
+				case .addNote(let path, let noteID, let text):
+					self = .addNote(path: path, noteID: noteID, text: text)
+				case .removeNote(let path, let noteID):
+					self = .removeNote(path: path, noteID: noteID)
+				case .addComment(let path, let commentID, let text):
+					self = .addComment(path: path, commentID: commentID, text: text)
+				case .removeComment(let path, let commentID):
+					self = .removeComment(path: path, commentID: commentID)
+				case .addImport(let value):
+					self = .addImport(value)
+				case .removeImport(let value):
+					self = .removeImport(value)
+			}
+		}
+	}
+
+	init(_ json: JSON) {
+		switch json {
+			case .setDocumentDate(let value):
+				self = .setDocumentDate(value)
+			case .addDocumentNote(let noteID, let text):
+				self = .addDocumentNote(noteID: noteID, text: text)
+			case .removeDocumentNote(let noteID):
+				self = .removeDocumentNote(noteID: noteID)
+			case .addDocumentComment(let commentID, let text):
+				self = .addDocumentComment(commentID: commentID, text: text)
+			case .removeDocumentComment(let commentID):
+				self = .removeDocumentComment(commentID: commentID)
+			case .createNode(let path, let parentPath, let name):
+				self = .createNode(path: path, parentPath: parentPath, name: name)
+			case .renameNode(let path, let name):
+				self = .renameNode(path: path, name: name)
+			case .deleteNode(let path):
+				self = .deleteNode(path: path)
+			case .addTypeReference(let path, let type):
+				self = .addTypeReference(path: path, type: type)
+			case .removeTypeReference(let path, let type):
+				self = .removeTypeReference(path: path, type: type)
+			case .setProtonym(let path, let protonym):
+				self = .setProtonym(path: path, protonym: protonym)
+			case .removeProtonym(let path):
+				self = .removeProtonym(path: path)
+			case .setDefaultValue(let path, let value):
+				self = .setDefaultValue(path: path, value: .init(value))
+			case .removeDefaultValue(let path):
+				self = .removeDefaultValue(path: path)
+			case .addConnection(let path, let value):
+				self = .addConnection(path: path, value)
+			case .removeConnection(let path, let value):
+				self = .removeConnection(path: path, value)
+			case .addNote(let path, let noteID, let text):
+				self = .addNote(path: path, noteID: noteID, text: text)
+			case .removeNote(let path, let noteID):
+				self = .removeNote(path: path, noteID: noteID)
+			case .addComment(let path, let commentID, let text):
+				self = .addComment(path: path, commentID: commentID, text: text)
+			case .removeComment(let path, let commentID):
+				self = .removeComment(path: path, commentID: commentID)
+			case .addImport(let value):
+				self = .addImport(value)
+			case .removeImport(let value):
+				self = .removeImport(value)
+		}
+	}
+}
+
+public extension Lexicon.CRDT.Replica {
+
+	struct JSON: Codable, Sendable {
+		public var operations: Set<Lexicon.CRDT.Operation.JSON>
+
+		public init(_ replica: Lexicon.CRDT.Replica) {
+			self.operations = Set(replica.operations.map(Lexicon.CRDT.Operation.JSON.init))
+		}
+	}
+
+	var json: JSON {
+		JSON(self)
+	}
+
+	init(_ json: JSON) {
+		self.init(operations: Set(json.operations.map(Lexicon.CRDT.Operation.init)))
 	}
 }
 
