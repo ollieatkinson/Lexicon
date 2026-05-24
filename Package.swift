@@ -1,14 +1,16 @@
-// swift-tools-version: 5.6
+// swift-tools-version: 6.3
 
 import PackageDescription
 
 let package = Package(
 	name: "Lexicon",
 	platforms: [
-		.macOS(.v11),
-		.iOS(.v14)
+		.macOS(.v15),
+		.iOS(.v18)
 	],
 	products: [
+		.library(name: "_Collections", targets: ["_Collections"]),
+		.library(name: "_JSON", targets: ["_JSON"]),
 		.library(name: "Lexicon", targets: ["Lexicon"]),
 		.library(name: "SwiftLexicon", targets: ["SwiftLexicon"]),
 		.library(name: "SwiftStandAlone", targets: ["SwiftStandAlone"]),
@@ -16,18 +18,30 @@ let package = Package(
 		.library(name: "TypeScriptStandAlone", targets: ["TypeScriptStandAlone"]),
 		.library(name: "LexiconGenerators", targets: ["LexiconGenerators"]),
 		.executable(name: "lexicon-generate", targets: ["lexicon-generate"]),
+		.executable(name: "lexicon", targets: ["lexicon-cli"]),
 		.plugin(name: "SwiftStandAloneGeneratorPlugin", targets: ["SwiftStandAloneGeneratorPlugin"]),
 		.plugin(name: "SwiftLibraryGeneratorPlugin", targets: ["SwiftLibraryGeneratorPlugin"]),
 	],
 	dependencies: [
 		.package(url: "https://github.com/screensailor/Hope", branch: "trunk"),
-		.package(url: "https://github.com/apple/swift-collections", from: "1.0.0"),
-		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.1.2")
+		.package(url: "https://github.com/apple/swift-collections", from: "1.5.1"),
+		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.7.1"),
+		.package(url: "https://github.com/apple/swift-async-algorithms", from: "1.1.3")
 	],
 	targets: [
 		.target(
+			name: "_Collections",
+			dependencies: [
+				.product(name: "Collections", package: "swift-collections")
+			]
+		),
+		.target(
+			name: "_JSON"
+		),
+		.target(
 			name: "Lexicon",
 			dependencies: [
+				"_Collections",
 				.product(name: "Collections", package: "swift-collections")
 			],
 			swiftSettings: [.define("EDITOR")] // TODO: make this opt in
@@ -39,6 +53,14 @@ let package = Package(
 				"Lexicon"
 			],
 			resources: [.copy("Resources")]
+		),
+		.testTarget(
+			name: "_CollectionsTests",
+			dependencies: ["_Collections"]
+		),
+		.testTarget(
+			name: "_JSONTests",
+			dependencies: ["_JSON"]
 		),
 		.target(
 			name: "LexiconGenerators",
@@ -58,14 +80,17 @@ let package = Package(
 		.target(
 			name: "SwiftLexicon",
 			dependencies: [
-				"Lexicon"
+				"Lexicon",
+				"_JSON",
+				.product(name: "AsyncAlgorithms", package: "swift-async-algorithms")
 			]
 		),
 		.testTarget(
 			name: "SwiftLexiconTests",
 			dependencies: [
 				"Hope",
-				"SwiftLexicon"
+				"SwiftLexicon",
+				.product(name: "AsyncAlgorithms", package: "swift-async-algorithms")
 			],
 			resources: [.copy("Resources")]
 		),
@@ -119,6 +144,13 @@ let package = Package(
 				.product(name: "Collections", package: "swift-collections")
 			]
 		),
+		.executableTarget(
+			name: "lexicon-cli",
+			dependencies: [
+				"Lexicon",
+				.product(name: "ArgumentParser", package: "swift-argument-parser")
+			]
+		),
 		.plugin(
 			name: "SwiftStandAloneGeneratorPlugin",
 			capability: .buildTool(),
@@ -129,5 +161,6 @@ let package = Package(
 			capability: .buildTool(),
 			dependencies: ["lexicon-generate"]
 		)
-	]
+	],
+	swiftLanguageModes: [.v6]
 )

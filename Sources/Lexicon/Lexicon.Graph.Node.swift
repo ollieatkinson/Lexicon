@@ -2,32 +2,63 @@
 // github.com/screensailor 2021
 //
 
+import _Collections
+
 public extension Lexicon.Graph.Node {
 	typealias ID = String // TODO: consider [Name] or WritableKeyPath or [WritableKeyPath] instead
 	typealias Name = String
 	typealias Protonym = String
+	typealias Children = SortedDictionary<Name, Lexicon.Graph.Node>
 }
 
 public extension Lexicon.Graph {
 	
-	struct Node {
+	struct Node: Sendable {
 		
 		public var name: Name
 		public var type: Set<ID>
 		public var protonym: Protonym?
-		public var children: [Name: Node]
+		public var defaultValue: DefaultValue?
+		public var connections: [Lexicon.Import]
+		public var notes: [String]
+		public var comments: [String]
+		public var children: Children
 		
-		public init(name: Name, protonym: Protonym) {
+		public init(
+			name: Name,
+			protonym: Protonym,
+			defaultValue: DefaultValue? = nil,
+			connections: [Lexicon.Import] = [],
+			notes: [String] = [],
+			comments: [String] = []
+		) {
 			self.name = name
 			self.type = []
 			self.protonym = protonym
+			self.defaultValue = defaultValue
+			self.connections = connections
+			self.notes = notes
+			self.comments = comments
 			self.children = [:]
 		}
 		
-		public init(name: Name, children: [Name: Node] = [:], type: Set<ID> = []) {
+		public init(
+			name: Name,
+			children: [Name: Node] = [:],
+			type: Set<ID> = [],
+			defaultValue: DefaultValue? = nil,
+			connections: [Lexicon.Import] = [],
+			notes: [String] = [],
+			comments: [String] = []
+		) {
 			self.name = name
 			self.type = type
-			self.children = children
+			self.protonym = nil
+			self.defaultValue = defaultValue
+			self.connections = connections
+			self.notes = notes
+			self.comments = comments
+			self.children = Children(children)
 		}
 
 		@discardableResult
@@ -61,13 +92,12 @@ extension Lexicon.Graph.Node: CustomStringConvertible {
 public extension Lexicon.Graph.Node {
 	
 	// TODO: rewrite to reflect Node changes
-	func traverse(sorted: Bool = false, parent: ID? = nil, name: Name? = nil, yield: ((id: ID, name: Name, node: Lexicon.Graph.Node)) -> ()) {
+	func traverse(parent: ID? = nil, name: Name? = nil, yield: ((id: ID, name: Name, node: Lexicon.Graph.Node)) -> ()) {
 		let name = name ?? self.name
 		let id = parent.map{ "\($0).\(name)" } ?? name
 		yield((id, name, self))
-		let nodes = sorted ? AnyCollection(children.sorted(by: { $0.key < $1.key })) : AnyCollection(children)
-		nodes.forEach { (name, child) in
-			child.traverse(sorted: sorted, parent: id, name: name, yield: yield)
+		children.forEach { (name, child) in
+			child.traverse(parent: id, name: name, yield: yield)
 		}
 	}
 }
