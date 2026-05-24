@@ -12,4 +12,14 @@ final class SourceIdentifierTests: Hopes {
 		hope("test.type_even.no_good".standAloneTypeSuffix) == "test_type__even_no__good"
 		hope("test._&_.type".standAloneTypeSuffix) == "test_____type"
 	}
+
+	func test_stand_alone_type_names_share_prefix_rules() {
+		let names = StandAloneTypeNames(id: "root.some_type", prefix: ("L", "I"))
+
+		hope(names.className) == "L_root_some__type"
+		hope(names.protocolName) == "I_root_some__type"
+		hope(names.className(for: "root.some_type.child")) == "L_root_some__type_child"
+		hope(names.protocolBase(supertype: nil)) == "I"
+		hope(names.protocolBase(supertype: "root.a_&_root.bad")) == "I_root_a, I_root_bad"
+	}
 }

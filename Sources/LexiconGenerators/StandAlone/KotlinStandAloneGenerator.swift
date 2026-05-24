@@ -61,24 +61,16 @@ private extension Lexicon.Graph.Node.Class.JSON {
 			return []
 		}
 		
-		let T = id.standAloneTypeSuffix
-		let (L, I) = prefix
-		let className = "\(L)_\(T)"
-		let protocolName = "\(I)_\(T)"
+		let names = StandAloneTypeNames(id: id, prefix: prefix)
 		
 		if let protonym = protonym {
 			return [
 				try SourceTemplate("typealias {{className}} = {{baseClass}}").render([
-					"className": className,
-					"baseClass": "\(L)_\(protonym.standAloneTypeSuffix)",
+					"className": names.className,
+					"baseClass": names.className(for: protonym),
 				])
 			]
 		}
-		
-		let supertype = supertype?
-			.replacingOccurrences(of: "_", with: "__")
-			.replacingOccurrences(of: ".", with: "_")
-			.replacingOccurrences(of: "__&__", with: ", I_")
 		
 		var lines = [
 			try SourceTemplate(
@@ -87,10 +79,10 @@ private extension Lexicon.Graph.Node.Class.JSON {
 				interface {{protocolName}}: {{protocolBase}}
 				"""
 			).render([
-				"className": className,
-				"baseClass": L,
-				"protocolName": protocolName,
-				"protocolBase": "\(I)\(supertype.map{ "_\($0)" } ?? "")",
+				"className": names.className,
+				"baseClass": names.classPrefix,
+				"protocolName": names.protocolName,
+				"protocolBase": names.protocolBase(supertype: supertype),
 			])
 		]
 
@@ -99,9 +91,9 @@ private extension Lexicon.Graph.Node.Class.JSON {
 			lines.append(
 				try SourceTemplate("val {{protocolName}}.`{{name}}`: {{className}} get() = {{className}}(\"${identifier}.{{name}}\")")
 					.render([
-						"protocolName": protocolName,
+						"protocolName": names.protocolName,
 						"name": child,
-						"className": "\(L)_\(id.standAloneTypeSuffix)",
+						"className": names.className(for: id),
 					])
 			)
 		}
@@ -111,9 +103,9 @@ private extension Lexicon.Graph.Node.Class.JSON {
 			lines.append(
 				try SourceTemplate("val {{protocolName}}.`{{name}}`: {{className}} get() = {{protonym}}")
 					.render([
-						"protocolName": protocolName,
+						"protocolName": names.protocolName,
 						"name": synonym,
-						"className": "\(L)_\(id.standAloneTypeSuffix)",
+						"className": names.className(for: id),
 						"protonym": protonym,
 					])
 			)

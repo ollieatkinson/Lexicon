@@ -62,38 +62,31 @@ private extension Lexicon.Graph.Node.Class.JSON {
 			return []
 		}
 		
-		let T = id.standAloneTypeSuffix
-		let (L, I) = prefix
-		let className = "\(L)_\(T)"
-		let protocolName = "\(I)_\(T)"
+		let names = StandAloneTypeNames(id: id, prefix: prefix)
 		
 		if let protonym = protonym {
 			return [
 				try SourceTemplate("type {{className}} = {{baseClass}}").render([
-					"className": className,
-					"baseClass": "\(L)_\(protonym.standAloneTypeSuffix)",
+					"className": names.className,
+					"baseClass": names.className(for: protonym),
 				])
 			]
 		}
-		
-		let supertype = supertype?
-			.replacingOccurrences(of: "_", with: "__")
-			.replacingOccurrences(of: ".", with: "_")
-			.replacingOccurrences(of: "__&__", with: ", I_")
 		
 		if hasNoProperties {
 			return [
 				try SourceTemplate(
 					"""
 					class {{className}} extends {{baseClass}} implements {{protocolName}} {{classBlock}}
-					type {{protocolName}} = {{protocolAlias}};
+					interface {{protocolName}} extends {{protocolBase}} {{protocolBlock}}
 					"""
 				).render([
-					"className": className,
-					"baseClass": L,
-					"protocolName": protocolName,
+					"className": names.className,
+					"baseClass": names.classPrefix,
+					"protocolName": names.protocolName,
 					"classBlock": typeScriptBlock(emptyTypeScriptClassMembers(prefix: prefix, classes: classes, supertype: supertype)),
-					"protocolAlias": supertype.map { "\(I)_\($0)" } ?? I,
+					"protocolBase": names.protocolBase(supertype: supertype),
+					"protocolBlock": typeScriptBlock([]),
 				])
 			]
 		}
@@ -105,11 +98,11 @@ private extension Lexicon.Graph.Node.Class.JSON {
 				interface {{protocolName}} extends {{protocolBase}} {{protocolBlock}}
 				"""
 			).render([
-				"className": className,
-				"baseClass": L,
-				"protocolName": protocolName,
+				"className": names.className,
+				"baseClass": names.classPrefix,
+				"protocolName": names.protocolName,
 				"classBlock": typeScriptBlock(typeScriptClassMembers(prefix: prefix, classes: classes)),
-				"protocolBase": "\(I)\(supertype.map{ "_\($0)" } ?? "")",
+				"protocolBase": names.protocolBase(supertype: supertype),
 				"protocolBlock": typeScriptBlock(typeScriptProtocolMembers(prefix: prefix)),
 			])
 		]
@@ -122,19 +115,42 @@ private extension Lexicon.Graph.Node.Class.JSON {
 		return "{\n\(members.joined(separator: "\n"))\n}"
 	}
 
-	func emptyTypeScriptClassMembers(
-		prefix: (class: String, protocol: String),
-		classes: [Lexicon.Graph.Node.Class.JSON],
-		supertype: Lemma.ID?
-	) -> [String] {
-		guard let supertype else {
-			return []
+		func emptyTypeScriptClassMembers(
+			prefix: (class: String, protocol: String),
+			classes: [Lexicon.Graph.Node.Class.JSON],
+			supertype: Lemma.ID?
+		) -> [String] {
+			guard let supertype else {
+				return []
+			}
+			return inheritedTypeScriptChildren(classes: classes, supertype: supertype).map { child in
+				"  \(child.name)!: \(prefix.class)_\(child.id.standAloneTypeSuffix);"
+			}
 		}
-		let superChildren = classes.first { $0.id == supertype }?.children ?? []
-		return superChildren.map { child in
-			"  \(child)!: \(prefix.class)_\(supertype)_\(child);"
+
+		func inheritedTypeScriptChildren(
+			classes: [Lexicon.Graph.Node.Class.JSON],
+			supertype: Lemma.ID
+		) -> [(name: Lemma.Name, id: Lemma.ID)] {
+			guard let superclass = classes.first(where: { $0.id == supertype }) else {
+				return []
+			}
+
+			var children = superclass.supertype.map {
+				inheritedTypeScriptChildren(classes: classes, supertype: $0)
+			} ?? []
+
+			children += (superclass.children ?? []).map { child in
+				(child, "\(superclass.id).\(child)")
+			}
+
+			let mixinChildren = superclass.mixin?.children ?? [:]
+			children += mixinChildren.keys.sorted().map { child in
+				(child, mixinChildren[child] ?? "\(superclass.id).\(child)")
+			}
+
+			return children
 		}
-	}
 
 	func typeScriptClassMembers(prefix: (class: String, protocol: String), classes: [Lexicon.Graph.Node.Class.JSON]) -> [String] {
 		var members: [String] = []
