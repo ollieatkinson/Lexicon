@@ -18,13 +18,15 @@ let package = Package(
 		.library(name: "TypeScriptStandAlone", targets: ["TypeScriptStandAlone"]),
 		.library(name: "LexiconGenerators", targets: ["LexiconGenerators"]),
 		.executable(name: "lexicon-generate", targets: ["lexicon-generate"]),
+		.executable(name: "lexicon", targets: ["lexicon-cli"]),
 		.plugin(name: "SwiftStandAloneGeneratorPlugin", targets: ["SwiftStandAloneGeneratorPlugin"]),
 		.plugin(name: "SwiftLibraryGeneratorPlugin", targets: ["SwiftLibraryGeneratorPlugin"]),
 	],
 	dependencies: [
 		.package(url: "https://github.com/screensailor/Hope", branch: "trunk"),
 		.package(url: "https://github.com/apple/swift-collections", from: "1.5.1"),
-		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.1.2")
+		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.7.1"),
+		.package(url: "https://github.com/apple/swift-async-algorithms", from: "1.1.3")
 	],
 	targets: [
 		.target(
@@ -64,30 +66,37 @@ let package = Package(
 			name: "LexiconGenerators",
 			dependencies: [
 				"Lexicon",
-				"SwiftLexicon",
-				"SwiftStandAlone",
-				"KotlinStandAlone",
-        "TypeScriptStandAlone"
+				"SwiftLexicon"
+			]
+		),
+		.testTarget(
+			name: "LexiconGeneratorsTests",
+			dependencies: [
+				"Hope",
+				"LexiconGenerators"
 			]
 		),
 		.target(
 			name: "SwiftLexicon",
 			dependencies: [
-				"Lexicon"
+				"Lexicon",
+				"_JSON",
+				.product(name: "AsyncAlgorithms", package: "swift-async-algorithms")
 			]
 		),
 		.testTarget(
 			name: "SwiftLexiconTests",
 			dependencies: [
 				"Hope",
-				"SwiftLexicon"
+				"SwiftLexicon",
+				.product(name: "AsyncAlgorithms", package: "swift-async-algorithms")
 			],
 			resources: [.copy("Resources")]
 		),
 		.target(
 			name: "SwiftStandAlone",
 			dependencies: [
-				"Lexicon",
+				"LexiconGenerators",
 			]
 		),
 		.testTarget(
@@ -101,7 +110,7 @@ let package = Package(
 		.target(
 			name: "KotlinStandAlone",
 			dependencies: [
-				"Lexicon",
+				"LexiconGenerators",
 			]
 		),
 		.testTarget(
@@ -112,10 +121,10 @@ let package = Package(
 			],
 			resources: [.copy("Resources")]
 		),
-    .target(
+		.target(
 			name: "TypeScriptStandAlone",
 			dependencies: [
-				"Lexicon",
+				"LexiconGenerators",
 			]
 		),
 		.testTarget(
@@ -134,6 +143,13 @@ let package = Package(
 				.product(name: "Collections", package: "swift-collections")
 			]
 		),
+		.executableTarget(
+			name: "lexicon-cli",
+			dependencies: [
+				"Lexicon",
+				.product(name: "ArgumentParser", package: "swift-argument-parser")
+			]
+		),
 		.plugin(
 			name: "SwiftStandAloneGeneratorPlugin",
 			capability: .buildTool(),
@@ -145,6 +161,5 @@ let package = Package(
 			dependencies: ["lexicon-generate"]
 		)
 	],
-	// TODO: switch to Swift 6 language mode after porting SwiftLexicon events off Combine.
-	swiftLanguageModes: [.v5]
+	swiftLanguageModes: [.v6]
 )

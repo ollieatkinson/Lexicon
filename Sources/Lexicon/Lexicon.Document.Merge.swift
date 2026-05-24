@@ -299,29 +299,13 @@ private extension Lexicon.Graph.Node {
 		parentPath: String?,
 		name newName: String
 	) -> Self {
-		var node = self
-		node.name = newName
-		node.type = Set(node.type.map { $0.rewritingInternalReference(from: oldRootID, to: newRootID) })
-		if case .reference(let reference) = node.defaultValue {
-			node.defaultValue = .reference(reference.rewritingInternalReference(from: oldRootID, to: newRootID))
-		}
-		if let protonym = node.protonym {
-			let rewritten = protonym.rewritingInternalReference(from: oldRootID, to: newRootID)
-			node.protonym = parentPath.map { rewritten.dotPath(after: $0) } ?? rewritten
-		}
-		var children: Lexicon.Graph.Node.Children = [:]
-		for (name, child) in node.children {
-			let childPath = "\(path).\(name)"
-			children[name] = child.rebased(
-				from: oldRootID,
-				to: newRootID,
-				path: childPath,
-				parentPath: path,
-				name: name
-			)
-		}
-		node.children = children
-		return node
+		rewritingInternalReferences(
+			from: oldRootID,
+			to: newRootID,
+			path: path,
+			parentPath: parentPath,
+			name: newName
+		)
 	}
 
 	mutating func mutate<Path>(path: Path, body: (inout Self) throws -> Void) throws where Path: Collection, Path.Element == String {
@@ -345,27 +329,6 @@ private extension SortedDictionary where Key == String, Value == Lexicon.Graph.N
 		}
 		try body(&value)
 		self[key] = value
-	}
-}
-
-private extension String {
-
-	func rewritingInternalReference(from oldRootID: String, to newRootID: String) -> String {
-		if self == oldRootID {
-			return newRootID
-		}
-		guard hasPrefix("\(oldRootID).") else {
-			return self
-		}
-		return "\(newRootID)\(dropFirst(oldRootID.count))"
-	}
-}
-
-private extension Array where Element: Hashable {
-
-	func uniqued() -> [Element] {
-		var seen: Set<Element> = []
-		return filter { seen.insert($0).inserted }
 	}
 }
 
