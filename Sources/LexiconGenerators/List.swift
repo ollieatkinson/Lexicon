@@ -22,5 +22,7 @@ public extension Lexicon.Graph.JSON {
 		"TypeScript Stand-Alone": TypeScriptStandAlone.Generator.self,
 		
 		"JSON Classes & Mixins": JSONClasses.self,
+
+		"SKOS JSON-LD": SKOSJSONLD.self,
 	]
 }
