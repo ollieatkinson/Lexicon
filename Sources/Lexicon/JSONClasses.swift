@@ -21,36 +21,23 @@ public enum JSONClasses: CodeGenerator {
 	public class Encoder: JSONEncoder, @unchecked Sendable {
 		public override init() {
 			super.init()
-			self.dateEncodingStrategy = .formatted(DateFormatter.shared)
+			self.dateEncodingStrategy = .formatted(JSONClasses.makeDateFormatter())
 		}
 	}
 	
 	public class Decoder: JSONDecoder, @unchecked Sendable {
 		public override init() {
 			super.init()
-			self.dateDecodingStrategy = .formatted(DateFormatter.shared)
+			self.dateDecodingStrategy = .formatted(JSONClasses.makeDateFormatter())
 		}
 	}
 	
-	public class DateFormatter: Foundation.DateFormatter, @unchecked Sendable {
-		
-		public static let shared = DateFormatter()
-		
-		public private(set) lazy var iso: ISO8601DateFormatter = {
-			self.dateStyle = .long
-			self.timeStyle = .short
-			let o = ISO8601DateFormatter()
-			o.formatOptions.insert(.withFractionalSeconds)
-			o.timeZone = .none
-			return o
-		}()
-		
-		public override func date(from string: String) -> Date? {
-			iso.date(from: string)
-		}
-		
-		public override func string(from date: Date) -> String {
-			iso.string(from: date)
-		}
+	private static func makeDateFormatter() -> Foundation.DateFormatter {
+		let o = Foundation.DateFormatter()
+		o.calendar = Calendar(identifier: .iso8601)
+		o.locale = Locale(identifier: "en_US_POSIX")
+		o.timeZone = TimeZone(secondsFromGMT: 0)
+		o.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSXXXXX"
+		return o
 	}
 }
