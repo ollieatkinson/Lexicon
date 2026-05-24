@@ -62,7 +62,7 @@ private extension Lexicon.Graph.Node.Class.JSON {
 			return []
 		}
 		
-		let T = id.idToClassSuffix
+		let T = id.standAloneTypeSuffix
 		let (L, I) = prefix
 		let className = "\(L)_\(T)"
 		let protocolName = "\(I)_\(T)"
@@ -71,7 +71,7 @@ private extension Lexicon.Graph.Node.Class.JSON {
 			return [
 				try SourceTemplate("type {{className}} = {{baseClass}}").render([
 					"className": className,
-					"baseClass": "\(L)_\(protonym.idToClassSuffix)",
+					"baseClass": "\(L)_\(protonym.standAloneTypeSuffix)",
 				])
 			]
 		}
@@ -142,17 +142,17 @@ private extension Lexicon.Graph.Node.Class.JSON {
 			let subClass = classes.first { $0.id == t }
 			for child in subClass?.children ?? [] {
 				let id = "L.\(t).\(child)"
-				members.append("  \(child)!: \(id.idToClassSuffix);")
+				members.append("  \(child)!: \(id.standAloneTypeSuffix);")
 			}
 			for synonym in subClass?.synonyms?.keys.sorted() ?? [] {
 				let id = "L.\(t).\(synonym)"
-				members.append("  \(synonym)!: \(id.idToClassSuffix);")
+				members.append("  \(synonym)!: \(id.standAloneTypeSuffix);")
 			}
 		}
 
 		for child in children ?? [] {
 			let id = "\(id).\(child)"
-			members.append("  \(child) = new \(prefix.class)_\(id.idToClassSuffix)(`${this.__}.\(child)`);")
+			members.append("  \(child) = new \(prefix.class)_\(id.standAloneTypeSuffix)(`${this.__}.\(child)`);")
 		}
 
 		for (synonym, protonym) in (synonyms?.sorted(by: { $0.key < $1.key }) ?? []) {
@@ -164,15 +164,7 @@ private extension Lexicon.Graph.Node.Class.JSON {
 	func typeScriptProtocolMembers(prefix: (class: String, protocol: String)) -> [String] {
 		(children ?? []).map { child in
 			let id = "\(id).\(child)"
-			return "  \(child): \(prefix.protocol)_\(id.idToClassSuffix);"
+			return "  \(child): \(prefix.protocol)_\(id.standAloneTypeSuffix);"
 		}
-	}
-}
-
-private extension String {
-	var idToClassSuffix: String {
-		replacingOccurrences(of: "_", with: "__")
-			.replacingOccurrences(of: ".", with: "_")
-			.replacingOccurrences(of: "_&_", with: "_")
 	}
 }

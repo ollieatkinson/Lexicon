@@ -93,7 +93,7 @@ private extension Lexicon.Graph.Node.Class.JSON {
 			return []
 		}
 		
-		let T = id.idToClassSuffix
+		let T = id.standAloneTypeSuffix
 		let (L, I) = prefix
 		let className = "\(L)_\(T)"
 		let protocolName = "\(I)_\(T)"
@@ -105,7 +105,7 @@ private extension Lexicon.Graph.Node.Class.JSON {
 					delimiters: .percentSigns
 				).render([
 					"className": className,
-					"baseClass": "\(L)_\(protonym.idToClassSuffix)",
+					"baseClass": "\(L)_\(protonym.standAloneTypeSuffix)",
 				])
 			]
 		}
@@ -170,7 +170,7 @@ private extension Lexicon.Graph.Node.Class.JSON {
 					delimiters: .percentSigns
 				).render([
 					"name": child,
-					"className": "\(L)_\(id.idToClassSuffix)",
+					"className": "\(L)_\(id.standAloneTypeSuffix)",
 				])
 			)
 		}
@@ -183,20 +183,11 @@ private extension Lexicon.Graph.Node.Class.JSON {
 					delimiters: .percentSigns
 				).render([
 					"name": synonym,
-					"className": "\(L)_\(id.idToClassSuffix)",
+					"className": "\(L)_\(id.standAloneTypeSuffix)",
 					"protonym": protonym,
 				])
 			)
 		}
 		return properties
-	}
-}
-
-private extension String {
-	
-	var idToClassSuffix: String {
-		replacingOccurrences(of: "_", with: "__")
-			.replacingOccurrences(of: ".", with: "_")
-			.replacingOccurrences(of: "_&_", with: "_")
 	}
 }
