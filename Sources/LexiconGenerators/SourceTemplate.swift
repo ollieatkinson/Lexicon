@@ -4,18 +4,29 @@
 
 struct SourceTemplate: Sendable {
 
-	private let template: String
+	struct Delimiters: Sendable {
+		let opening: String
+		let closing: String
 
-	init(_ template: String) {
+		static let doubleBraces = Self(opening: "{{", closing: "}}")
+		static let percentSigns = Self(opening: "%%", closing: "%%")
+	}
+
+	private let template: String
+	private let delimiters: Delimiters
+
+	init(_ template: String, delimiters: Delimiters = .doubleBraces) {
 		self.template = template
+		self.delimiters = delimiters
 	}
 
 	func render(_ values: [String: String]) throws -> String {
 		var output = template
 		for (key, value) in values {
-			output = output.replacingOccurrences(of: "{{\(key)}}", with: value)
+			let placeholder = "\(delimiters.opening)\(key)\(delimiters.closing)"
+			output = output.replacingOccurrences(of: placeholder, with: value)
 		}
-		guard output.range(of: "{{") == nil else {
+		guard output.range(of: delimiters.opening) == nil else {
 			throw Error.unresolvedPlaceholder(output)
 		}
 		return output
