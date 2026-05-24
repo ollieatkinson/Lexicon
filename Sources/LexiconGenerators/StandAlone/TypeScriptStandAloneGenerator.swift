@@ -6,7 +6,7 @@ import Lexicon
 import UniformTypeIdentifiers
 
 public extension UTType {
-	static var typescript = UTType(filenameExtension: "ts", conformingTo: .sourceCode)!
+	static let typescript = UTType(filenameExtension: "ts", conformingTo: .sourceCode)!
 }
 
 public enum TypeScriptStandAloneGenerator: CodeGenerator {

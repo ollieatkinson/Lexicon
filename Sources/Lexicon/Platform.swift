@@ -5,7 +5,7 @@
 import Foundation
 
 #if !canImport(UniformTypeIdentifiers)
-public struct UTType: Hashable, CustomStringConvertible {
+public struct UTType: Hashable, Sendable, CustomStringConvertible {
 	public var preferredFilenameExtension: String?
 	public var identifier: String
 
