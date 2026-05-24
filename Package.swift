@@ -44,10 +44,14 @@ let package = Package(
 			name: "LexiconGenerators",
 			dependencies: [
 				"Lexicon",
-				"SwiftLexicon",
-				"SwiftStandAlone",
-				"KotlinStandAlone",
-        "TypeScriptStandAlone"
+				"SwiftLexicon"
+			]
+		),
+		.testTarget(
+			name: "LexiconGeneratorsTests",
+			dependencies: [
+				"Hope",
+				"LexiconGenerators"
 			]
 		),
 		.target(
@@ -67,7 +71,7 @@ let package = Package(
 		.target(
 			name: "SwiftStandAlone",
 			dependencies: [
-				"Lexicon",
+				"LexiconGenerators",
 			]
 		),
 		.testTarget(
@@ -81,7 +85,7 @@ let package = Package(
 		.target(
 			name: "KotlinStandAlone",
 			dependencies: [
-				"Lexicon",
+				"LexiconGenerators",
 			]
 		),
 		.testTarget(
@@ -92,10 +96,10 @@ let package = Package(
 			],
 			resources: [.copy("Resources")]
 		),
-    .target(
+		.target(
 			name: "TypeScriptStandAlone",
 			dependencies: [
-				"Lexicon",
+				"LexiconGenerators",
 			]
 		),
 		.testTarget(
