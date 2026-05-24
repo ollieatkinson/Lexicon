@@ -2,47 +2,57 @@
 // github.com/screensailor 2026
 //
 
-@_exported import Hope
-@testable import LexiconGenerators
 import XCTest
+@testable import LexiconGenerators
 
-final class SourceTemplateTests: Hopes {
+final class SourceTemplateTests: XCTestCase {
 
-	func test_renders_default_double_brace_placeholders() throws {
-		let template = SourceTemplate("type {{name}} = {{target}}")
+	func test_render_replaces_placeholders() throws {
+		let source = try SourceTemplate("hello {{name}}").render(["name": "world"])
 
-		let source = try template.render([
-			"name": "L_test",
-			"target": "L_root",
-		])
-
-		hope(source) == "type L_test = L_root"
+		XCTAssertEqual(source, "hello world")
 	}
 
-	func test_renders_custom_delimiters_without_treating_double_braces_as_placeholders() throws {
-		let template = SourceTemplate(
+	func test_render_supports_alternateDelimiters() throws {
+		let source = try SourceTemplate("public var body: String { %%value%% }", delimiters: .percentSigns)
+			.render(["value": "\"ok\""])
+
+		XCTAssertEqual(source, "public var body: String { \"ok\" }")
+	}
+
+	func test_render_supports_alternateDelimitersWithSwiftLiteralBraces() throws {
+		let source = try SourceTemplate(
 			"var id: (I) -> String {{ $0.__ }}\nlet %%name%% = %%type%%()",
 			delimiters: .percentSigns
 		)
-
-		let source = try template.render([
+		.render([
 			"name": "test",
 			"type": "L_test",
 		])
 
-		hope(source) == """
+		XCTAssertEqual(source, """
 		var id: (I) -> String {{ $0.__ }}
 		let test = L_test()
-		"""
+		""")
 	}
 
-	func test_throws_when_a_placeholder_is_unresolved() throws {
-		do {
-			_ = try SourceTemplate("let {{name}} = {{value}}").render(["name": "test"])
-			XCTFail("Expected unresolved placeholder error")
-		} catch {
-			hope.true(String(describing: error).contains("Unresolved source template placeholder"))
-			hope.true(String(describing: error).contains("{{value}}"))
+	func test_render_does_not_parse_replacement_values() throws {
+		let source = try SourceTemplate("let value = \"{{value}}\"").render(["value": "literal {{braces}}"])
+
+		XCTAssertEqual(source, "let value = \"literal {{braces}}\"")
+	}
+
+	func test_render_throws_for_unresolvedPlaceholders() {
+		XCTAssertThrowsError(try SourceTemplate("let {{name}} = {{value}}").render(["name": "test"])) { error in
+			let description = String(describing: error)
+			XCTAssertTrue(description.contains("Unresolved source template placeholder"))
+			XCTAssertTrue(description.contains("{{value}}"))
 		}
+	}
+
+	func test_render_treats_non_identifier_braces_as_literalText() throws {
+		let source = try SourceTemplate("{{ not a placeholder }}").render([:])
+
+		XCTAssertEqual(source, "{{ not a placeholder }}")
 	}
 }

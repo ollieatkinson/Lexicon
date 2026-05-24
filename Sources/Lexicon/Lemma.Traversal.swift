@@ -24,7 +24,7 @@ public extension Lemma {
 					guard let last = buffer.popLast() else {
 						return nil
 					}
-					buffer.append(contentsOf: last.ownChildren.values.sortedByLocalizedStandard(by: \.id).reversed())
+					buffer.append(contentsOf: last.ownChildren.values.reversed())
 					return last
 				}
 
@@ -36,7 +36,7 @@ public extension Lemma {
 					guard let first = buffer.popFirst() else {
 						return nil
 					}
-					buffer.append(contentsOf: first.ownChildren.values.sortedByLocalizedStandard(by: \.id))
+					buffer.append(contentsOf: first.ownChildren.values)
 					return first
 				}
 		}
