@@ -36,7 +36,7 @@ public extension Lexicon.Graph.Node {
 			guard let first = buffer.popFirst() else {
 				return nil
 			}
-			buffer.append(contentsOf: first.children.values.sortedByLocalizedStandard(by: \.name, .orderedAscending))
+			buffer.append(contentsOf: first.children.values)
 			return first
 		}
 		
@@ -60,7 +60,7 @@ public extension Lexicon.Graph.Node {
 			guard let last = buffer.popLast() else {
 				return nil
 			}
-			buffer.append(contentsOf: last.children.values.sortedByLocalizedStandard(by: \.name, .orderedDescending))
+			buffer.append(contentsOf: last.children.values.reversed())
 			return last
 		}
 		
@@ -98,7 +98,6 @@ public extension Lexicon.Graph.Node {
 				return nil
 			}
 			let children = node.children.values.lazy
-				.sortedByLocalizedStandard(by: \.name, .orderedAscending)
 				.map{ child in (child, path.appending(path: \.[child.name])) }
 			buffer.append(contentsOf: children)
 			return (node, path)
@@ -127,8 +126,7 @@ public extension Lexicon.Graph.Node {
 			guard let (node, path) = buffer.popLast() else {
 				return nil
 			}
-			let children = node.children.values.lazy
-				.sortedByLocalizedStandard(by: \.name, .orderedDescending)
+			let children = node.children.values.reversed().lazy
 				.map{ child in (child, path.appending(path: \.[child.name])) }
 			buffer.append(contentsOf: children)
 			return (node, path)
