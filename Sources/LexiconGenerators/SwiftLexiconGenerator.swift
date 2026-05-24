@@ -5,15 +5,15 @@
 import Lexicon
 import UniformTypeIdentifiers
 
-public enum SwiftLexiconGenerator: CodeGenerator {
+public enum SwiftLexiconGenerator: SourceCodeGenerator {
 
 	// TODO: prefixes?
 
 	public static let utType = UTType.swiftSource
 	public static let command = "swift"
 
-	public static func generate(_ json: Lexicon.Graph.JSON) throws -> Data {
-		Data(json.swift().utf8)
+	public static func generateSource(_ json: Lexicon.Graph.JSON) throws -> String {
+		json.swift()
 	}
 }
 

@@ -9,15 +9,15 @@ public extension UTType {
 	static var typescript = UTType(filenameExtension: "ts", conformingTo: .sourceCode)!
 }
 
-public enum TypeScriptStandAloneGenerator: CodeGenerator {
+public enum TypeScriptStandAloneGenerator: SourceCodeGenerator {
 	
 	// TODO: prefixes?
 	
 	public static let utType = UTType.typescript
 	public static let command = "ts"
 
-	public static func generate(_ json: Lexicon.Graph.JSON) throws -> Data {
-		Data(try json.ts().utf8)
+	public static func generateSource(_ json: Lexicon.Graph.JSON) throws -> String {
+		try json.ts()
 	}
 }
 

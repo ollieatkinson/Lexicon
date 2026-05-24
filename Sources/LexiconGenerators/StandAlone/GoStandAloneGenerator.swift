@@ -7,13 +7,13 @@ import Lexicon
 import UniformTypeIdentifiers
 #endif
 
-public enum GoStandAloneGenerator: CodeGenerator {
+public enum GoStandAloneGenerator: SourceCodeGenerator {
 
 	public static let utType = UTType(filenameExtension: "go", conformingTo: .sourceCode)!
 	public static let command = "go"
 
-	public static func generate(_ json: Lexicon.Graph.JSON) throws -> Data {
-		Data(try json.go().utf8)
+	public static func generateSource(_ json: Lexicon.Graph.JSON) throws -> String {
+		try json.go()
 	}
 }
 

@@ -5,15 +5,15 @@
 import Lexicon
 import UniformTypeIdentifiers
 
-public enum KotlinStandAloneGenerator: CodeGenerator {
+public enum KotlinStandAloneGenerator: SourceCodeGenerator {
 	
 	// TODO: prefixes?
 	
 	public static let utType = UTType(filenameExtension: "kt", conformingTo: .sourceCode)!
 	public static let command = "kotlin"
 	
-	public static func generate(_ json: Lexicon.Graph.JSON) throws -> Data {
-		Data(try json.kotlin().utf8)
+	public static func generateSource(_ json: Lexicon.Graph.JSON) throws -> String {
+		try json.kotlin()
 	}
 }
 
