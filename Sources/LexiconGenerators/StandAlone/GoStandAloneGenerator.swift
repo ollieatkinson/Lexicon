@@ -109,67 +109,11 @@ private extension Lexicon.Graph.Node.Class.JSON {
 
 private extension Lexicon.Graph.Node.Class.JSON {
 
-	struct Accessor {
-		var name: String
-		var sourceID: String
-		var targetID: String
-		var pathSuffix: String
-		var isSynonym: Bool
-
-		func factory(receiver: String) -> String {
-			"new_L_\(targetID.goTypeSuffix)(\(receiver) + \".\(pathSuffix)\")"
-		}
-
-		func method(receiverType: String) throws -> String {
-			"\n\n" + (try SourceTemplate(
-				"""
-				func (l {{receiverType}}) {{name}}() L_{{sourceType}} {
-					return {{factory}}
-				}
-				"""
-			).render([
-				"receiverType": receiverType,
-				"name": name.goIdentifier,
-				"sourceType": sourceID.goTypeSuffix,
-				"factory": factory(receiver: "l.id"),
-			]))
-		}
+	func ownAccessors() -> [StandAloneAccessor] {
+		standAloneAccessors()
 	}
 
-	func ownAccessors() -> [Accessor] {
-		var accessors: [String: Accessor] = [:]
-		for child in children ?? [] {
-			let childID = "\(id).\(child)"
-			accessors[child] = .init(
-				name: child,
-				sourceID: childID,
-				targetID: childID,
-				pathSuffix: child,
-				isSynonym: false
-			)
-		}
-
-		for (synonym, protonym) in (synonyms?.sorted(by: { $0.key < $1.key }) ?? []) {
-			let synonymID = "\(id).\(synonym)"
-			let targetID = "\(id).\(protonym)"
-			accessors[synonym] = .init(
-				name: synonym,
-				sourceID: synonymID,
-				targetID: targetID,
-				pathSuffix: protonym,
-				isSynonym: true
-			)
-		}
-
-		return accessors.values.sorted { lhs, rhs in
-			if lhs.isSynonym != rhs.isSynonym {
-				return !lhs.isSynonym
-			}
-			return lhs.name < rhs.name
-		}
-	}
-
-	func allAccessors(classes: [Lexicon.Graph.Node.Class.JSON]) -> [Accessor] {
+	func allAccessors(classes: [Lexicon.Graph.Node.Class.JSON]) -> [StandAloneAccessor] {
 		var accessors = Dictionary(uniqueKeysWithValues: inheritedAccessors(classes: classes).map { ($0.name, $0) })
 		for accessor in ownAccessors() {
 			accessors[accessor.name] = accessor
@@ -177,7 +121,7 @@ private extension Lexicon.Graph.Node.Class.JSON {
 		return accessors.values.sorted { $0.name < $1.name }
 	}
 
-	func inheritedAccessors(classes: [Lexicon.Graph.Node.Class.JSON]) -> [Accessor] {
+	func inheritedAccessors(classes: [Lexicon.Graph.Node.Class.JSON]) -> [StandAloneAccessor] {
 		guard let supertype = supertype else {
 			return []
 		}
@@ -199,6 +143,28 @@ private extension Lexicon.Graph.Node.Class.JSON {
 		} else {
 			return klass.allAccessors(classes: classes)
 		}
+	}
+}
+
+private extension StandAloneAccessor {
+
+	func factory(receiver: String) -> String {
+		"new_L_\(targetID.goTypeSuffix)(\(receiver) + \".\(pathSuffix)\")"
+	}
+
+	func method(receiverType: String) throws -> String {
+		"\n\n" + (try SourceTemplate(
+			"""
+			func (l {{receiverType}}) {{name}}() L_{{sourceType}} {
+				return {{factory}}
+			}
+			"""
+		).render([
+			"receiverType": receiverType,
+			"name": name.goIdentifier,
+			"sourceType": sourceID.goTypeSuffix,
+			"factory": factory(receiver: "l.id"),
+		]))
 	}
 }
 
