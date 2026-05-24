@@ -73,13 +73,13 @@ struct CodeGeneratorCommand: AsyncParsableCommand {
 	}
 }
 
-typealias Generators = OrderedDictionary<String, CodeGenerator.Type>
+typealias Generators = OrderedDictionary<String, LexiconSourceGenerator>
 
 extension Generators {
 
 	var commandHelp: String { values.map { $0.command }.joined(separator: ", ") }
 
-	func find(_ command: String) -> CodeGenerator.Type? {
+	func find(_ command: String) -> LexiconSourceGenerator? {
 		first { _, value in value.command == command }?.value
 	}
 }
