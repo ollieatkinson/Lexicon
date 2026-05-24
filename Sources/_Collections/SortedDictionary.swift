@@ -33,8 +33,16 @@ public struct SortedDictionary<Key: Comparable & Hashable, Value> {
 		storage.keys
 	}
 
+	public var keysInOrder: OrderedSet<Key> {
+		keys
+	}
+
 	public var values: OrderedDictionary<Key, Value>.Values {
 		storage.values
+	}
+
+	public var valuesInKeyOrder: [Value] {
+		Array(values)
 	}
 
 	public var count: Int {

@@ -15,7 +15,9 @@ final class SortedDictionaryTests: XCTestCase {
 		]
 
 		XCTAssertEqual(Array(dictionary.keys), ["alpha", "middle", "zeta"])
+		XCTAssertEqual(Array(dictionary.keysInOrder), ["alpha", "middle", "zeta"])
 		XCTAssertEqual(Array(dictionary.values), [1, 2, 3])
+		XCTAssertEqual(dictionary.valuesInKeyOrder, [1, 2, 3])
 	}
 
 	func test_subscript_insert_keeps_keys_sorted() {

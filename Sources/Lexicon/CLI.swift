@@ -272,11 +272,11 @@ public extension Lemma {
 	
 	var childrenGroupedByTypeAndSorted: [(type: Lemma, children: [Lemma])] {
 		if let protonym = sourceProtonym {
-			return [(protonym, Array(children.values))]
+			return [(protonym, children.valuesInKeyOrder)]
 		}
-		var o = [(self, Array(ownChildren.values))]
-		for type in ownType.values {
-			o.append((type.unwrapped, type.children.keys.compactMap{ children[$0] }))
+		var o = [(self, ownChildren.valuesInKeyOrder)]
+		for type in ownType.valuesInKeyOrder {
+			o.append((type.unwrapped, type.children.keysInOrder.compactMap{ children[$0] }))
 		}
 		return o
 	}
