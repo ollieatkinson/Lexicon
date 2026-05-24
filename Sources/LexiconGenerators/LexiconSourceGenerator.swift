@@ -10,9 +10,9 @@ import UniformTypeIdentifiers
 
 public struct LexiconSourceGenerator: Sendable {
 
-	public var command: String
-	public var utType: UTType
-	private var generator: @Sendable (Lexicon.Graph.JSON) throws -> Data
+	public let command: String
+	public let utType: UTType
+	private let generator: @Sendable (Lexicon.Graph.JSON) throws -> Data
 
 	public init(
 		command: String,
