@@ -107,7 +107,7 @@ extension Lexicon.Graph.Node.Class.JSON {
 		var accessors = Dictionary(
 			uniqueKeysWithValues: type.standAloneInheritedAccessors(classes: classes).map { ($0.name, $0) }
 		)
-		for (name, id) in mixin.children?.sorted(by: { $0.key < $1.key }) ?? [] {
+		for (name, id) in mixin.children ?? [:] {
 			accessors[name] = .init(
 				name: name,
 				sourceID: id,

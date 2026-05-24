@@ -65,8 +65,20 @@ final class SourceIdentifierTests: Hopes {
 		)
 
 		let instance = try classes.first { $0.id == "root.instance" }.try()
+		let inheritedAccessors = instance.standAloneInheritedAccessors(classes: classes)
 		let accessors = instance.standAloneAllAccessors(classes: classes)
 
+		hope(inheritedAccessors.map(\.name)) == ["alias", "base", "shadowed"]
+		hope(inheritedAccessors.map(\.sourceID)) == [
+			"root.type.alias",
+			"root.type.base",
+			"root.type.shadowed",
+		]
+		hope(inheritedAccessors.map(\.targetID)) == [
+			"root.type.base",
+			"root.type.base",
+			"root.type.shadowed",
+		]
 		hope(accessors.map(\.name)) == ["alias", "base", "own", "shadowed"]
 		hope(accessors.map(\.sourceID)) == [
 			"root.type.alias",
