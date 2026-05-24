@@ -16,9 +16,11 @@ public extension Lexicon.Graph.JSON {
 		"Kotlin Stand-Alone": .init(KotlinStandAloneGenerator.self),
 
 		"Go Stand-Alone": .init(GoStandAloneGenerator.self),
-		
+
 		"TypeScript Stand-Alone": .init(TypeScriptStandAloneGenerator.self),
 		
 		"JSON Classes & Mixins": .init(JSONClasses.self),
+		
+		"SKOS JSON-LD": .init(SKOSJSONLD.self),
 	]
 }
