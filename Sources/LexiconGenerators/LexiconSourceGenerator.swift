@@ -6,16 +6,16 @@ import Foundation
 import Lexicon
 import UniformTypeIdentifiers
 
-public struct LexiconSourceGenerator {
+public struct LexiconSourceGenerator: Sendable {
 
 	public var command: String
 	public var utType: UTType
-	private var generator: (Lexicon.Graph.JSON) throws -> Data
+	private var generator: @Sendable (Lexicon.Graph.JSON) throws -> Data
 
 	public init(
 		command: String,
 		utType: UTType,
-		generate: @escaping (Lexicon.Graph.JSON) throws -> Data
+		generate: @escaping @Sendable (Lexicon.Graph.JSON) throws -> Data
 	) {
 		self.command = command
 		self.utType = utType
