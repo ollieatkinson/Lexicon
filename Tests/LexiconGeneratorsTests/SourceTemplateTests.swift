@@ -20,6 +20,22 @@ final class SourceTemplateTests: XCTestCase {
 		XCTAssertEqual(source, "public var body: String { \"ok\" }")
 	}
 
+	func test_render_supports_alternateDelimitersWithSwiftLiteralBraces() throws {
+		let source = try SourceTemplate(
+			"var id: (I) -> String {{ $0.__ }}\nlet %%name%% = %%type%%()",
+			delimiters: .percentSigns
+		)
+		.render([
+			"name": "test",
+			"type": "L_test",
+		])
+
+		XCTAssertEqual(source, """
+		var id: (I) -> String {{ $0.__ }}
+		let test = L_test()
+		""")
+	}
+
 	func test_render_does_not_parse_replacement_values() throws {
 		let source = try SourceTemplate("let value = \"{{value}}\"").render(["value": "literal {{braces}}"])
 
@@ -27,7 +43,11 @@ final class SourceTemplateTests: XCTestCase {
 	}
 
 	func test_render_throws_for_unresolvedPlaceholders() {
-		XCTAssertThrowsError(try SourceTemplate("hello {{name}}").render([:]))
+		XCTAssertThrowsError(try SourceTemplate("let {{name}} = {{value}}").render(["name": "test"])) { error in
+			let description = String(describing: error)
+			XCTAssertTrue(description.contains("Unresolved source template placeholder"))
+			XCTAssertTrue(description.contains("{{value}}"))
+		}
 	}
 
 	func test_render_treats_non_identifier_braces_as_literalText() throws {
