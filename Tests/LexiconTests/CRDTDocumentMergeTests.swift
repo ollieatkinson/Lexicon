@@ -163,6 +163,45 @@ final class CRDTDocumentMergeTests: Hopes {
 		hope(try composed.document.roots["root"].try().children["value"].try().children.keys.sorted()) == ["child"]
 	}
 
+	func test_example_connected_lexicons_compose_from_file_connections() throws {
+
+		let source = try Bundle.module.url(
+			forResource: "Resources/Examples/connected-root.taskpaper",
+			withExtension: nil
+		).try()
+		let document = try TaskPaper(Data(contentsOf: source)).decodeDocument()
+		let composed = try document.composed(resolving: FileLexiconImportResolver(
+			baseURL: source.deletingLastPathComponent()
+		))
+
+		hope(composed.conflicts) == []
+		hope(composed.document.roots.keys.sorted()) == ["organization"]
+
+		let root = try composed.document.roots["organization"].try()
+		let products = try root.children["products"].try()
+		hope(products.connections) == []
+		hope(products.children.keys.sorted()) == [
+			"glossary",
+			"local_term",
+			"product",
+		]
+		hope(try products.children["product"].try().children.keys.sorted()) == [
+			"roadmap",
+		]
+
+		let engineering = try root.children["engineering"].try()
+		hope(engineering.connections) == []
+		hope(engineering.children.keys.sorted()) == [
+			"local_term",
+			"quality",
+			"runtime",
+		]
+
+		let encoded = TaskPaper.encode(composed.document)
+		hope.false(encoded.contains("@ ./products.lexicon"))
+		hope.false(encoded.contains("@ ./engineering.lexicon"))
+	}
+
 	func test_file_import_resolver_restricts_local_imports_to_base_url() throws {
 
 		let temporary = FileManager.default.temporaryDirectory
