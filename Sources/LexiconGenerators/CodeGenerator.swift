@@ -3,6 +3,7 @@
 //
 
 import UniformTypeIdentifiers
+import Lexicon
 
 public protocol CodeGenerator {
 	static var utType: UTType { get }

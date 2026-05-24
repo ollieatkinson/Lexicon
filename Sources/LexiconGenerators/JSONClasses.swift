@@ -3,6 +3,7 @@
 //
 
 import Foundation
+import Lexicon
 import UniformTypeIdentifiers
 
 public enum JSONClasses: CodeGenerator {

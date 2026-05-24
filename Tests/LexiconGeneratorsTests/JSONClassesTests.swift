@@ -2,6 +2,8 @@
 // github.com/screensailor 2022
 //
 
+import Foundation
+
 class JSONClasses™: Hopes {
 	
 	func test() async throws {
