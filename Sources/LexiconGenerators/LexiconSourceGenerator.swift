@@ -4,7 +4,9 @@
 
 import Foundation
 import Lexicon
+#if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
+#endif
 
 public struct LexiconSourceGenerator: Sendable {
 
@@ -26,7 +28,7 @@ public struct LexiconSourceGenerator: Sendable {
 		self.init(
 			command: type.command,
 			utType: type.utType,
-			generate: { json in try type.generate(json) }
+			generate: type.generate
 		)
 	}
 

@@ -1,0 +1,7 @@
+organization:
+	products:
+	@ ./products.lexicon
+		local_term:
+	engineering:
+	@ ./engineering.lexicon
+		local_term:

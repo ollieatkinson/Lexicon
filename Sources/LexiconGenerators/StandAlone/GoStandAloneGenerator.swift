@@ -2,6 +2,7 @@
 // github.com/screensailor 2026
 //
 
+import Foundation
 import Lexicon
 #if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
