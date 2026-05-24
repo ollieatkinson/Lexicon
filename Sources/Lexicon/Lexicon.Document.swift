@@ -4,12 +4,15 @@
 
 import Foundation
 import Collections
+import _Collections
 
 public extension Lexicon {
 
 	struct Document {
+		public typealias Roots = _Collections.SortedDictionary<Graph.Node.Name, Graph.Node>
+
 		public var date: Date
-		public var roots: [Graph.Node.Name: Graph.Node]
+		public var roots: Roots
 		public var imports: [Import]
 		public var notes: [String]
 		public var comments: [String]
@@ -22,7 +25,7 @@ public extension Lexicon {
 			comments: [String] = []
 		) {
 			self.date = date
-			self.roots = roots
+			self.roots = Roots(roots)
 			self.imports = imports
 			self.notes = notes
 			self.comments = comments
@@ -36,9 +39,7 @@ public extension Lexicon {
 		}
 
 		public var root: Graph.Node? {
-			roots.min { lhs, rhs in
-				lhs.key.localizedStandardCompare(rhs.key) == .orderedAscending
-			}?.value
+			roots.values.first
 		}
 
 		public func graph(root name: Graph.Node.Name? = nil) throws -> Graph {
@@ -92,11 +93,10 @@ public extension Lexicon.Document {
 		public init(_ document: Lexicon.Document) {
 			self.date = document.date
 			self.roots = document.roots.values
-				.sortedByLocalizedStandard(by: \.name)
 				.map(Lexicon.Graph.Node.JSON.init)
 				.unlessEmpty
 			self.imports = document.imports
-				.sortedByLocalizedStandard(by: \.reference)
+				.sorted { $0.reference < $1.reference }
 				.unlessEmpty
 			self.notes = document.notes.unlessEmpty
 			self.comments = document.comments.unlessEmpty
@@ -125,7 +125,6 @@ public extension Lexicon.Graph.Node {
 
 	struct JSON: Codable {
 		public var name: Name
-		public var stableID: ID?
 		public var type: OrderedSet<ID>?
 		public var protonym: Protonym?
 		public var defaultValue: DefaultValue.JSON?
@@ -136,20 +135,18 @@ public extension Lexicon.Graph.Node {
 
 		public init(_ node: Lexicon.Graph.Node) {
 			self.name = node.name
-			self.stableID = node.stableID
 			self.type = node.type
-				.sortedByLocalizedStandard()
+				.sorted()
 				.unlessEmpty
 				.map(OrderedSet.init)
 			self.protonym = node.protonym
 			self.defaultValue = node.defaultValue.map(DefaultValue.JSON.init)
 			self.connections = node.connections
-				.sortedByLocalizedStandard(by: \.reference)
+				.sorted { $0.reference < $1.reference }
 				.unlessEmpty
 			self.notes = node.notes.unlessEmpty
 			self.comments = node.comments.unlessEmpty
 			self.children = node.children.values
-				.sortedByLocalizedStandard(by: \.name)
 				.map(Self.init)
 				.unlessEmpty
 		}
@@ -163,7 +160,6 @@ public extension Lexicon.Graph.Node {
 				uniquingKeysWith: { _, last in last }
 			),
 			type: Set(json.type ?? []),
-			stableID: json.stableID,
 			defaultValue: json.defaultValue.map(DefaultValue.init),
 			connections: json.connections ?? [],
 			notes: json.notes ?? [],

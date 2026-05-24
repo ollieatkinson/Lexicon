@@ -237,11 +237,11 @@ public extension TaskPaper {
 		for note in document.notes {
 			lines.append("> \(note)")
 		}
-		for `import` in document.imports.sortedByLocalizedStandard(by: \.reference) {
+		for `import` in document.imports.sorted(by: { $0.reference < $1.reference }) {
 			lines.append("@ \(`import`.reference)")
 		}
 
-		for root in document.roots.values.sortedByLocalizedStandard(by: \.name) {
+		for root in document.roots.values {
 			root.traverse(sorted: true) { id, name, node in
 				let depth = id.reduce(0){ a, e in e == "." ? a + 1 : a }
 				let tabs = "\t" * depth
@@ -255,7 +255,7 @@ public extension TaskPaper {
 				if let defaultValue = node.defaultValue {
 					lines.append("\(tabs)? \(Self.encode(defaultValue))")
 				}
-				for connection in node.connections.sortedByLocalizedStandard(by: \.reference) {
+				for connection in node.connections.sorted(by: { $0.reference < $1.reference }) {
 					lines.append("\(tabs)@ \(connection.reference)")
 				}
 				if let protonym = node.protonym {

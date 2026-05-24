@@ -34,7 +34,7 @@ final class DocumentMetadataTests: Hopes {
 			"https://example.com/remote.lexicon",
 		]
 		hope(document.imports.map(\.location)) == [.local, .remote]
-		hope(document.roots.keys.sorted()) == ["root"]
+		hope(Array(document.roots.keys)) == ["root"]
 
 		let root = try document.roots["root"].try()
 		hope(root.comments) == ["root comment"]
@@ -74,9 +74,9 @@ final class DocumentMetadataTests: Hopes {
 				first:
 			""").decodeDocument()
 
-		hope(document.roots.keys.sorted()) == ["alpha", "zeta"]
-		hope(try document.roots["alpha"].try().children.keys.sorted()) == ["first"]
-		hope(try document.roots["zeta"].try().children.keys.sorted()) == ["last"]
+		hope(Array(document.roots.keys)) == ["alpha", "zeta"]
+		hope(try Array(document.roots["alpha"].try().children.keys)) == ["first"]
+		hope(try Array(document.roots["zeta"].try().children.keys)) == ["last"]
 
 		let graph = try TaskPaper("""
 			zeta:
@@ -92,6 +92,24 @@ final class DocumentMetadataTests: Hopes {
 			"""
 	}
 
+	func test_document_backing_collections_keep_keys_sorted() throws {
+
+		var root = Lexicon.Graph.Node(name: "root")
+		root.children["zeta"] = .init(name: "zeta")
+		root.children["alpha"] = .init(name: "alpha")
+		root.children["middle"] = .init(name: "middle")
+		root.children["alpha"] = .init(name: "alpha")
+
+		var document = Lexicon.Document()
+		document.roots["zeta"] = .init(name: "zeta")
+		document.roots["alpha"] = root
+		document.roots["middle"] = .init(name: "middle")
+		document.roots["alpha"] = root
+
+		hope(Array(root.children.keys)) == ["alpha", "middle", "zeta"]
+		hope(Array(document.roots.keys)) == ["alpha", "middle", "zeta"]
+	}
+
 	func test_lexicon_document_loads_multiple_roots() async throws {
 
 		let document = try TaskPaper("""
@@ -105,7 +123,7 @@ final class DocumentMetadataTests: Hopes {
 			""").decodeDocument()
 
 		let lexicon = try await Lexicon.from(document)
-		let rootNames = await lexicon.roots.keys.sorted()
+		let rootNames = await Array(lexicon.roots.keys)
 		let selectedRootName = await lexicon.root.name
 		let sharedKind = try await lexicon["shared.kind"].hopefully()
 		let item = try await lexicon["app.item"].hopefully()
@@ -142,7 +160,7 @@ final class DocumentMetadataTests: Hopes {
 		let lexicon = try await Lexicon.from(document, root: "app")
 		await lexicon.reset(to: graph)
 
-		let rootNames = await lexicon.document.roots.keys.sorted()
+		let rootNames = await Array(lexicon.document.roots.keys)
 		let sharedKind = try await lexicon["shared.kind"].hopefully()
 		let new = try await lexicon["app.new"].hopefully()
 
@@ -256,7 +274,6 @@ final class DocumentMetadataTests: Hopes {
 						"value": .init(
 							name: "value",
 							type: ["root.type"],
-							stableID: "stable-value",
 							defaultValue: .reference("root.default"),
 							connections: [.init("https://example.com/remote.lexicon")],
 							notes: ["node note"],
@@ -278,7 +295,6 @@ final class DocumentMetadataTests: Hopes {
 		hope(decoded.imports) == [.init("local.lexicon")]
 		hope(decoded.notes) == ["document note"]
 		hope(try decoded.roots["root"].try().notes) == ["root note"]
-		hope(value.stableID) == "stable-value"
 		hope(value.defaultValue) == .reference("root.default")
 		hope(value.connections) == [.init("https://example.com/remote.lexicon")]
 		hope(value.notes) == ["node note"]

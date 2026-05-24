@@ -9,6 +9,7 @@ let package = Package(
 		.iOS(.v14)
 	],
 	products: [
+		.library(name: "_Collections", targets: ["_Collections"]),
 		.library(name: "Lexicon", targets: ["Lexicon"]),
 		.library(name: "SwiftLexicon", targets: ["SwiftLexicon"]),
 		.library(name: "SwiftStandAlone", targets: ["SwiftStandAlone"]),
@@ -26,8 +27,15 @@ let package = Package(
 	],
 	targets: [
 		.target(
+			name: "_Collections",
+			dependencies: [
+				.product(name: "Collections", package: "swift-collections")
+			]
+		),
+		.target(
 			name: "Lexicon",
 			dependencies: [
+				"_Collections",
 				.product(name: "Collections", package: "swift-collections")
 			],
 			swiftSettings: [.define("EDITOR")] // TODO: make this opt in
@@ -39,6 +47,10 @@ let package = Package(
 				"Lexicon"
 			],
 			resources: [.copy("Resources")]
+		),
+		.testTarget(
+			name: "_CollectionsTests",
+			dependencies: ["_Collections"]
 		),
 		.target(
 			name: "LexiconGenerators",

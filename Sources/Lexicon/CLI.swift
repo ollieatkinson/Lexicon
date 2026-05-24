@@ -272,11 +272,11 @@ public extension Lemma {
 	
 	var childrenGroupedByTypeAndSorted: [(type: Lemma, children: [Lemma])] {
 		if let protonym = sourceProtonym {
-			return [(protonym, children.values.sortedByLocalizedStandard(by: \.name))]
+			return [(protonym, Array(children.values))]
 		}
-		var o = [(self, ownChildren.values.sortedByLocalizedStandard(by: \.name))]
-		for type in ownType.values.sortedByLocalizedStandard(by: \.id) {
-			o.append((type.unwrapped, type.children.keys.sortedByLocalizedStandard(by: \.self).compactMap{ children[$0] }))
+		var o = [(self, Array(ownChildren.values))]
+		for type in ownType.values {
+			o.append((type.unwrapped, type.children.keys.compactMap{ children[$0] }))
 		}
 		return o
 	}

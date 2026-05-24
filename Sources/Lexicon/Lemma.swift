@@ -3,6 +3,8 @@
 //
 
 import Foundation
+import Collections
+import _Collections
 
 @LexiconActor public final class Lemma {
 	
@@ -10,6 +12,8 @@ import Foundation
 	public typealias Name = String
 	public typealias Protonym = String
 	public typealias Description = String
+	public typealias Children = SortedDictionary<Name, Lemma>
+	public typealias Types = SortedDictionary<ID, Unowned<Lemma>>
 	
 	nonisolated public let id: ID
 	nonisolated public let name: Name
@@ -19,12 +23,12 @@ import Foundation
 	nonisolated public unowned let lexicon: Lexicon
 	
 	public internal(set) var node: Lexicon.Graph.Node
-	public internal(set) var ownChildren: [Name: Lemma] = [:]
+	public internal(set) var ownChildren: Children = [:]
 
 	public internal(set) lazy var protonym: Unowned<Lemma>? = lazy_protonym()
-	public internal(set) lazy var children: [Name: Lemma] = lazy_children()
-	public internal(set) lazy var type: [ID: Unowned<Lemma>] = lazy_type()
-	public internal(set) lazy var ownType: [ID: Unowned<Lemma>] = lazy_ownType()
+	public internal(set) lazy var children: Children = lazy_children()
+	public internal(set) lazy var type: Types = lazy_type()
+	public internal(set) lazy var ownType: Types = lazy_ownType()
 	
 	init(name: Name, node: Lexicon.Graph.Node, parent: Lemma?, lexicon: Lexicon) {
 		
@@ -71,7 +75,6 @@ public extension Lemma {
 			return Lexicon.Graph.Node(
 				name: node.name,
 				protonym: protonym,
-				stableID: node.stableID,
 				defaultValue: node.defaultValue,
 				connections: node.connections,
 				notes: node.notes,
@@ -82,7 +85,6 @@ public extension Lemma {
 				name: node.name,
 				children: ownChildren.mapValues{ $0.regenerateNode(ƒ) },
 				type: node.type,
-				stableID: node.stableID,
 				defaultValue: node.defaultValue,
 				connections: node.connections,
 				notes: node.notes,
@@ -143,7 +145,7 @@ public extension Lemma {
 		if let own = node.defaultValue {
 			return own
 		}
-		for (_, type) in ownType.sorted(by: { $0.key.localizedStandardCompare($1.key) == .orderedAscending }) {
+		for (_, type) in ownType {
 			if let value = type.unwrapped.defaultValue {
 				return value
 			}
@@ -348,9 +350,9 @@ extension Lemma {
 		return .init(protonym)
 	}
 	
-	func lazy_children() -> [Name: Lemma] {
+	func lazy_children() -> Children {
 		if let protonym = protonym {
-			var o: [Name: Lemma] = [:]
+			var o: Children = [:]
 			for (name, child) in protonym.children {
 				o[name] = Lemma(name: name, node: child.node, parent: self, lexicon: lexicon)
 			}
@@ -358,7 +360,7 @@ extension Lemma {
 		}
 		else {
 			var o = ownChildren
-			for (_, type) in ownType.sorted(by: { $0.key.localizedStandardCompare($1.key) == .orderedAscending }) {
+			for (_, type) in ownType {
 				for (name, lemma) in type.children {
 					guard o[name] == nil else {
 						continue
@@ -370,29 +372,29 @@ extension Lemma {
 		}
 	}
 	
-	func lazy_type() -> [ID: Unowned<Lemma>] {
+	func lazy_type() -> Types {
 		if let protonym = protonym { // TODO: make this computed pass through to the protonym
 			return protonym.type
 		}
 		else {
 			var o = ownType
-			o[id] = self
-			for (_, lemma) in ownType.sorted(by: { $0.key.localizedStandardCompare($1.key) == .orderedAscending }) {
+			o[id] = Unowned(self)
+			for (_, lemma) in ownType {
 				o.merge(lemma.type){ o, _ in o }
 			}
 			return o
 		}
 	}
 	
-	func lazy_ownType() -> [ID: Unowned<Lemma>] {
-		var o: [ID: Unowned<Lemma>] = [:]
+	func lazy_ownType() -> Types {
+		var o: Types = [:]
 		if isGraphNode {
-			for id in node.type.sortedByLocalizedStandard() {
+			for id in node.type.sorted() {
 				o[id] = lexicon.dictionary[id].map(Unowned.init)
 			}
 		} else if let parent = lineage.first(where: \.isGraphNode) {
 			let descendant = id.dotPath(after: parent.id).split(separator: ".").map(Name.init)
-			for id in parent.node.type.sortedByLocalizedStandard() {
+			for id in parent.node.type.sorted() {
 				guard let node = lexicon.dictionary[id]?[descendant] else { continue }
 				o[node.id] = Unowned(node)
 			}

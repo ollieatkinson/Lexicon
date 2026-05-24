@@ -22,7 +22,7 @@ public extension Lexicon {
 		Graph.JSON(
 			date: document.date,
 			name: graph.root.name,
-			classes: classes().values.map(\.json).sortedByLocalizedStandard(by: \.id)
+			classes: classes().values.map(\.json).sorted { $0.id < $1.id }
 		)
 	}
 
@@ -30,7 +30,7 @@ public extension Lexicon {
 
 		var classes: [Lemma.ID: Graph.Node.Class] = [:]
 
-		for root in roots.values.sortedByLocalizedStandard(by: \.id) {
+		for root in roots.values {
 			root.graphTraversal(.depthFirst) { lemma in
 				let o = Graph.Node.Class(lemma: lemma)
 				classes[o.json.id] = o
@@ -141,15 +141,11 @@ public extension Lexicon.Graph.Node {
 				protonym: lemma.protonym?.id,
 				type: lemma.ownType
 					.keys
-					.sortedByLocalizedStandard()
-					.unlessEmpty
-					.map(OrderedSet.init),
+					.unlessEmpty,
 				children: lemma.ownChildren
 					.filter(\.value.protonym.isNil)
 					.keys
-					.sortedByLocalizedStandard()
-					.unlessEmpty
-					.map(OrderedSet.init),
+					.unlessEmpty,
 				synonyms: lemma.ownChildren
 					.compactMap{ (name, lemma) in lemma.node.protonym.map{ protonym in (name, protonym)  } }
 					.unlessEmpty
@@ -253,7 +249,7 @@ private extension Lemma {
 		}
 	}
 
-	var jsonFields: [Name: Lemma] {
+	var jsonFields: Children {
 		children.filter { !$0.value.isSynonym }
 	}
 }

@@ -3,6 +3,7 @@
 //
 
 import Foundation
+import _Collections
 
 @LexiconActor public final class Lexicon: ObservableObject {
 	
@@ -10,7 +11,7 @@ import Foundation
 	@Published public private(set) var document: Document
 	
 	public internal(set) var dictionary: [Lemma.ID: Lemma] = [:]
-	public internal(set) var roots: [Lemma.Name: Lemma] = [:]
+	public internal(set) var roots: SortedDictionary<Lemma.Name, Lemma> = [:]
 	
 	private var lemma: Lemma! // TODO: serioulsy?
 	
@@ -204,7 +205,7 @@ public extension Lexicon { // MARK: non-additive mutations
 			return nil
 		}
 		
-		let children = Array(parent.ownChildren.keys.sortedByLocalizedStandard(by: \.self))
+		let children = Array(parent.ownChildren.keys)
 		
 		let sibling: Lemma.Name? = children
 			.firstIndex(of: lemma.name)
