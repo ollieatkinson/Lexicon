@@ -162,13 +162,13 @@ private struct EventMatcher: Sendable {
 
 	init<A: L>(k event: K<A>) {
 		self.init(lemma: event(\.L).__, values: Dictionary(uniqueKeysWithValues: event.____.map { key, value in
-			(key.__, Event.Value(value))
+			(key.__, value)
 		}))
 	}
 
 	init(kProtocol event: any KProtocol) {
 		self.init(lemma: event(\.L).__, values: Dictionary(uniqueKeysWithValues: event.____.map { key, value in
-			(key.__, Event.Value(value))
+			(key.__, value)
 		}))
 	}
 

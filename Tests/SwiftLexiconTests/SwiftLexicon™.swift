@@ -87,6 +87,47 @@ final class SwiftLexicon™: Hopes {
 		try hope(x[test.one.more.time]) == "3"
 	}
 
+	func test_Event_snapshot_Codable() throws {
+
+		let event = Event(test.one[1].more["two"])
+		let data = try JSONEncoder().encode(event.snapshot)
+		let snapshot = try JSONDecoder().decode(Event.Snapshot.self, from: data)
+
+		hope(snapshot.id) == event.id
+		hope(snapshot.description) == "test.one[1].more[two]"
+		hope(snapshot.lemma) == "test.one.more"
+		hope(snapshot.values["test.one"]?.int) == 1
+		hope(snapshot.values["test.one.more"]?.string) == "two"
+	}
+
+	func test_Event_snapshot_encodes_Codable_payloads_as_JSON() throws {
+
+		let payload = EventPayload(name: "lexicon", count: 2)
+		let event = Event(test.one[payload])
+		let value = try event.snapshot.values["test.one"].try()
+		let decoded: EventPayload = try event[test.one]
+		let decodedUsingDecoder: EventPayload = try event[test.one, as: EventPayload.self, using: JSONDecoder()]
+
+		hope(value.object?["name"]?.string) == payload.name
+		hope(value.object?["count"]?.int) == payload.count
+		hope(decoded) == payload
+		hope(decodedUsingDecoder) == payload
+	}
+
+	func test_Event_typed_String_access_rejects_non_string_values() throws {
+
+		let event = Event(test.one[1])
+		var didThrow = false
+
+		do {
+			let _: String = try event[test.one]
+		} catch {
+			didThrow = true
+		}
+
+		hope(didThrow) == true
+	}
+
 	func test_Event_granularity() async throws {
 
 		let events = Events()
@@ -140,6 +181,11 @@ private func collect<Value>(_ count: Int, from channel: AsyncChannel<Value>) asy
 		}
 	}
 	return values
+}
+
+private struct EventPayload: Codable, Hashable, Sendable {
+	var name: String
+	var count: Int
 }
 
 // MARK: ↓ demonstrating the limitations of purely static type constraints
