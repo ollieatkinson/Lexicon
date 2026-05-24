@@ -6,7 +6,7 @@ import Foundation
 
 public extension CLI {
 	
-	struct Session: Codable {
+	struct Session: Codable, Sendable {
 		
 		public var video: Video?
 		public var startTime: Double
@@ -57,13 +57,13 @@ extension CLI.Session: RangeReplaceableCollection {
 
 public extension CLI.Session {
 	
-	struct Event: Codable, Hashable, CustomStringConvertible {
+	struct Event: Codable, Hashable, Sendable, CustomStringConvertible {
 		public var time: Double
 		public var record: Record
 		public var description: String
 	}
 	
-	struct Record: Codable, Hashable {
+	struct Record: Codable, Hashable, Sendable {
 		public var taskpaper: String
 		public var root: Lemma.ID
 		public var lemma: Lemma.ID
@@ -74,7 +74,7 @@ public extension CLI.Session {
 		public var selectedIndex: Int?
 	}
 	
-	struct Video: Codable, Hashable {
+	struct Video: Codable, Hashable, Sendable {
 		public var url: URL
 		public var start: Double
 	}

@@ -5,7 +5,9 @@
 import Foundation
 import Lexicon
 import LexiconGenerators
+#if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
+#endif
 
 public enum Generator: CodeGenerator {
 	public static let utType = KotlinStandAloneGenerator.utType

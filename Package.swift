@@ -1,14 +1,15 @@
-// swift-tools-version: 5.6
+// swift-tools-version: 6.3
 
 import PackageDescription
 
 let package = Package(
 	name: "Lexicon",
 	platforms: [
-		.macOS(.v11),
-		.iOS(.v14)
+		.macOS(.v15),
+		.iOS(.v18)
 	],
 	products: [
+		.library(name: "_Collections", targets: ["_Collections"]),
 		.library(name: "Lexicon", targets: ["Lexicon"]),
 		.library(name: "SwiftLexicon", targets: ["SwiftLexicon"]),
 		.library(name: "SwiftStandAlone", targets: ["SwiftStandAlone"]),
@@ -21,13 +22,20 @@ let package = Package(
 	],
 	dependencies: [
 		.package(url: "https://github.com/screensailor/Hope", branch: "trunk"),
-		.package(url: "https://github.com/apple/swift-collections", from: "1.0.0"),
+		.package(url: "https://github.com/apple/swift-collections", from: "1.5.1"),
 		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.1.2")
 	],
 	targets: [
 		.target(
+			name: "_Collections",
+			dependencies: [
+				.product(name: "Collections", package: "swift-collections")
+			]
+		),
+		.target(
 			name: "Lexicon",
 			dependencies: [
+				"_Collections",
 				.product(name: "Collections", package: "swift-collections")
 			],
 			swiftSettings: [.define("EDITOR")] // TODO: make this opt in
@@ -39,6 +47,10 @@ let package = Package(
 				"Lexicon"
 			],
 			resources: [.copy("Resources")]
+		),
+		.testTarget(
+			name: "_CollectionsTests",
+			dependencies: ["_Collections"]
 		),
 		.target(
 			name: "LexiconGenerators",
@@ -128,5 +140,7 @@ let package = Package(
 			capability: .buildTool(),
 			dependencies: ["lexicon-generate"]
 		)
-	]
+	],
+	// TODO: switch to Swift 6 language mode after porting SwiftLexicon events off Combine.
+	swiftLanguageModes: [.v5]
 )

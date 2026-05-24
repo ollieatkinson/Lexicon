@@ -3,7 +3,9 @@
 //
 
 import Lexicon
+#if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
+#endif
 
 public enum Generator: CodeGenerator {
 	
