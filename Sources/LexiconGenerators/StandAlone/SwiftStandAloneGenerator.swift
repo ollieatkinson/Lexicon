@@ -154,32 +154,22 @@ private extension Lexicon.Graph.Node.Class.JSON {
 		let names = StandAloneTypeNames(id: id, prefix: prefix)
 		var properties: [String] = []
 
-		for child in children ?? [] {
-			let id = "\(id).\(child)"
+		for accessor in standAloneAccessors() {
+			let template = accessor.isSynonym
+				? "\tvar `%%name%%`: %%className%% { %%protonym%% }"
+				: "\tvar `%%name%%`: %%className%% { .init(\"\\(__).%%name%%\") }"
 			properties.append(
 				try SourceTemplate(
-					"\tvar `%%name%%`: %%className%% { .init(\"\\(__).%%name%%\") }",
+					template,
 					delimiters: .percentSigns
 				).render([
-					"name": child,
-					"className": names.className(for: id),
+					"name": accessor.name,
+					"className": names.className(for: accessor.sourceID),
+					"protonym": accessor.pathSuffix,
 				])
 			)
 		}
 
-		for (synonym, protonym) in (synonyms?.sorted(by: { $0.key < $1.key }) ?? []) {
-			let id = "\(id).\(synonym)"
-			properties.append(
-				try SourceTemplate(
-					"\tvar `%%name%%`: %%className%% { %%protonym%% }",
-					delimiters: .percentSigns
-				).render([
-					"name": synonym,
-					"className": names.className(for: id),
-					"protonym": protonym,
-				])
-			)
-		}
 		return properties
 	}
 }
