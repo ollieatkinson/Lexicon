@@ -1,0 +1,10 @@
+db:
+	type:
+		any:
+		+ commerce.db.leaf
+		boolean:
+		+ commerce.db.leaf
+		string:
+		+ commerce.db.leaf
+		tag:
+		+ commerce.db.leaf

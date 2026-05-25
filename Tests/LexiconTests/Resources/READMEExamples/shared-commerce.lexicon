@@ -1,0 +1,34 @@
+commerce:
+	db:
+		collection:
+			id:
+			+ commerce.db.type.string
+		leaf:
+	session:
+		configuration:
+			value:
+		state:
+			value:
+			shared:
+				value:
+				+ commerce.session.state.value
+			stored:
+				value:
+				+ commerce.session.state.value
+	ui:
+		type:
+		> Reusable controls are deliberately small; product screens compose them.
+			control:
+			label:
+			card:
+			+ commerce.ui.type.control
+			button:
+				primary:
+				+ commerce.ui.type.control
+				secondary:
+				+ commerce.ui.type.control
+	ux:
+		type:
+			action:
+			story:
+			task:

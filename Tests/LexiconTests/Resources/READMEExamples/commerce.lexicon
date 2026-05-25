@@ -1,0 +1,41 @@
+# Commerce language shared by API, UI, session and product surfaces.
+> Product teams can add local dialects without replacing the shared vocabulary.
+@ ./shared-commerce.lexicon
+
+commerce:
+# The main application vocabulary.
+> Terms under this root are composed into generated platform code.
+	db:
+	@ ./data-types.lexicon
+	session:
+	# Runtime ownership is separate from API and UI ownership.
+		configuration:
+			value:
+		state:
+			value:
+			shared:
+				value:
+				+ commerce.session.state.value
+			stored:
+				value:
+				+ commerce.session.state.value
+	api:
+		storefront:
+		@ ./storefront-api.lexicon
+	ui:
+		product:
+		@ ./product-ui.lexicon
+	ux:
+		onboarding:
+			choose:
+				product:
+				+ commerce.ux.type.story
+					confirm:
+					+ commerce.ux.type.task
+support:
+# A second root can still reference the commerce vocabulary.
+	case:
+	+ commerce.db.collection
+		status:
+		+ commerce.db.type.string
+		? "open"

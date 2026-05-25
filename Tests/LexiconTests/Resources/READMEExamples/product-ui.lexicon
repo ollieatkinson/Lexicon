@@ -1,0 +1,14 @@
+product:
+	card:
+	+ commerce.ui.type.card
+		title:
+		+ commerce.ui.type.label
+		buy:
+		+ commerce.ui.type.button.primary
+		+ commerce.ux.type.action
+		# UI says enabled; analytics may say active.
+			enabled:
+			+ commerce.api.storefront.order.create.can.submit
+			? true
+			active:
+			= enabled

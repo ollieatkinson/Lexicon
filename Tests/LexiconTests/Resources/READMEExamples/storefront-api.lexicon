@@ -1,0 +1,27 @@
+storefront:
+	products:
+	+ commerce.db.collection
+		product:
+		+ commerce.db.collection
+			id:
+			+ commerce.db.type.string
+			title:
+			+ commerce.db.type.string
+			is:
+				eligible:
+				+ commerce.db.type.boolean
+				+ commerce.session.state.value
+			ineligible:
+				reason:
+				+ commerce.db.type.string
+	order:
+		create:
+		+ commerce.ux.type.task
+			can:
+				submit:
+				+ commerce.db.type.boolean
+				+ commerce.session.configuration.value
+			primary:
+				action:
+				+ commerce.ui.type.button.primary
+				+ commerce.ux.type.action
