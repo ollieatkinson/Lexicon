@@ -44,4 +44,89 @@ final class SourceIdentifierTests: Hopes {
 		hope(accessors.map(\.pathSuffix)) == ["child", "child"]
 		hope(accessors.map(\.isSynonym)) == [false, true]
 	}
+
+	func test_stand_alone_all_accessors_include_inherited_accessors() throws {
+		let classes = try JSONDecoder().decode(
+			[Lexicon.Graph.Node.Class.JSON].self,
+			from: Data("""
+			[
+				{
+					"id": "root.type",
+					"children": ["base", "shadowed"],
+					"synonyms": { "alias": "base" }
+				},
+				{
+					"id": "root.instance",
+					"supertype": "root.type",
+					"children": ["shadowed", "own"]
+				}
+			]
+			""".utf8)
+		)
+
+		let instance = try classes.first { $0.id == "root.instance" }.try()
+		let inheritedAccessors = instance.standAloneInheritedAccessors(classes: classes)
+		let accessors = instance.standAloneAllAccessors(classes: classes)
+
+		hope(inheritedAccessors.map(\.name)) == ["alias", "base", "shadowed"]
+		hope(inheritedAccessors.map(\.sourceID)) == [
+			"root.type.alias",
+			"root.type.base",
+			"root.type.shadowed",
+		]
+		hope(inheritedAccessors.map(\.targetID)) == [
+			"root.type.base",
+			"root.type.base",
+			"root.type.shadowed",
+		]
+		hope(accessors.map(\.name)) == ["alias", "base", "own", "shadowed"]
+		hope(accessors.map(\.sourceID)) == [
+			"root.type.alias",
+			"root.type.base",
+			"root.instance.own",
+			"root.instance.shadowed",
+		]
+		hope(accessors.map(\.targetID)) == [
+			"root.type.base",
+			"root.type.base",
+			"root.instance.own",
+			"root.instance.shadowed",
+		]
+	}
+
+	func test_stand_alone_inherited_accessors_include_mixin_children() throws {
+		let classes = try JSONDecoder().decode(
+			[Lexicon.Graph.Node.Class.JSON].self,
+			from: Data("""
+			[
+				{
+					"id": "root.shared",
+					"children": ["base"]
+				},
+				{
+					"id": "root.mixin",
+					"supertype": "root.shared",
+					"mixin": {
+						"type": "root.shared",
+						"children": {
+							"mixinChild": "root.mixin.child"
+						}
+					}
+				},
+				{
+					"id": "root.instance",
+					"supertype": "root.mixin"
+				}
+			]
+			""".utf8)
+		)
+
+		let instance = try classes.first { $0.id == "root.instance" }.try()
+		let accessors = instance.standAloneInheritedAccessors(classes: classes)
+
+		hope(accessors.map(\.name)) == ["base", "mixinChild"]
+		hope(accessors.map(\.sourceID)) == ["root.shared.base", "root.mixin.child"]
+		hope(accessors.map(\.targetID)) == ["root.shared.base", "root.mixin.child"]
+		hope(accessors.map(\.pathSuffix)) == ["base", "mixinChild"]
+	}
 }

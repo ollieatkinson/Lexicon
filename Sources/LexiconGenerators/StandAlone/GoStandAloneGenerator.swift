@@ -73,7 +73,7 @@ private extension Lexicon.Graph.Node.Class.JSON {
 			]
 		}
 
-		let ownAccessors = ownAccessors()
+		let ownAccessors = standAloneAccessors()
 		return [
 			try SourceTemplate(
 				"""
@@ -99,51 +99,12 @@ private extension Lexicon.Graph.Node.Class.JSON {
 				"initializers": ownAccessors
 					.map { "\n\tl.\($0.name.goIdentifier) = \($0.factory(receiver: "id"))" }
 					.joined(),
-				"inherited": try inheritedAccessors(classes: classes)
+				"inherited": try standAloneInheritedAccessors(classes: classes)
 					.filter { inherited in !ownAccessors.contains(where: { $0.name == inherited.name }) }
 					.map { try $0.method(receiverType: type) }
 					.joined(),
 			])
 		]
-	}
-}
-
-private extension Lexicon.Graph.Node.Class.JSON {
-
-	func ownAccessors() -> [StandAloneAccessor] {
-		standAloneAccessors()
-	}
-
-	func allAccessors(classes: [Lexicon.Graph.Node.Class.JSON]) -> [StandAloneAccessor] {
-		var accessors = Dictionary(uniqueKeysWithValues: inheritedAccessors(classes: classes).map { ($0.name, $0) })
-		for accessor in ownAccessors() {
-			accessors[accessor.name] = accessor
-		}
-		return accessors.values.sorted { $0.name < $1.name }
-	}
-
-	func inheritedAccessors(classes: [Lexicon.Graph.Node.Class.JSON]) -> [StandAloneAccessor] {
-		guard let supertype = supertype else {
-			return []
-		}
-		guard let klass = classes.first(where: { $0.id == supertype }) else {
-			return []
-		}
-		if let mixin = klass.mixin {
-			var accessors = Dictionary(uniqueKeysWithValues: klass.inheritedAccessors(classes: classes).map { ($0.name, $0) })
-			for (name, id) in mixin.children?.sorted(by: { $0.key < $1.key }) ?? [] {
-				accessors[name] = .init(
-					name: name,
-					sourceID: id,
-					targetID: id,
-					pathSuffix: name,
-					isSynonym: false
-				)
-			}
-			return accessors.values.sorted { $0.name < $1.name }
-		} else {
-			return klass.allAccessors(classes: classes)
-		}
 	}
 }
 
