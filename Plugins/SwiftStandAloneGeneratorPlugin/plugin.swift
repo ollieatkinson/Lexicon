@@ -6,21 +6,22 @@ struct SwiftStandAloneGeneratorPlugin: BuildToolPlugin {
 
 	func createBuildCommands(context: PluginContext, target: Target) async throws -> [Command] {
 		let lexicon = try context.tool(named: "lexicon-generate")
-		let output = context.pluginWorkDirectory.appending("GeneratedSources")
-		return FileManager.default.enumerator(atPath: target.directory.string)?
-			.compactMap { value in (value as? String).map(target.directory.appending) }
-			.filter { path in (path.extension ?? "").hasSuffix("lexicon") }
+		let output = context.pluginWorkDirectoryURL.appendingPathComponent("GeneratedSources", isDirectory: true)
+		return FileManager.default.enumerator(at: target.directoryURL, includingPropertiesForKeys: nil)?
+			.compactMap { $0 as? URL }
+			.filter { $0.pathExtension.hasSuffix("lexicon") }
 			.map { input in
+				let stem = input.deletingPathExtension().lastPathComponent
 				return .buildCommand(
 					displayName: "Generate \(input)",
-					executable: lexicon.path,
+					executable: lexicon.url,
 					arguments: [
-						input.string,
-						"--output", output.appending(input.stem).string,
+						input.path,
+						"--output", output.appendingPathComponent(stem).path,
 						"--type", "swift-standalone"
 					],
 					inputFiles: [input],
-					outputFiles: [output.appending(input.stem + ".swift")]
+					outputFiles: [output.appendingPathComponent(stem + ".swift")]
 				)
 			} ?? []
 	}

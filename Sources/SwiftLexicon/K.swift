@@ -2,30 +2,33 @@
 // github.com/screensailor 2022
 //
 
+import Foundation
+import Lexicon
+
 public extension I where Self: L {
 	
-	subscript<Value>(value: Value) -> K<Self> where Value: Sendable, Value: Hashable {
-		K(self, [self: value])
+	subscript<Value>(value: Value) -> K<Self> where Value: Sendable, Value: Hashable, Value: Codable {
+		K(self, [self: eventValue(value)])
 	}
 }
 
-@dynamicMemberLookup public struct K<A: L>: @unchecked Sendable, Hashable, KProtocol {
+@dynamicMemberLookup public struct K<A: L>: Hashable, KProtocol {
 	
 	public let __: String
 	public let ___: A
-	public let ____: [L: AnyHashable]
+	public let ____: [L: Event.Value]
 	
 	public init(_ a: A) {
 		self.init(a, [:])
 	}
 	
-	internal init(_ l: A, _ d: [L: AnyHashable]) {
+	internal init(_ l: A, _ d: [L: Event.Value]) {
 		self.____ = d
 		self.___ = l
 		self.__ = d.sorted(by: { $0.key.__.count > $1.key.__.count }).reduce(into: l.__) { (o, e) in
 			assert(o.starts(with: e.key.__))
 			let i = o.index(o.startIndex, offsetBy: e.key.__.count)
-			o.insert(contentsOf: "[\(e.value)]", at: i) // TODO: measure performance
+			o.insert(contentsOf: "[\(e.value.eventDescription)]", at: i) // TODO: measure performance
 		}
 	}
 }
@@ -40,8 +43,8 @@ public extension K {
 		K<B>(___[keyPath: keyPath], ____)
 	}
 	
-	subscript<Value>(value: Value) -> K<A> where Value: Sendable, Value: Hashable {
-		K(___, ____.merging([___: value], uniquingKeysWith: { _, last in last }))
+	subscript<Value>(value: Value) -> K<A> where Value: Sendable, Value: Hashable, Value: Codable {
+		K(___, ____.merging([___: eventValue(value)], uniquingKeysWith: { _, last in last }))
 	}
 }
 
@@ -51,42 +54,30 @@ public extension K {
 	
 	subscript(key: L) -> Any? { ____[key]?.base }
 	
-	subscript<Value>(as type: Value.Type = Value.self) -> Value {
-		get throws { try self[___] }
+	subscript<Value>(
+		as type: Value.Type = Value.self,
+		using decoder: JSONDecoder = JSONDecoder()
+	) -> Value where Value: Decodable {
+		get throws { try self[___, as: Value.self, using: decoder] }
 	}
 	
-	subscript<Value>(key: L, as type: Value.Type = Value.self) -> Value {
-		get throws {
-			guard let value = self[key] as? Value else {
-				throw CastError(value: self[key], to: Value.self)
-			}
-			return value
-		}
+	subscript<Value>(
+		key: L,
+		as type: Value.Type = Value.self,
+		using decoder: JSONDecoder = JSONDecoder()
+	) -> Value where Value: Decodable {
+		get throws { try ____[key].try().value(as: type, using: decoder) }
 	}
 }
 
 public protocol KProtocol: I {
 	var __: String { get }
-	var ____: [L: AnyHashable] { get }
+	var ____: [L: Event.Value] { get }
 	subscript() -> Any? { get }
 	subscript(key: L) -> Any? { get }
-	subscript<A>(as type: A.Type) -> A { get throws }
-	subscript<A>(key: L, as type: A.Type) -> A { get throws }
+	subscript<A>(as type: A.Type, using decoder: JSONDecoder) -> A where A: Decodable { get throws }
+	subscript<A>(key: L, as type: A.Type, using decoder: JSONDecoder) -> A where A: Decodable { get throws }
 	func callAsFunction(_: KeyPath<CallAsFunctionKExtensions, CallAsFunctionKExtensions.GetL>) -> L
-}
-
-private struct CastError: Error, CustomStringConvertible {
-	let value: Any?
-	let type: Any.Type
-
-	init<Value>(value: Any?, to type: Value.Type) {
-		self.value = value
-		self.type = type
-	}
-
-	var description: String {
-		"Could not cast \(String(describing: value)) to \(type)"
-	}
 }
 
 public extension K {
@@ -117,4 +108,12 @@ extension K { // TODO: ↓
 	//        id = substrings.enumerated().filter{ $0.offset.isMultiple(of: 2) }.map(\.element).joined()
 	//        return (id, data)
 	//    }
+}
+
+private func eventValue<Value>(_ value: Value) -> Event.Value where Value: Encodable {
+	do {
+		return try Event.Value.encoded(value)
+	} catch {
+		preconditionFailure("Could not encode \(Value.self) as an event JSON value: \(error)")
+	}
 }
