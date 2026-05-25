@@ -351,12 +351,12 @@ import SwiftLexicon
 
 let events = Events()
 
-commerce.ui.product.card.buy["tap"] >> events
-
 let subscription = commerce.ux.type.action >> events.then { event in
 	let value: String = try event[type: String.self]
 	print(value)
 }
+
+commerce.ui.product.card.buy["birthday_001"] >> events
 
 subscription.cancel()
 events.finish()
