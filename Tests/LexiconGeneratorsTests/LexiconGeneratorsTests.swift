@@ -16,6 +16,7 @@ final class LexiconGeneratorsTests: Hopes {
 		let go = try generator("Go Stand-Alone")
 		let typeScript = try generator("TypeScript Stand-Alone")
 		let json = try generator("JSON Classes & Mixins")
+		let skos = try generator("SKOS JSON-LD")
 
 		hope(swift.command) == "swift"
 		hope(swiftStandAlone.command) == "swift-standalone"
@@ -23,19 +24,21 @@ final class LexiconGeneratorsTests: Hopes {
 		hope(go.command) == "go"
 		hope(typeScript.command) == "ts"
 		hope(json.command) == "json"
+		hope(skos.command) == "json-ld"
 		hope(swift.utType.preferredFilenameExtension) == "swift"
 		hope(swiftStandAlone.utType.preferredFilenameExtension) == "swift"
 		hope(kotlin.utType.preferredFilenameExtension) == "kt"
 		hope(go.utType.preferredFilenameExtension) == "go"
 		hope(typeScript.utType.preferredFilenameExtension) == "ts"
 		hope(json.utType.preferredFilenameExtension) == "json"
+		hope(skos.utType.preferredFilenameExtension) == "jsonld"
 	}
 
 	func test_registry_finds_generators_by_command() throws {
 		let generator = try LexiconSourceGenerators.all.find("swift-standalone").try()
 
 		hope(generator.command) == "swift-standalone"
-		hope(LexiconSourceGenerators.all.commandHelp) == "swift, swift-standalone, kotlin, go, ts, json"
+		hope(LexiconSourceGenerators.all.commandHelp) == "swift, swift-standalone, kotlin, go, ts, json, json-ld"
 	}
 
 	func test_json_registry_alias_matches_source_generator_registry() throws {

@@ -4,7 +4,7 @@
 
 public extension CLI {
 	
-	enum Error: Swift.Error, Codable, Hashable {
+	enum Error: Swift.Error, Codable, Hashable, Sendable {
 		case none
 		case invalidInputCharacter(Character)
 		case noChildrenMatchInput(String)
@@ -14,7 +14,7 @@ public extension CLI {
 
 public extension CLI.Error {
 	
-	struct JSON: Codable {
+	struct JSON: Codable, Sendable {
 		var `case`: String
 		var int: Int?
 		var string: String?

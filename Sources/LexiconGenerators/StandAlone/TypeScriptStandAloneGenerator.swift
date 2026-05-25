@@ -2,11 +2,14 @@
 // github.com/screensailor 2022
 //
 
+import Foundation
 import Lexicon
+#if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
+#endif
 
 public extension UTType {
-	static var typescript = UTType(filenameExtension: "ts", conformingTo: .sourceCode)!
+	static let typescript = UTType(filenameExtension: "ts", conformingTo: .sourceCode)!
 }
 
 public enum TypeScriptStandAloneGenerator: SourceCodeGenerator {
@@ -75,14 +78,15 @@ private extension Lexicon.Graph.Node.Class.JSON {
 				try SourceTemplate(
 					"""
 					class {{className}} extends {{baseClass}} implements {{protocolName}} {{classBlock}}
-					type {{protocolName}} = {{protocolAlias}};
+					interface {{protocolName}} extends {{protocolBase}} {{protocolBlock}}
 					"""
 				).render([
 					"className": names.className,
 					"baseClass": names.classPrefix,
 					"protocolName": names.protocolName,
 					"classBlock": typeScriptBlock(emptyTypeScriptClassMembers(prefix: prefix, classes: classes)),
-					"protocolAlias": names.protocolBase(supertype: supertype),
+					"protocolBase": names.protocolBase(supertype: supertype),
+					"protocolBlock": typeScriptBlock([]),
 				])
 			]
 		}
