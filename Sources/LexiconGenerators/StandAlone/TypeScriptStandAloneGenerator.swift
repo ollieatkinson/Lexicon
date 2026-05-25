@@ -119,36 +119,35 @@ private extension Lexicon.Graph.Node.Class.JSON {
 		prefix: (class: String, protocol: String),
 		classes: [Lexicon.Graph.Node.Class.JSON]
 	) -> [String] {
-		standAloneInheritedAccessors(classes: classes)
+		let names = StandAloneTypeNames(id: id, prefix: prefix)
+		return standAloneInheritedAccessors(classes: classes)
 			.filter { !$0.isSynonym }
 			.map { accessor in
-				"  \(accessor.name)!: \(prefix.class)_\(accessor.sourceID.standAloneTypeSuffix);"
+				"  \(accessor.name)!: \(names.className(for: accessor.sourceID));"
 			}
 	}
 
 	func typeScriptClassMembers(prefix: (class: String, protocol: String), classes: [Lexicon.Graph.Node.Class.JSON]) -> [String] {
-		var members: [String] = []
-		for t in type ?? [] {
-			let subClass = classes.first { $0.id == t }
-			for accessor in subClass?.standAloneAccessors() ?? [] {
-				let id = "\(prefix.class).\(accessor.sourceID)"
-				members.append("  \(accessor.name)!: \(id.standAloneTypeSuffix);")
+		let names = StandAloneTypeNames(id: id, prefix: prefix)
+		let typeMembers = standAloneTypeAccessors(classes: classes).map { accessor in
+			"  \(accessor.name)!: \(names.className(for: accessor.sourceID));"
+		}
+
+		let ownMembers = standAloneAccessors().map { accessor in
+			if accessor.isSynonym {
+				"  \(accessor.name) = this.\(accessor.pathSuffix);"
+			} else {
+				"  \(accessor.name) = new \(names.className(for: accessor.sourceID))(`${this.__}.\(accessor.name)`);"
 			}
 		}
 
-		for accessor in standAloneAccessors() {
-			if accessor.isSynonym {
-				members.append("  \(accessor.name) = this.\(accessor.pathSuffix);")
-			} else {
-				members.append("  \(accessor.name) = new \(prefix.class)_\(accessor.sourceID.standAloneTypeSuffix)(`${this.__}.\(accessor.name)`);")
-			}
-		}
-		return members
+		return typeMembers + ownMembers
 	}
 
 	func typeScriptProtocolMembers(prefix: (class: String, protocol: String)) -> [String] {
-		standAloneAccessors().filter { !$0.isSynonym }.map { accessor in
-			"  \(accessor.name): \(prefix.protocol)_\(accessor.sourceID.standAloneTypeSuffix);"
+		let names = StandAloneTypeNames(id: id, prefix: prefix)
+		return standAloneAccessors().filter { !$0.isSynonym }.map { accessor in
+			"  \(accessor.name): \(names.protocolName(for: accessor.sourceID));"
 		}
 	}
 }

@@ -94,6 +94,44 @@ final class SourceIdentifierTests: Hopes {
 		]
 	}
 
+	func test_stand_alone_type_accessors_follow_declared_type_order() throws {
+		let classes = try JSONDecoder().decode(
+			[Lexicon.Graph.Node.Class.JSON].self,
+			from: Data("""
+			[
+				{
+					"id": "root.first",
+					"children": ["first"],
+					"synonyms": { "firstAlias": "first" }
+				},
+				{
+					"id": "root.second",
+					"children": ["second"]
+				},
+				{
+					"id": "root.instance",
+					"type": ["root.second", "root.first"]
+				}
+			]
+			""".utf8)
+		)
+
+		let instance = try classes.first { $0.id == "root.instance" }.try()
+		let accessors = instance.standAloneTypeAccessors(classes: classes)
+
+		hope(accessors.map(\.name)) == ["second", "first", "firstAlias"]
+		hope(accessors.map(\.sourceID)) == [
+			"root.second.second",
+			"root.first.first",
+			"root.first.firstAlias",
+		]
+		hope(accessors.map(\.targetID)) == [
+			"root.second.second",
+			"root.first.first",
+			"root.first.first",
+		]
+	}
+
 	func test_stand_alone_inherited_accessors_include_mixin_children() throws {
 		let classes = try JSONDecoder().decode(
 			[Lexicon.Graph.Node.Class.JSON].self,
