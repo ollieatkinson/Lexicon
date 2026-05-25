@@ -10,7 +10,7 @@ final class READMEExampleTests: Hopes {
 
 	func test_readme_commerce_example_composes() async throws {
 
-		let examples = try Self.taskpaperExamples()
+		let examples = try Self.resourceExamples()
 		let baseURL = FileManager.default.temporaryDirectory
 			.appendingPathComponent("LexiconREADMEExamples-\(UUID().uuidString)", isDirectory: true)
 		defer { try? FileManager.default.removeItem(at: baseURL) }
@@ -94,7 +94,9 @@ final class READMEExampleTests: Hopes {
 
 	func test_readme_swift_examples_use_generated_member_access() throws {
 
-		let readme = try Self.readme()
+		guard let readme = try Self.readmeIfAvailable() else {
+			return
+		}
 
 		hope.false(readme.contains("lexicon[\""))
 		hope.true(readme.contains("commerce.api.storefront.order.create.can.submit"))
@@ -102,6 +104,18 @@ final class READMEExampleTests: Hopes {
 
 		for filename in Self.connectedExampleFilenames {
 			hope.true(readme.contains("<summary><code>\(filename)</code></summary>"))
+		}
+	}
+
+	func test_readme_taskpaper_examples_match_test_resources_when_available() throws {
+
+		guard let readme = try Self.readmeIfAvailable() else {
+			return
+		}
+
+		for (filename, resource) in try Self.resourceExamples() {
+			let example = try Self.taskpaperExample(named: filename, in: readme)
+			hope(example) == resource
 		}
 	}
 }
@@ -116,12 +130,21 @@ private extension READMEExampleTests {
 		"product-ui.lexicon",
 	]
 
-	static func taskpaperExamples() throws -> [String: String] {
-		let readme = try readme()
+	static func resourceExamples() throws -> [String: String] {
 		let filenames = [mainExampleFilename] + connectedExampleFilenames
 		return try Dictionary(uniqueKeysWithValues: filenames.map { filename in
-			try (filename, taskpaperExample(named: filename, in: readme))
+			try (filename, resourceExample(named: filename))
 		})
+	}
+
+	static func resourceExample(named filename: String) throws -> String {
+		guard let url = Bundle.module.url(
+			forResource: "Resources/READMEExamples/\(filename)",
+			withExtension: nil
+		) else {
+			throw "README example resource not found: \(filename)"
+		}
+		return try String(contentsOf: url, encoding: .utf8).droppingTrailingNewline()
 	}
 
 	static func taskpaperExample(named filename: String, in readme: String) throws -> String {
@@ -145,15 +168,16 @@ private extension READMEExampleTests {
 		return String(content[..<fenceEnd.lowerBound])
 	}
 
-	static func readme() throws -> String {
+	static func readmeIfAvailable() throws -> String? {
 		let root = URL(fileURLWithPath: #filePath)
 			.deletingLastPathComponent()
 			.deletingLastPathComponent()
 			.deletingLastPathComponent()
-		return try String(
-			contentsOf: root.appendingPathComponent("README.md"),
-			encoding: .utf8
-		)
+		let url = root.appendingPathComponent("README.md")
+		guard FileManager.default.fileExists(atPath: url.path) else {
+			return nil
+		}
+		return try String(contentsOf: url, encoding: .utf8)
 	}
 }
 
@@ -163,6 +187,13 @@ private extension Lexicon.Graph.Node {
 		try path.split(separator: ".").reduce(self) { node, component in
 			try node.children[String(component)].try()
 		}
+	}
+}
+
+private extension String {
+
+	func droppingTrailingNewline() -> String {
+		hasSuffix("\n") ? String(dropLast()) : self
 	}
 }
 
