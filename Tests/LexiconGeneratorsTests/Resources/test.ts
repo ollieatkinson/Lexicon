@@ -40,7 +40,8 @@ class L_test_one_more_time extends L implements I_test_one_more_time {
   two!: L_test_two;
   type!: L_test_type;
 }
-type I_test_one_more_time = I_test;
+interface I_test_one_more_time extends I_test {
+}
 class L_test_two extends L implements I_test_two {
   no!: L_test_type_even_no;
   bad!: L_test_type_even_bad;
@@ -51,7 +52,8 @@ interface I_test_two extends I_test_type_even {
 }
 class L_test_two_timing extends L implements I_test_two_timing {
 }
-type I_test_two_timing = I;
+interface I_test_two_timing extends I {
+}
 class L_test_type extends L implements I_test_type {
   even = new L_test_type_even(`${this.__}.even`);
   odd = new L_test_type_odd(`${this.__}.odd`);
@@ -76,7 +78,8 @@ interface I_test_type_even_no extends I {
 }
 class L_test_type_even_no_good extends L implements I_test_type_even_no_good {
 }
-type I_test_type_even_no_good = I;
+interface I_test_type_even_no_good extends I {
+}
 class L_test_type_odd extends L implements I_test_type_odd {
   good = new L_test_type_odd_good(`${this.__}.good`);
 }
@@ -85,5 +88,6 @@ interface I_test_type_odd extends I {
 }
 class L_test_type_odd_good extends L implements I_test_type_odd_good {
 }
-type I_test_type_odd_good = I;
+interface I_test_type_odd_good extends I {
+}
 const test = new L_test("test");
