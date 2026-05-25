@@ -84,7 +84,7 @@ private extension Lexicon.Graph.Node.Class.JSON {
 					"className": names.className,
 					"baseClass": names.classPrefix,
 					"protocolName": names.protocolName,
-					"classBlock": typeScriptBlock(emptyTypeScriptClassMembers(prefix: prefix, classes: classes, supertype: supertype)),
+					"classBlock": typeScriptBlock(emptyTypeScriptClassMembers(prefix: prefix, classes: classes)),
 					"protocolBase": names.protocolBase(supertype: supertype),
 					"protocolBlock": typeScriptBlock([]),
 				])
@@ -115,42 +115,16 @@ private extension Lexicon.Graph.Node.Class.JSON {
 		return "{\n\(members.joined(separator: "\n"))\n}"
 	}
 
-		func emptyTypeScriptClassMembers(
-			prefix: (class: String, protocol: String),
-			classes: [Lexicon.Graph.Node.Class.JSON],
-			supertype: Lemma.ID?
-		) -> [String] {
-			guard let supertype else {
-				return []
+	func emptyTypeScriptClassMembers(
+		prefix: (class: String, protocol: String),
+		classes: [Lexicon.Graph.Node.Class.JSON]
+	) -> [String] {
+		standAloneInheritedAccessors(classes: classes)
+			.filter { !$0.isSynonym }
+			.map { accessor in
+				"  \(accessor.name)!: \(prefix.class)_\(accessor.sourceID.standAloneTypeSuffix);"
 			}
-			return inheritedTypeScriptChildren(classes: classes, supertype: supertype).map { child in
-				"  \(child.name)!: \(prefix.class)_\(child.id.standAloneTypeSuffix);"
-			}
-		}
-
-		func inheritedTypeScriptChildren(
-			classes: [Lexicon.Graph.Node.Class.JSON],
-			supertype: Lemma.ID
-		) -> [(name: Lemma.Name, id: Lemma.ID)] {
-			guard let superclass = classes.first(where: { $0.id == supertype }) else {
-				return []
-			}
-
-			var children = superclass.supertype.map {
-				inheritedTypeScriptChildren(classes: classes, supertype: $0)
-			} ?? []
-
-			children += (superclass.children ?? []).map { child in
-				(child, "\(superclass.id).\(child)")
-			}
-
-			let mixinChildren = superclass.mixin?.children ?? [:]
-			children += mixinChildren.keys.sorted().map { child in
-				(child, mixinChildren[child] ?? "\(superclass.id).\(child)")
-			}
-
-			return children
-		}
+	}
 
 	func typeScriptClassMembers(prefix: (class: String, protocol: String), classes: [Lexicon.Graph.Node.Class.JSON]) -> [String] {
 		var members: [String] = []
