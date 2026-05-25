@@ -57,4 +57,62 @@ final class TypeScriptStandAloneGeneratorTests: Hopes {
 
 		try hope(code) == "test.ts".file().string()
 	}
+
+	func test_empty_type_inherits_dotted_supertype_members() async throws {
+		let code = try await typeScript(
+			"""
+			root:
+				type:
+					child:
+				inherited:
+				+ root.type
+			"""
+		)
+
+		hope.true(
+			code.contains(
+				"""
+				class L_root_inherited extends L implements I_root_inherited {
+				  child!: L_root_type_child;
+				}
+				interface I_root_inherited extends I_root_type {
+				}
+				"""
+			)
+		)
+	}
+
+	func test_empty_type_inherits_mixin_protocols() async throws {
+		let code = try await typeScript(
+			"""
+			root:
+				first:
+					one:
+				second:
+					two:
+				combined:
+				+ root.first
+				+ root.second
+			"""
+		)
+
+		hope.true(
+			code.contains(
+				"""
+				class L_root_combined extends L implements I_root_combined {
+				  one!: L_root_first_one;
+				  two!: L_root_second_two;
+				}
+				interface I_root_combined extends I_root_first, I_root_second {
+				}
+				"""
+			)
+		)
+	}
+
+	private func typeScript(_ taskpaper: String) async throws -> String {
+		var json = try await taskpaper.lexicon().json()
+		json.date = Date(timeIntervalSinceReferenceDate: 0)
+		return try TypeScriptStandAloneGenerator.generate(json).string()
+	}
 }

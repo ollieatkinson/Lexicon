@@ -2,8 +2,11 @@
 // github.com/screensailor 2022
 //
 
+import Foundation
 import Lexicon
+#if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
+#endif
 
 public enum SwiftLexiconGenerator: SourceCodeGenerator {
 
