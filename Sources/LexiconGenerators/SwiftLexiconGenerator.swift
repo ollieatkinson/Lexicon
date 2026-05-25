@@ -16,67 +16,104 @@ public enum SwiftLexiconGenerator: SourceCodeGenerator {
 	public static let command = "swift"
 
 	public static func generateSource(_ json: Lexicon.Graph.JSON) throws -> String {
-		json.swift()
+		try json.swift()
 	}
 }
 
 private extension Lexicon.Graph.JSON {
 
-	func swift() -> String {
-
-		return """
+	func swift() throws -> String {
+		try SourceTemplate(
+			"""
 		@_exported import SwiftLexicon // https://github.com/thousandyears/Lexicon
 		import Foundation
 
-		public let \(name) = L_\(name)("\(name)")
+		public let {{root}} = L_{{root}}("{{root}}")
 
-		\(classes.flatMap{ $0.swift(prefix: ("L", "I")) }.joined(separator: "\n"))
+		{{types}}
 		"""
+		).render([
+			"root": name,
+			"types": try classes.flatMap { try $0.swift(prefix: ("L", "I")) }.joined(separator: "\n"),
+		])
 	}
 }
 
 private extension Lexicon.Graph.Node.Class.JSON {
 
-	// TODO: make this more readable
-
-	func swift(prefix: (class: String, protocol: String)) -> [String] {
+	func swift(prefix: (class: String, protocol: String)) throws -> [String] {
 
 		guard mixin == nil else {
 			return []
 		}
 
-		var lines: [String] = []
 		let names = StandAloneTypeNames(id: id, prefix: prefix)
 
 		if let protonym = protonym {
-			lines += "public typealias \(names.className) = \(names.className(for: protonym))"
-			return lines
+			return [
+				try SourceTemplate("public typealias {{className}} = {{baseClass}}").render([
+					"className": names.className,
+					"baseClass": names.className(for: protonym),
+				])
+			]
 		}
 
-		lines += """
-		public final class \(names.className): \(names.classPrefix), @unchecked Sendable, \(names.protocolName) {
-		\tpublic override class var localized: String { NSLocalizedString("\(id)", comment: "") }
+		var lines = [
+			try SourceTemplate(
+				"""
+				public final class {{className}}: {{baseClass}}, @unchecked Sendable, {{protocolName}} {
+				\tpublic override class var localized: String { NSLocalizedString("{{localized}}", comment: "") }
+				}
+				"""
+			).render([
+				"className": names.className,
+				"baseClass": names.classPrefix,
+				"protocolName": names.protocolName,
+				"localized": id,
+			]),
+			try SourceTemplate("public protocol {{protocolName}}: {{protocolBase}} {}").render([
+				"protocolName": names.protocolName,
+				"protocolBase": names.protocolBase(supertype: supertype),
+			])
+		]
+
+		let properties = try swiftProperties(prefix: prefix)
+		if !properties.isEmpty {
+			lines.append(
+				try SourceTemplate(
+					"""
+					public extension {{protocolName}} {
+					{{properties}}
+					}
+					"""
+				).render([
+					"protocolName": names.protocolName,
+					"properties": properties.joined(separator: "\n"),
+				])
+			)
 		}
-		"""
-
-		lines += "public protocol \(names.protocolName): \(names.protocolBase(supertype: supertype)) {}"
-
-		guard hasProperties else {
-			return lines
-		}
-
-		let line = "public extension \(names.protocolName)"
-
-		lines += line + " {"
-
-		for accessor in standAloneAccessors() {
-			let body = accessor.isSynonym ? accessor.pathSuffix : ".init(\"\\(__).\(accessor.name)\")"
-			lines += "\tvar `\(accessor.name)`: \(names.className(for: accessor.sourceID)) { \(body) }"
-		}
-
-		lines += "}"
 
 		return lines
 	}
 
+	func swiftProperties(prefix: (class: String, protocol: String)) throws -> [String] {
+		let names = StandAloneTypeNames(id: id, prefix: prefix)
+		var properties: [String] = []
+
+		for accessor in standAloneAccessors() {
+			let template = accessor.isSynonym
+				? "\tvar `{{name}}`: {{className}} { {{protonym}} }"
+				: "\tvar `{{name}}`: {{className}} { .init(\"\\(__).{{name}}\") }"
+			properties.append(
+				try SourceTemplate(template)
+					.render([
+						"name": accessor.name,
+						"className": names.className(for: accessor.sourceID),
+						"protonym": accessor.pathSuffix,
+					])
+			)
+		}
+
+		return properties
+	}
 }
