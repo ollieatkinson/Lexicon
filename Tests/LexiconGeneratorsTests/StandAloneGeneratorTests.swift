@@ -2,62 +2,77 @@
 // github.com/screensailor 2026
 //
 
+import Testing
 import Foundation
 
-final class SwiftLexiconGeneratorTests: Hopes {
+@Suite
 
+struct SwiftLexiconGeneratorTests {
+
+	@Test
 	func test_generator() async throws {
 		var json = try await "test".taskpaper().lexicon().json()
 		json.date = Date(timeIntervalSinceReferenceDate: 0)
 
 		let code = try SwiftLexiconGenerator.generate(json).string()
 
-		try hope(code) == "swift-lexicon.swift".file().string()
+		#expect(code == (try "swift-lexicon.swift".file().string()))
 	}
 }
 
-final class SwiftStandAloneGeneratorTests: Hopes {
+@Suite
 
+struct SwiftStandAloneGeneratorTests {
+
+	@Test
 	func test_generator() async throws {
 		var json = try await "test".taskpaper().lexicon().json()
 		json.date = Date(timeIntervalSinceReferenceDate: 0)
 
 		let code = try SwiftStandAloneGenerator.generate(json).string()
 
-		try hope(code) == "test.swift".file().string()
+		#expect(code == (try "test.swift".file().string()))
 	}
 
+	@Test
 	func test_generated_swift_fixture() throws {
-		hope(test.one.more.time.one.more.time(\.id)) == "test.one.more.time.one.more.time"
+		#expect(test.one.more.time.one.more.time(\.id) == "test.one.more.time.one.more.time")
 
-		hope(test.two.bad) == test.two.no.good
-		hope(test.two.bad(\.id)) == "test.two.no.good"
+		#expect(test.two.bad == test.two.no.good)
+		#expect(test.two.bad(\.id) == "test.two.no.good")
 	}
 }
 
-final class KotlinStandAloneGeneratorTests: Hopes {
+@Suite
 
+struct KotlinStandAloneGeneratorTests {
+
+	@Test
 	func test_generator() async throws {
 		var json = try await "test".taskpaper().lexicon().json()
 		json.date = Date(timeIntervalSinceReferenceDate: 0)
 
 		let code = try KotlinStandAloneGenerator.generate(json).string()
 
-		try hope(code) == "test.kt".file().string()
+		#expect(code == (try "test.kt".file().string()))
 	}
 }
 
-final class TypeScriptStandAloneGeneratorTests: Hopes {
+@Suite
 
+struct TypeScriptStandAloneGeneratorTests {
+
+	@Test
 	func test_generator() async throws {
 		var json = try await "test".taskpaper().lexicon().json()
 		json.date = Date(timeIntervalSinceReferenceDate: 0)
 
 		let code = try TypeScriptStandAloneGenerator.generate(json).string()
 
-		try hope(code) == "test.ts".file().string()
+		#expect(code == (try "test.ts".file().string()))
 	}
 
+	@Test
 	func test_empty_type_inherits_dotted_supertype_members() async throws {
 		let code = try await typeScript(
 			"""
@@ -69,7 +84,7 @@ final class TypeScriptStandAloneGeneratorTests: Hopes {
 			"""
 		)
 
-		hope.true(
+		#expect(
 			code.contains(
 				"""
 				class L_root_inherited extends L implements I_root_inherited {
@@ -82,6 +97,7 @@ final class TypeScriptStandAloneGeneratorTests: Hopes {
 		)
 	}
 
+	@Test
 	func test_empty_type_inherits_mixin_protocols() async throws {
 		let code = try await typeScript(
 			"""
@@ -96,7 +112,7 @@ final class TypeScriptStandAloneGeneratorTests: Hopes {
 			"""
 		)
 
-		hope.true(
+		#expect(
 			code.contains(
 				"""
 				class L_root_combined extends L implements I_root_combined {

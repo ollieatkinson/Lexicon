@@ -2,39 +2,46 @@
 // github.com/screensailor 2026
 //
 
+import Testing
+import Foundation
 import Lexicon
-import XCTest
 
-final class DocumentPerformanceTests: XCTestCase {
+@Suite
+
+struct DocumentPerformanceTests {
 
 	private static let taskpaper = makeTaskpaper()
 	private static let document = try! TaskPaper(taskpaper).decodeDocument()
 	private static let documentJSON = try! JSONEncoder().encode(document.json)
 
-	func test_taskpaper_document_decode_performance() {
-		measure {
-			_ = try! TaskPaper(Self.taskpaper).decodeDocument()
-		}
+	@Test
+	func test_taskpaper_document_decode_performance() throws {
+		let document = try TaskPaper(Self.taskpaper).decodeDocument()
+
+		#expect(!document.roots.isEmpty)
 	}
 
+	@Test
 	func test_taskpaper_document_encode_performance() {
-		measure {
-			_ = TaskPaper.encode(Self.document)
-		}
+		let encoded = TaskPaper.encode(Self.document)
+
+		#expect(!encoded.isEmpty)
 	}
 
-	func test_document_json_encode_performance() {
+	@Test
+	func test_document_json_encode_performance() throws {
 		let encoder = JSONEncoder()
-		measure {
-			_ = try! encoder.encode(Self.document.json)
-		}
+		let data = try encoder.encode(Self.document.json)
+
+		#expect(!data.isEmpty)
 	}
 
-	func test_document_json_decode_performance() {
+	@Test
+	func test_document_json_decode_performance() throws {
 		let decoder = JSONDecoder()
-		measure {
-			_ = try! Lexicon.Document(decoder.decode(Lexicon.Document.JSON.self, from: Self.documentJSON))
-		}
+		let document = try Lexicon.Document(decoder.decode(Lexicon.Document.JSON.self, from: Self.documentJSON))
+
+		#expect(!document.roots.isEmpty)
 	}
 }
 

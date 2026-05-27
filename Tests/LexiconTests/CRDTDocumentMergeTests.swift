@@ -2,10 +2,14 @@
 // github.com/screensailor 2026
 //
 
+import Testing
 import Foundation
 
-final class CRDTDocumentMergeTests: Hopes {
+@Suite
 
+struct CRDTDocumentMergeTests {
+
+	@Test
 	func test_crdt_replay_order_independent() throws {
 
 		let local = Lexicon.Import("local.lexicon")
@@ -40,8 +44,8 @@ final class CRDTDocumentMergeTests: Hopes {
 		rightThenLeft.merge(left)
 
 		let encoded = TaskPaper.encode(leftThenRight.materialized())
-		hope(encoded) == TaskPaper.encode(rightThenLeft.materialized())
-		hope(encoded) == """
+		#expect(encoded == TaskPaper.encode(rightThenLeft.materialized()))
+		#expect(encoded == """
 			@ https://example.com/base.lexicon
 			root:
 				alpha:
@@ -49,9 +53,10 @@ final class CRDTDocumentMergeTests: Hopes {
 				> note
 				? "value"
 				+ root.kind
-			"""
+			""")
 	}
 
+	@Test
 	func test_crdt_replica_json_round_trip() throws {
 
 		var replica = Lexicon.CRDT.Replica()
@@ -62,17 +67,18 @@ final class CRDTDocumentMergeTests: Hopes {
 		])))))
 		replica.apply(.operation(2, "a", .createNode(path: "root.value", parentPath: "root", name: "value")))
 
-		hope(replica.json.operations.map(\.id.counter)) == [1, 2, 3]
+		#expect(replica.json.operations.map(\.id.counter) == [1, 2, 3])
 		let data = try JSONEncoder().encode(replica.json)
 		let decoded = try Lexicon.CRDT.Replica(JSONDecoder().decode(Lexicon.CRDT.Replica.JSON.self, from: data))
 
-		hope(TaskPaper.encode(decoded.materialized())) == """
+		#expect(TaskPaper.encode(decoded.materialized()) == """
 			root:
 				value:
 				? {"count":2,"enabled":true}
-			"""
+			""")
 	}
 
+	@Test
 	func test_document_merge_and_composition_are_deterministic() throws {
 
 		let imported = try TaskPaper("""
@@ -94,18 +100,18 @@ final class CRDTDocumentMergeTests: Hopes {
 			"imported.lexicon": imported,
 		]))
 
-		hope(composed.conflicts) == []
-		hope(composed.document.roots.keys.sorted()) == ["shared"]
+		#expect(composed.conflicts == [])
+		#expect(composed.document.roots.keys.sorted() == ["shared"])
 		let connected = try composed.document.roots["shared"].try().children["connected"].try()
-		hope(connected.connections) == []
-		hope(connected.children.keys.sorted()) == [
+		#expect(connected.connections == [])
+		#expect(connected.children.keys.sorted() == [
 			"imported",
 			"local",
 			"reference",
 			"type",
-		]
-		hope(try connected.children["reference"].try().type) == Set(["shared.connected.type"])
-		hope(try connected.children["reference"].try().defaultValue) == .reference("shared.connected.type")
+		])
+		#expect(try connected.children["reference"].try().type == Set(["shared.connected.type"]))
+		#expect(try connected.children["reference"].try().defaultValue == .reference("shared.connected.type"))
 
 		let left = try TaskPaper("""
 			root:
@@ -121,24 +127,25 @@ final class CRDTDocumentMergeTests: Hopes {
 
 		let plan = left.merging(right)
 
-		hope(plan.conflicts) == []
-		hope(try plan.document.roots["root"].try().children["value"].try().defaultValue) == .literal(.string("right"))
-		hope(try plan.document.roots["root"].try().children["value"].try().children.keys.sorted()) == ["child"]
+		#expect(plan.conflicts == [])
+		#expect(try plan.document.roots["root"].try().children["value"].try().defaultValue == .literal(.string("right")))
+		#expect(try plan.document.roots["root"].try().children["value"].try().children.keys.sorted() == ["child"])
 
 		let reversed = right.merging(left)
-		hope(reversed.conflicts) == []
-		hope(try reversed.document.roots["root"].try().children["value"].try().defaultValue) == .literal(.string("left"))
+		#expect(reversed.conflicts == [])
+		#expect(try reversed.document.roots["root"].try().children["value"].try().defaultValue == .literal(.string("left")))
 
 		let external = try TaskPaper("""
 			external:
 				child:
 			""").decodeDocument()
 		let grafted = left.merging(external)
-		hope(grafted.conflicts) == []
-		hope(grafted.document.roots.keys.sorted()) == ["root"]
-		hope(try grafted.document.roots["root"].try().children["external"].try().children.keys.sorted()) == ["child"]
+		#expect(grafted.conflicts == [])
+		#expect(grafted.document.roots.keys.sorted() == ["root"])
+		#expect(try grafted.document.roots["root"].try().children["external"].try().children.keys.sorted() == ["child"])
 	}
 
+	@Test
 	func test_composition_uses_crdt_overlay_order() throws {
 
 		let imported = try TaskPaper("""
@@ -158,11 +165,12 @@ final class CRDTDocumentMergeTests: Hopes {
 			"imported.lexicon": imported,
 		]))
 
-		hope(composed.conflicts) == []
-		hope(try composed.document.roots["root"].try().children["value"].try().defaultValue) == .literal(.string("local"))
-		hope(try composed.document.roots["root"].try().children["value"].try().children.keys.sorted()) == ["child"]
+		#expect(composed.conflicts == [])
+		#expect(try composed.document.roots["root"].try().children["value"].try().defaultValue == .literal(.string("local")))
+		#expect(try composed.document.roots["root"].try().children["value"].try().children.keys.sorted() == ["child"])
 	}
 
+	@Test
 	func test_example_connected_lexicons_compose_from_file_connections() throws {
 
 		let source = try Bundle.module.url(
@@ -174,34 +182,35 @@ final class CRDTDocumentMergeTests: Hopes {
 			baseURL: source.deletingLastPathComponent()
 		))
 
-		hope(composed.conflicts) == []
-		hope(composed.document.roots.keys.sorted()) == ["organization"]
+		#expect(composed.conflicts == [])
+		#expect(composed.document.roots.keys.sorted() == ["organization"])
 
 		let root = try composed.document.roots["organization"].try()
 		let products = try root.children["products"].try()
-		hope(products.connections) == []
-		hope(products.children.keys.sorted()) == [
+		#expect(products.connections == [])
+		#expect(products.children.keys.sorted() == [
 			"glossary",
 			"local_term",
 			"product",
-		]
-		hope(try products.children["product"].try().children.keys.sorted()) == [
+		])
+		#expect(try products.children["product"].try().children.keys.sorted() == [
 			"roadmap",
-		]
+		])
 
 		let engineering = try root.children["engineering"].try()
-		hope(engineering.connections) == []
-		hope(engineering.children.keys.sorted()) == [
+		#expect(engineering.connections == [])
+		#expect(engineering.children.keys.sorted() == [
 			"local_term",
 			"quality",
 			"runtime",
-		]
+		])
 
 		let encoded = TaskPaper.encode(composed.document)
-		hope.false(encoded.contains("@ ./products.lexicon"))
-		hope.false(encoded.contains("@ ./engineering.lexicon"))
+		#expect(!(encoded.contains("@ ./products.lexicon")))
+		#expect(!(encoded.contains("@ ./engineering.lexicon")))
 	}
 
+	@Test
 	func test_file_import_resolver_restricts_local_imports_to_base_url() throws {
 
 		let temporary = FileManager.default.temporaryDirectory
@@ -217,11 +226,12 @@ final class CRDTDocumentMergeTests: Hopes {
 		let resolver = FileLexiconImportResolver(baseURL: base)
 
 		let resolved = try resolver.resolve(.init(reference: "inside.lexicon", location: .local))
-		hope(try resolved.try().roots.keys.first) == "inside"
-		try hope.none(try resolver.resolve(.init(reference: "../outside.lexicon", location: .local)))
-		try hope.none(try resolver.resolve(.init(reference: outside.path, location: .local)))
+		#expect(try resolved.try().roots.keys.first == "inside")
+		#expect(try resolver.resolve(.init(reference: "../outside.lexicon", location: .local)) == nil)
+		#expect(try resolver.resolve(.init(reference: outside.path, location: .local)) == nil)
 	}
 
+	@Test
 	func test_file_import_resolver_rejects_non_http_remote_urls() throws {
 
 		let resolver = FileLexiconImportResolver(
@@ -229,8 +239,8 @@ final class CRDTDocumentMergeTests: Hopes {
 			allowRemote: true
 		)
 
-		try hope.none(try resolver.resolve(.init(reference: "file:///tmp/import.lexicon", location: .remote)))
-		try hope.none(try resolver.resolve(.init(reference: "ftp://example.com/import.lexicon", location: .remote)))
+		#expect(try resolver.resolve(.init(reference: "file:///tmp/import.lexicon", location: .remote)) == nil)
+		#expect(try resolver.resolve(.init(reference: "ftp://example.com/import.lexicon", location: .remote)) == nil)
 	}
 }
 

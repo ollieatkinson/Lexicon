@@ -2,13 +2,16 @@
 // github.com/screensailor 2022
 //
 
-class Lemma_Traversal™: Hopes {
+import Testing
+@Suite
+struct Lemma_Traversal™ {
 	
 	let sentences = """
 		one two three
 		a b c d
 		"""
 	
+	@Test
 	func test_BreadthFirstTraversal() async throws {
 		
 		let sentences = """
@@ -24,7 +27,7 @@ class Lemma_Traversal™: Hopes {
 			hierarchy.append(lemma)
 		}
 		
-		hope(hierarchy.map(\.id)) == [
+		#expect(hierarchy.map(\.id) == [
 			"a",
 			"a.sentence",
 			"a.word",
@@ -38,9 +41,10 @@ class Lemma_Traversal™: Hopes {
 			"a.sentence.a.b.c",
 			"a.sentence.one.two.three",
 			"a.sentence.a.b.c.d",
-		]
+		])
 	}
 	
+	@Test
 	func test_DepthFirstTraversal() async throws {
 		
 		let sentences = """
@@ -56,7 +60,7 @@ class Lemma_Traversal™: Hopes {
 			hierarchy.append(lemma)
 		}
 
-		hope(hierarchy.map(\.id)) == [
+		#expect(hierarchy.map(\.id) == [
 			"a",
 			"a.sentence",
 			"a.sentence.a",
@@ -70,6 +74,6 @@ class Lemma_Traversal™: Hopes {
 			"a.word.determiner",
 			"a.word.noun",
 			"a.word.number",
-		]
+		])
 	}
 }

@@ -2,15 +2,18 @@
 // github.com/screensailor 2022
 //
 
-class TaskPaper™: Hopes {
+import Testing
+@Suite
+struct TaskPaper™ {
 	
+	@Test
 	func test_root_only_taskpaper() async throws {
 		
 		let graph = try TaskPaper(taskpaper_example).decode()
 		
 		let taskpaper = TaskPaper.encode(graph)
 		
-		hope(taskpaper) == taskpaper_example_clean
+		#expect(taskpaper == taskpaper_example_clean)
 	}
 }
 

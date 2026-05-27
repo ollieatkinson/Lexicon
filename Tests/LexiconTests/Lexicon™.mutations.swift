@@ -2,12 +2,14 @@
 // github.com/screensailor 2022
 //
 
+import Testing
 import Lexicon
 
 extension Lexicon™ {
 	
 	// MARK: additive mutations
 	
+	@Test
 	func test_make_child_graph() async throws {
 				
 		let taskpaper = """
@@ -32,11 +34,11 @@ extension Lexicon™ {
 			"""
 			
 		let src = try await taskpaper.lemma("o.copy.a.b")
-		let dst = try await src.lexicon["o.paste.a"].hopefully()
+		let dst = try #require(await src.lexicon["o.paste.a"])
 
-		let b = try await dst.make(child: src.graph).hopefully()
+		let b = try #require(await dst.make(child: src.graph))
 		
-		await hope(that: b.lexicon.taskpaper()) == """
+		#expect(await b.lexicon.taskpaper() == """
 			o:
 				copy:
 					a:
@@ -65,9 +67,10 @@ extension Lexicon™ {
 							= c.d
 							e:
 							= c.d.e.copy
-			"""
+			""")
 	}
 	
+	@Test
 	func test_make_child_graph_where_root_is_a_synonym() async throws {
 				
 		let taskpaper = """
@@ -81,11 +84,11 @@ extension Lexicon™ {
 			"""
 			
 		let src = try await taskpaper.lemma("o.a.b.x")
-		let dst = try await src.lexicon["o.a"].hopefully()
+		let dst = try #require(await src.lexicon["o.a"])
 
-		let b = try await dst.make(child: src.graph).hopefully()
+		let b = try #require(await dst.make(child: src.graph))
 
-		await hope(that: b.lexicon.taskpaper()) == """
+		#expect(await b.lexicon.taskpaper() == """
 			o:
 				a:
 					b:
@@ -94,11 +97,12 @@ extension Lexicon™ {
 						x:
 						= c
 					x:
-			"""
+			""")
 	}
 	
 	// MARK: non-additive mutations
 	
+	@Test
 	func test_delete() async throws {
 		
 		let taskpaper = """
@@ -116,17 +120,18 @@ extension Lexicon™ {
 			
 		let b = try await taskpaper.lemma("o.b")
 		
-		let o = try await b.delete().hopefully()
+		let o = try #require(await b.delete())
 		
-		await hope(that: o.lexicon.taskpaper()) == """
+		#expect(await o.lexicon.taskpaper() == """
 			o:
 				a:
 				+ o
 				d:
 				= a
-			"""
+			""")
 	}
 	
+	@Test
 	func test_remove_type() async throws {
 		
 		let taskpaper = """
@@ -142,20 +147,21 @@ extension Lexicon™ {
 			"""
 			
 		let a = try await taskpaper.lemma("o.a")
-		let o = try await a.lexicon["o"].hopefully()
+		let o = try #require(await a.lexicon["o"])
 
-		let a₂ = try await a.remove(type: o).hopefully()
+		let a₂ = try #require(await a.remove(type: o))
 		
-		await hope(that: a₂.lexicon.taskpaper()) == """
+		#expect(await a₂.lexicon.taskpaper() == """
 			o:
 				a:
 				b:
 					x:
 				d:
 				= a
-			"""
+			""")
 	}
 	
+	@Test
 	func test_remove_protonym() async throws {
 		
 		let taskpaper = """
@@ -172,9 +178,9 @@ extension Lexicon™ {
 			
 		let c = try await taskpaper.lemma("o.c")
 
-		let c₂ = try await c.removeProtonym().hopefully()
+		let c₂ = try #require(await c.removeProtonym())
 		
-		await hope(that: c₂.lexicon.taskpaper()) == """
+		#expect(await c₂.lexicon.taskpaper() == """
 			o:
 				a:
 				+ o
@@ -183,9 +189,10 @@ extension Lexicon™ {
 				c:
 				d:
 				= a
-			"""
+			""")
 	}
 		
+	@Test
 	func test_rename() async throws {
 		
 		let taskpaper = """
@@ -218,9 +225,9 @@ extension Lexicon™ {
 			
 		let y = try await taskpaper.lemma("o.x.y")
 
-		let y₂ = try await y.rename(to: "Y").hopefully()
+		let y₂ = try #require(await y.rename(to: "Y"))
 		
-		await hope(that: y₂.lexicon.taskpaper()) == """
+		#expect(await y₂.lexicon.taskpaper() == """
 			o:
 				a:
 				+ o.ax
@@ -246,9 +253,10 @@ extension Lexicon™ {
 						z:
 				z:
 					y:
-			"""
+			""")
 	}
 
+	@Test
 	func test_set_protonym() async throws {
 		
 		let taskpaper = """
@@ -263,11 +271,11 @@ extension Lexicon™ {
 			"""
 			
 		let c = try await taskpaper.lemma("o.c")
-		let x = try await c.lexicon["o.a.b.x"].hopefully()
+		let x = try #require(await c.lexicon["o.a.b.x"])
 
-		let c₂ = try await c.set(protonym: x).hopefully()
+		let c₂ = try #require(await c.set(protonym: x))
 
-		await hope(that: c₂.lexicon.taskpaper()) == """
+		#expect(await c₂.lexicon.taskpaper() == """
 			o:
 				a:
 				+ o
@@ -277,6 +285,6 @@ extension Lexicon™ {
 				= a.b.x
 				d:
 				= a
-			"""
+			""")
 	}
 }

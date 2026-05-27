@@ -2,8 +2,11 @@
 // github.com/screensailor 2022
 //
 
-class Sentences™: Hopes {
+import Testing
+@Suite
+struct Sentences™ {
 	
+	@Test
 	func test() async throws {
 		
 		/// https://en.wikipedia.org/wiki/Humpty_Dumpty
@@ -18,7 +21,7 @@ class Sentences™: Hopes {
 		let graph = Lexicon.Graph.from(sentences: humpty, root: "rhyme")
 		let taskpaper = TaskPaper.encode(graph)
 		
-		hope(taskpaper) == """
+		#expect(taskpaper == """
 			rhyme:
 				sentence:
 					all:
@@ -76,6 +79,6 @@ class Sentences™: Hopes {
 					particle:
 					preposition:
 					verb:
-			"""
+			""")
 	}
 }

@@ -2,34 +2,39 @@
 // github.com/screensailor 2026
 //
 
+import Testing
 import Foundation
-import Hope
 @testable import Lexicon
 
-final class LexiconDocumentSearchTests: Hopes {
+@Suite
 
+struct LexiconDocumentSearchTests {
+
+	@Test
 	func test_token_search_finds_path_segments_and_type_references() throws {
 		let document = try Self.fixture()
 
 		let pathResults = document.search("notification authorization status", options: .init(mode: .token))
-		hope(pathResults.first?.id) == "root.device.settings.permission.notifications.authorization.status"
+		#expect(pathResults.first?.id == "root.device.settings.permission.notifications.authorization.status")
 
 		let referenceResults = document.search("session state value", options: .init(mode: .token))
-		hope.true(referenceResults.map(\.id).contains("root.preference"))
-		hope.true(referenceResults
+		#expect(referenceResults.map(\.id).contains("root.preference"))
+		#expect(referenceResults
 			.first { $0.id == "root.preference" }?
 			.matches
 			.contains { $0.field == .type } ?? false)
 	}
 
+	@Test
 	func test_lexical_search_finds_metadata_without_synonym_rules() throws {
 		let document = try Self.fixture()
 
 		let results = document.search("shown in settings", options: .init(mode: .lexical))
-		hope(results.first?.id) == "root.notice"
-		hope.true(results.first?.matches.contains { $0.field == .note } ?? false)
+		#expect(results.first?.id == "root.notice")
+		#expect(results.first?.matches.contains { $0.field == .note } ?? false)
 	}
 
+	@Test
 	func test_hybrid_search_can_be_scoped_to_a_subtree() throws {
 		let document = try Self.fixture()
 
@@ -38,10 +43,11 @@ final class LexiconDocumentSearchTests: Hopes {
 			options: .init(root: "root.downloads", mode: .hybrid)
 		)
 
-		hope(results.first?.id) == "root.downloads.programme.to.device"
-		hope.true(results.allSatisfy { $0.id.hasPrefix("root.downloads") })
+		#expect(results.first?.id == "root.downloads.programme.to.device")
+		#expect(results.allSatisfy { $0.id.hasPrefix("root.downloads") })
 	}
 
+	@Test
 	func test_search_mode_can_compose_scoring_lenses() throws {
 		let document = try Self.fixture()
 
@@ -50,17 +56,18 @@ final class LexiconDocumentSearchTests: Hopes {
 		let notice = results.first { $0.id == "root.notice" }
 		let settings = results.first { $0.id == "root.device.settings" }
 
-		hope.true(ids.contains("root.notice"))
-		hope.true(ids.contains("root.device.settings"))
-		hope.true((notice?.scores.lexical ?? 0) > 0)
-		hope.true((settings?.scores.token ?? 0) > 0)
+		#expect(ids.contains("root.notice"))
+		#expect(ids.contains("root.device.settings"))
+		#expect((notice?.scores.lexical ?? 0) > 0)
+		#expect((settings?.scores.token ?? 0) > 0)
 	}
 
+	@Test
 	func test_live_scope_search_reranks_candidates_with_inherited_children() async throws {
 		let document = try Self.inheritedFixture()
 		let ownIndex = Lexicon.Search.Index(document: document, options: .init(mode: .token))
 		let ownResults = ownIndex.search("entitlement")
-		hope.false(ownResults.map(\.id).contains("root.offer"))
+		#expect(!(ownResults.map(\.id).contains("root.offer")))
 
 		let fullIndex = Lexicon.Search.Index(
 			document: document,
@@ -69,10 +76,11 @@ final class LexiconDocumentSearchTests: Hopes {
 		let fullResults = try await fullIndex.search("entitlement", in: document)
 		let offer = fullResults.first { $0.id == "root.offer" }
 
-		hope(offer?.id) == "root.offer"
-		hope.true(offer?.matches.contains { $0.field == .contextChild } ?? false)
+		#expect(offer?.id == "root.offer")
+		#expect(offer?.matches.contains { $0.field == .contextChild } ?? false)
 	}
 
+	@Test
 	func test_full_scope_materializes_resolved_graph_with_recursion_detection() async throws {
 		let document = try Self.recursiveFixture()
 		let index = Lexicon.Search.Index(
@@ -84,20 +92,22 @@ final class LexiconDocumentSearchTests: Hopes {
 		let ids = materialized.entries.map(\.id)
 		let results = materialized.search("recursive child")
 
-		hope.true(ids.contains("root.item.child"))
-		hope.false(ids.contains("root.item.child.child"))
-		hope(ids.count) < 30
-		hope.true(results.map(\.id).contains("root.item.child"))
+		#expect(ids.contains("root.item.child"))
+		#expect(!(ids.contains("root.item.child.child")))
+		#expect(ids.count < 30)
+		#expect(results.map(\.id).contains("root.item.child"))
 	}
 
+	@Test
 	func test_search_demo_lexicon_examples_are_searchable() throws {
 		let document = try Self.searchDemoFixture()
 
-		hope(document.search("submit order", options: .init(mode: .hybrid)).first?.id) == "demo.api.order.submit"
-		hope(document.search("demo ui product card badge low stock", options: .init(mode: .token)).first?.id) == "demo.ui.product.card.badge.low_stock"
-		hope(document.search("card issuer rejected the transaction", options: .init(mode: .lexical)).first?.id) == "demo.api.payment.decline"
+		#expect(document.search("submit order", options: .init(mode: .hybrid)).first?.id == "demo.api.order.submit")
+		#expect(document.search("demo ui product card badge low stock", options: .init(mode: .token)).first?.id == "demo.ui.product.card.badge.low_stock")
+		#expect(document.search("card issuer rejected the transaction", options: .init(mode: .lexical)).first?.id == "demo.api.payment.decline")
 	}
 
+	@Test
 	func test_embedding_cache_batches_document_embedding_requests() async throws {
 		let document = try Self.largeFixture()
 		let index = Lexicon.Search.Index(document: document, options: .init(mode: .semantic))
@@ -109,13 +119,14 @@ final class LexiconDocumentSearchTests: Hopes {
 		let expectedBatches = stride(from: 0, to: index.entries.count, by: 32).map {
 			min(32, index.entries.count - $0)
 		}
-		hope(cache.descriptor.provider) == "test"
-		hope(cache.descriptor.model) == "embedding-provider"
-		hope(cache.vectors.count) == index.entries.count
+		#expect(cache.descriptor.provider == "test")
+		#expect(cache.descriptor.model == "embedding-provider")
+		#expect(cache.vectors.count == index.entries.count)
 		let sizes = await recorder.sizes
-		hope(sizes) == expectedBatches
+		#expect(sizes == expectedBatches)
 	}
 
+	@Test
 	func test_provider_backed_semantic_search_embeds_query_for_live_and_full_scope() async throws {
 		let document = try Self.providerBackedSemanticFixture()
 		let provider = KeywordEmbeddingProvider()
@@ -137,11 +148,12 @@ final class LexiconDocumentSearchTests: Hopes {
 				contextEmbeddingProvider: provider
 			)
 
-			hope(results.first?.id) == "root.target"
-			hope.true((results.first?.scores.semantic ?? 0) > 0.99)
+			#expect(results.first?.id == "root.target")
+			#expect((results.first?.scores.semantic ?? 0) > 0.99)
 		}
 	}
 
+	@Test
 	func test_embedding_provider_vector_count_mismatch_throws() async throws {
 		let document = try Self.providerBackedSemanticFixture()
 		let index = Lexicon.Search.Index(document: document, options: .init(mode: .semantic))
@@ -154,9 +166,10 @@ final class LexiconDocumentSearchTests: Hopes {
 			message = "\(error)"
 		}
 
-		hope.true(message?.contains("Embedding provider returned") ?? false)
+		#expect(message?.contains("Embedding provider returned") ?? false)
 	}
 
+	@Test
 	func test_embedding_descriptor_identifier_is_derived_from_current_fields() throws {
 		var descriptor = Lexicon.Search.EmbeddingDescriptor(
 			provider: "test",
@@ -172,15 +185,15 @@ final class LexiconDocumentSearchTests: Hopes {
 		descriptor.model = "second"
 		descriptor.modelRevision = "two"
 
-		hope.false(descriptor.identifier == firstIdentifier)
-		hope.true(descriptor.identifier.contains("second"))
-		hope.true(descriptor.identifier.contains("two"))
+		#expect(!(descriptor.identifier == firstIdentifier))
+		#expect(descriptor.identifier.contains("second"))
+		#expect(descriptor.identifier.contains("two"))
 
 		let decoded = try JSONDecoder().decode(
 			Lexicon.Search.EmbeddingDescriptor.self,
 			from: JSONEncoder().encode(descriptor)
 		)
-		hope(decoded.identifier) == descriptor.identifier
+		#expect(decoded.identifier == descriptor.identifier)
 	}
 }
 

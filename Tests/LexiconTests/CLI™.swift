@@ -2,11 +2,15 @@
 // github.com/screensailor 2021
 //
 
+import Testing
 import Foundation
 @testable import Lexicon
 
-class CLI™: Hopes {
+@Suite
+
+struct CLI™ {
 	
+	@Test
 	func test_against_session_record() async throws {
 		
 		let session: CLI.Session = try "testCLI".json()
@@ -61,7 +65,7 @@ class CLI™: Hopes {
 									\(record.json().string())
 									"""
 					
-					hope.less(message)
+					throw message
 				}
 			}
 			

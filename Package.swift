@@ -24,7 +24,6 @@ let package = Package(
 		.trait(name: "MLXSearch"),
 	],
 	dependencies: [
-		.package(url: "https://github.com/screensailor/Hope", branch: "trunk"),
 		.package(url: "https://github.com/apple/swift-algorithms", from: "1.2.0"),
 		.package(url: "https://github.com/apple/swift-collections", from: "1.5.1"),
 		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.7.1"),
@@ -56,7 +55,6 @@ let package = Package(
 		.testTarget(
 			name: "LexiconTests",
 			dependencies: [
-				"Hope",
 				"Lexicon"
 			],
 			resources: [.copy("Resources")]
@@ -78,7 +76,6 @@ let package = Package(
 		.testTarget(
 			name: "LexiconGeneratorsTests",
 			dependencies: [
-				"Hope",
 				"LexiconGenerators"
 			],
 			resources: [.copy("Resources")]
@@ -94,7 +91,6 @@ let package = Package(
 		.testTarget(
 			name: "SwiftLexiconTests",
 			dependencies: [
-				"Hope",
 				"SwiftLexicon",
 				.product(name: "AsyncAlgorithms", package: "swift-async-algorithms")
 			],

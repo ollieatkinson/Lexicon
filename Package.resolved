@@ -1,15 +1,6 @@
 {
-  "originHash" : "b1438243b9249f9e408da1811f0bd2cf2edc1f146fc60bbd524e35c606eb8829",
+  "originHash" : "948be847607fa9ee163bc105672a42b75ae07a471be143bfe080cf088e0e6f1c",
   "pins" : [
-    {
-      "identity" : "hope",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/screensailor/Hope",
-      "state" : {
-        "branch" : "trunk",
-        "revision" : "b76209cf412ba8a78941a298ff0c5d2a58cc4e6a"
-      }
-    },
     {
       "identity" : "mlx-swift",
       "kind" : "remoteSourceControl",

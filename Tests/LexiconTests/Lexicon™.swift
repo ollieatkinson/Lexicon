@@ -1,30 +1,32 @@
 //
 // github.com/screensailor 2021
 //
-
-@_exported import Hope
+import Testing
 @_exported import Lexicon
 
-final class Lexicon™: Hopes {
+@Suite
+
+struct Lexicon™ {
 	
+	@Test
 	func test() async throws {
 		
 		let lexicon = try await Lexicon.from(TaskPaper(taskpaper).decode())
 		let root = await lexicon.root
 		var cli = await CLI(root)
 		
-		hope(cli.suggestions.map(\.name)) == ["idea", "purpose", "type", "ui", "ux"]
+		#expect(cli.suggestions.map(\.name) == ["idea", "purpose", "type", "ui", "ux"])
 		
 		await cli.replace(input: "idea")
 		await cli.enter()
 		
-		hope(cli.suggestions.map(\.name)) == ["knowledge"]
+		#expect(cli.suggestions.map(\.name) == ["knowledge"])
 		
-		let mindMap = try await lexicon["root.idea.knowledge.mind_map"].hopefully()
-		let tree = try await lexicon["root.idea.knowledge.tree"].hopefully()
+		let mindMap = try #require(await lexicon["root.idea.knowledge.mind_map"])
+		let tree = try #require(await lexicon["root.idea.knowledge.tree"])
 		
-		await hope(that: mindMap.source) == tree
-		await hope(that: mindMap.source === tree) == true
+		#expect(await mindMap.source == tree)
+		#expect(await mindMap.source === tree)
 		
 		// TODO: ...
 	}

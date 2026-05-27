@@ -2,10 +2,14 @@
 // github.com/screensailor 2026
 //
 
+import Testing
 import Foundation
 
-final class BranchPasteTests: Hopes {
+@Suite
 
+struct BranchPasteTests {
+
+	@Test
 	func test_branch_export_rewrites_internal_references_and_reports_external_references() async throws {
 
 		let lexicon = try await Lexicon.from(TaskPaper("""
@@ -21,14 +25,14 @@ final class BranchPasteTests: Hopes {
 					+ root.shared.kind
 			""").decodeDocument())
 
-		let branch = try await lexicon["root.branch"].hopefully()
+		let branch = try #require(await lexicon["root.branch"])
 		let exported = await branch.exportBranchDocument()
 
-		hope(exported.diagnostics) == [
+		#expect(exported.diagnostics == [
 			.init(kind: .externalType, path: "branch.external", reference: "root.shared.kind"),
-		]
-		hope(exported.document.imports) == [.init("root")]
-		hope(TaskPaper.encode(exported.document)) == """
+		])
+		#expect(exported.document.imports == [.init("root")])
+		#expect(TaskPaper.encode(exported.document) == """
 			@ root
 			branch:
 				external:
@@ -37,9 +41,10 @@ final class BranchPasteTests: Hopes {
 				? @ branch.kind
 				+ branch.kind
 				kind:
-			"""
+			""")
 	}
 
+	@Test
 	func test_paste_rewrites_branch_internal_references_at_destination() async throws {
 
 		let lexicon = try await Lexicon.from(TaskPaper("""
@@ -57,17 +62,17 @@ final class BranchPasteTests: Hopes {
 				external:
 				+ outside.type
 			""").decodeDocument()
-		hope(Array(branch.roots.keys)) == ["branch"]
+		#expect(Array(branch.roots.keys) == ["branch"])
 
-		let anchor = try await lexicon["root.anchor"].hopefully()
+		let anchor = try #require(await lexicon["root.anchor"])
 		let result = await lexicon.paste(branch, to: anchor)
 		let encoded = await TaskPaper.encode(lexicon.document)
 
-		hope(result.lemmaID) == "root.anchor.branch"
-		hope(result.diagnostics) == [
+		#expect(result.lemmaID == "root.anchor.branch")
+		#expect(result.diagnostics == [
 			.init(kind: .externalType, path: "branch.external", reference: "outside.type"),
-		]
-		hope(encoded) == """
+		])
+		#expect(encoded == """
 			root:
 				anchor:
 					branch:
@@ -79,6 +84,6 @@ final class BranchPasteTests: Hopes {
 						kind:
 				outside:
 					type:
-			"""
+			""")
 	}
 }
