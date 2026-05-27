@@ -80,6 +80,29 @@ let benchmarks: @Sendable () -> Void = {
 		benchmark.stopMeasurement()
 	}
 
+	Benchmark("Hybrid search query warmed index", configuration: benchmarkConfiguration()) { benchmark in
+		let document = try makeDocument(roots: 1, children: 20, grandchildren: 2)
+		let index = Lexicon.Search.Index(document: document, options: .init(mode: .hybrid))
+		let queries = [
+			"root node child",
+			"session state value",
+			"local lexicon type",
+			"node metadata root",
+		]
+		var queryIndex = 0
+
+		for query in queries {
+			blackHole(index.search(query))
+		}
+
+		benchmark.startMeasurement()
+		for _ in benchmark.scaledIterations {
+			blackHole(index.search(queries[queryIndex % queries.count]))
+			queryIndex += 1
+		}
+		benchmark.stopMeasurement()
+	}
+
 	Benchmark("Full-scope search materialization", configuration: benchmarkConfiguration()) { benchmark in
 		let document = try makeInheritedDocument(nodes: 10)
 		let index = Lexicon.Search.Index(

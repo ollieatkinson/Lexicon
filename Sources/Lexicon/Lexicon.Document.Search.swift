@@ -325,6 +325,7 @@ public extension Lexicon.Search {
 	struct Index: Sendable {
 		public var entries: [Entry]
 		public var options: Options
+		private let semanticEmbeddingCache: SemanticEmbeddingVectorCache
 		public var fingerprint: String {
 			var hash = StableHash()
 			for entry in entries.sorted(by: { $0.id < $1.id }) {
@@ -337,11 +338,13 @@ public extension Lexicon.Search {
 		public init(document: Lexicon.Document, options: Options = .init()) {
 			self.options = options
 			self.entries = document.searchEntries(options: options)
+			self.semanticEmbeddingCache = .init()
 		}
 
 		public init(entries: [Entry], options: Options = .init()) {
 			self.options = options
 			self.entries = entries
+			self.semanticEmbeddingCache = .init()
 		}
 
 		public func search(
@@ -359,7 +362,7 @@ public extension Lexicon.Search {
 				: nil)
 			let results = entries.compactMap { entry in
 				let entryVector = embeddingCache?.vectors[entry.id]
-					?? (queryVector?.isEmpty == false ? SemanticEmbedding.vector(for: entry.embeddingText) : nil)
+					?? (queryVector?.isEmpty == false ? semanticEmbeddingCache.vector(for: entry) : nil)
 				return entry.result(
 					for: query,
 					queryVector: queryVector,
@@ -552,7 +555,7 @@ public extension Lexicon.Search {
 			let queryVector = queryVector ?? self.queryVector(for: query)
 			let contextResults = contextEntries.compactMap { entry in
 				let entryVector = contextVectors[entry.id]
-					?? (queryVector?.isEmpty == false ? SemanticEmbedding.vector(for: entry.embeddingText) : nil)
+					?? (queryVector?.isEmpty == false ? semanticEmbeddingCache.vector(for: entry) : nil)
 				return entry.result(
 					for: query,
 					queryVector: queryVector,
@@ -775,6 +778,33 @@ public extension Lexicon.Search.Entry {
 			.map(\.normalizedText)
 			.filter(\.isNotEmpty)
 			.joined(separator: " ")
+	}
+}
+
+private final class SemanticEmbeddingVectorCache: @unchecked Sendable {
+
+	private struct CachedVector: Sendable {
+		var text: String
+		var vector: [Double]?
+	}
+
+	private let lock = NSLock()
+	private var vectors: [Lemma.ID: CachedVector] = [:]
+
+	func vector(for entry: Lexicon.Search.Entry) -> [Double]? {
+		let text = entry.embeddingText
+		lock.lock()
+		if let cached = vectors[entry.id], cached.text == text {
+			lock.unlock()
+			return cached.vector
+		}
+		lock.unlock()
+
+		let vector = SemanticEmbedding.vector(for: text)
+		lock.lock()
+		vectors[entry.id] = .init(text: text, vector: vector)
+		lock.unlock()
+		return vector
 	}
 }
 
@@ -1202,18 +1232,36 @@ private enum SearchTokenizer {
 
 private enum SemanticEmbedding {
 
+	#if canImport(NaturalLanguage)
+	private static let sentenceEmbedding = NaturalLanguageSentenceEmbedding()
+	#endif
+
 	static func vector(for text: String) -> [Double]? {
 		let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
 		guard text.isNotEmpty else {
 			return nil
 		}
 		#if canImport(NaturalLanguage)
-		return NLEmbedding.sentenceEmbedding(for: .english)?.vector(for: text)
+		return sentenceEmbedding.vector(for: text)
 		#else
 		return nil
 		#endif
 	}
 }
+
+#if canImport(NaturalLanguage)
+private final class NaturalLanguageSentenceEmbedding: @unchecked Sendable {
+
+	private let lock = NSLock()
+	private let embedding = NLEmbedding.sentenceEmbedding(for: .english)
+
+	func vector(for text: String) -> [Double]? {
+		lock.lock()
+		defer { lock.unlock() }
+		return embedding?.vector(for: text)
+	}
+}
+#endif
 
 private extension Lexicon.Search.Mode {
 
