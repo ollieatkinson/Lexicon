@@ -100,17 +100,12 @@ extension Lexicon.Search.Index {
 			provider: provider,
 			rebuild: rebuildEmbeddings
 		)
-		let queryVector = try await provider.embed(["search_query: \(query)"]).first
-		if index.options.scope == .live {
-			return try await index.search(
-				query,
-				in: document,
-				embeddingCache: cache,
-				queryVector: queryVector,
-				contextEmbeddingProvider: provider
-			)
-		}
-		return index.search(query, embeddingCache: cache, queryVector: queryVector)
+		return try await index.search(
+			query,
+			in: document,
+			embeddingCache: cache,
+			contextEmbeddingProvider: provider
+		)
 	}
 
 	private func embeddingCache(

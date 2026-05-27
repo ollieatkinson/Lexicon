@@ -417,14 +417,28 @@ public extension Lexicon.Search {
 			queryVector: [Double]? = nil,
 			contextEmbeddingProvider provider: Provider
 		) async throws -> [Result] {
+			let query = SearchQuery(rawQuery)
+			let queryVector = try await providerQueryVector(
+				for: query,
+				provided: queryVector,
+				using: provider
+			)
 			switch options.scope {
 				case .own:
-					return search(rawQuery, embeddingCache: embeddingCache, queryVector: queryVector)
+					let cache = try await providerEmbeddingCache(
+						embeddingCache,
+						using: provider
+					)
+					return search(rawQuery, embeddingCache: cache, queryVector: queryVector)
 				case .live:
+					let cache = try await providerEmbeddingCache(
+						embeddingCache,
+						using: provider
+					)
 					let context = try await liveSearchContext(
 						rawQuery,
 						document: document,
-						embeddingCache: embeddingCache,
+						embeddingCache: cache,
 						queryVector: queryVector
 					)
 					let contextVectors = try await embeddingVectors(for: context.contextEntries, using: provider)
@@ -437,14 +451,10 @@ public extension Lexicon.Search {
 					)
 				case .full:
 					let index = try await materialized(in: document)
-					let cache: EmbeddingCache?
-					if embeddingCache?.fingerprint == index.fingerprint {
-						cache = embeddingCache
-					} else if options.mode.usesSemanticSearch {
-						cache = try await index.embeddingCache(using: provider)
-					} else {
-						cache = nil
-					}
+					let cache = try await index.providerEmbeddingCache(
+						embeddingCache,
+						using: provider
+					)
 					return index.search(rawQuery, embeddingCache: cache, queryVector: queryVector)
 			}
 		}
@@ -472,6 +482,40 @@ public extension Lexicon.Search {
 				fingerprint: fingerprint,
 				vectors: vectors
 			)
+		}
+
+		private func providerQueryVector<Provider: EmbeddingProvider>(
+			for query: SearchQuery,
+			provided queryVector: [Double]?,
+			using provider: Provider
+		) async throws -> [Double]? {
+			guard queryVector == nil,
+				  options.mode.usesSemanticSearch,
+				  query.hasTerms,
+				  options.limit != 0
+			else {
+				return queryVector
+			}
+			return try await providerEmbeddings(
+				for: ["search_query: \(query.embeddingText)"],
+				using: provider
+			).first
+		}
+
+		private func providerEmbeddingCache<Provider: EmbeddingProvider>(
+			_ embeddingCache: EmbeddingCache?,
+			using provider: Provider
+		) async throws -> EmbeddingCache? {
+			guard options.mode.usesSemanticSearch else {
+				return nil
+			}
+			if let embeddingCache,
+			   embeddingCache.fingerprint == fingerprint,
+			   embeddingCache.descriptor == provider.descriptor
+			{
+				return embeddingCache
+			}
+			return try await self.embeddingCache(using: provider)
 		}
 
 		private func liveSearchContext(
@@ -550,12 +594,26 @@ public extension Lexicon.Search {
 		) async throws -> [Lemma.ID: [Double]] {
 			var vectors: [Lemma.ID: [Double]] = [:]
 			for batch in entries.chunks(ofCount: 32) {
-				let embeddings = try await provider.embed(batch.map { "search_document: \($0.embeddingText)" })
+				let embeddings = try await providerEmbeddings(
+					for: batch.map { "search_document: \($0.embeddingText)" },
+					using: provider
+				)
 				for (entry, vector) in zip(batch, embeddings) {
 					vectors[entry.id] = vector
 				}
 			}
 			return vectors
+		}
+
+		private func providerEmbeddings<Provider: EmbeddingProvider>(
+			for texts: [String],
+			using provider: Provider
+		) async throws -> [[Double]] {
+			let embeddings = try await provider.embed(texts)
+			guard embeddings.count == texts.count else {
+				throw "Embedding provider returned \(embeddings.count) vectors for \(texts.count) texts."
+			}
+			return embeddings
 		}
 
 		@LexiconActor private func contextEntries(
@@ -569,7 +627,7 @@ public extension Lexicon.Search {
 				.split(separator: ".", maxSplits: 1)
 				.first
 				.map(String.init)
-			let lexicon = try Lexicon.from(document, root: rootName)
+			let lexicon = try Lexicon.temporary(from: document, root: rootName)
 			let entryIDs = Set(entries.map(\.id))
 			let seedIDs = seedResults
 				.prefix(max(1, options.bounds.candidates))
@@ -623,7 +681,7 @@ public extension Lexicon.Search {
 				.split(separator: ".", maxSplits: 1)
 				.first
 				.map(String.init)
-			let lexicon = try Lexicon.from(document, root: rootName)
+			let lexicon = try Lexicon.temporary(from: document, root: rootName)
 			let roots: [Lemma]
 			if let root = options.root {
 				roots = lexicon[root].map { [$0] } ?? []

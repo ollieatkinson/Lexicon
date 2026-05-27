@@ -22,10 +22,6 @@ import _Collections
 		self.document = document
 		self.graph = graph
 	}
-	
-	deinit {
-		assertionFailure("🗑 \(self)")
-	}
 }
 
 public extension Lexicon {
@@ -47,16 +43,14 @@ public extension Lexicon {
 	
 	static func from(_ graph: Graph) -> Lexicon {
 		let document = Document(graph)
-		let o = Lexicon(document: document, graph: graph)
-		connect(lexicon: o, with: graph)
+		let o = make(document: document, graph: graph)
 		all.append(o) // TODO: hard rethink
 		return o
 	}
 
 	static func from(_ document: Document, root name: Graph.Node.Name? = nil) throws -> Lexicon {
 		let graph = try document.graph(root: name)
-		let o = Lexicon(document: document, graph: graph)
-		try connect(lexicon: o, with: document, root: graph.root.name)
+		let o = make(document: document, graph: graph)
 		all.append(o) // TODO: hard rethink
 		return o
 	}
@@ -75,9 +69,23 @@ public extension Lexicon {
 	#endif
 }
 
+extension Lexicon {
+
+	static func temporary(from document: Document, root name: Graph.Node.Name? = nil) throws -> Lexicon {
+		let graph = try document.graph(root: name)
+		return make(document: document, graph: graph)
+	}
+}
+
 private extension Lexicon {
 	
 	static var all: [Lexicon] = []
+
+	static func make(document: Document, graph: Graph) -> Lexicon {
+		let o = Lexicon(document: document, graph: graph)
+		connect(lexicon: o, with: document, graph: graph)
+		return o
+	}
 	
 	static func connect(lexicon: Lexicon, with new: Graph? = nil) {
 		let graph = new ?? lexicon.graph
