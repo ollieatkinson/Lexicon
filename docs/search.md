@@ -95,24 +95,6 @@ swift run --traits ONNXSearch lexicon search Examples/search-demo.lexicon "late 
 
 See [`search-platforms.md`](search-platforms.md) for Linux, Android, Windows, and ONNX backend notes.
 
-## Quality Harness
-
-Search quality should be measured against local judgments, not guessed from generic model leaderboards. [`Examples/search-quality.json`](../Examples/search-quality.json) includes demo, Sky, and Blockchain query suites:
-
-```sh
-swift run lexicon search-evaluate Examples/search-quality.json \
-	--mode hybrid \
-	--embedding-provider none \
-	--limit 10
-swift run --traits ONNXSearch lexicon search-evaluate Examples/search-quality.json \
-	--mode semantic \
-	--embedding-provider onnx \
-	--embedding-model-preset bge-small-en-v1.5 \
-	--limit 10
-```
-
-The output reports MRR@10, nDCG@10, recall@10, per-query latency, document load time, index time, and cache size.
-
 ## Hybrid Examples
 
 | Query | Top result |

@@ -351,7 +351,7 @@ swift run --traits ONNXSearch lexicon search commerce.lexicon "order submit" \
 	--embedding-model-preset bge-small-en-v1.5
 ```
 
-ONNX presets currently include MiniLM, BGE-small, GTE-small and E5-small-v2. `lexicon search-evaluate` runs JSON query judgments and reports MRR@10, nDCG@10, recall@10, query latency, index time and cache size when an explicit cache path is supplied, so model choices can be measured against real lexicons before changing defaults.
+ONNX presets currently include MiniLM, BGE-small, GTE-small and E5-small-v2. BGE-small is a good first ONNX model to try for semantic search, but `hybrid` remains the default because exact graph names and references still matter.
 
 See [`docs/search.md`](docs/search.md) for the search mode guide and demo lexicon examples. See [`docs/search-platforms.md`](docs/search-platforms.md) for Linux, Android, Windows, and ONNX backend notes.
 

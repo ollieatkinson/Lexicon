@@ -25,7 +25,6 @@ Semantic search is different. The system provider uses Apple's `NaturalLanguage`
 | Model registry | Built-in ONNX presets cover MiniLM, BGE-small, GTE-small, and E5-small-v2. |
 | Runtime packaging | SwiftPM command plugin installs ONNX Runtime release artifacts for Linux, Android, and Windows. |
 | Non-Apple runtime | `CLexiconONNXRuntime` imports the ONNX Runtime C API and loads the runtime library dynamically on Linux, Android, and Windows builds. |
-| Quality harness | `lexicon search-evaluate` runs real searches and reports MRR@10, nDCG@10, recall@10, latency, index time, and cache size. |
 
 The Windows artifact installer is present, but the C API session still needs `ORTCHAR_T` wide-string path bridging before Windows semantic search can run. Linux and Android are the immediate shipping targets.
 
@@ -161,41 +160,6 @@ swift run --traits ONNXSearch lexicon search Examples/search-demo.lexicon \
 
 The first semantic search for a document creates the embedding cache and logs indexing progress to stderr. The old `warm-search` and `index-search` commands are intentionally not present; first search auto-indexes when needed.
 
-## Quality Harness
-
-`Examples/search-quality.json` contains judgment suites for the demo lexicon plus local Sky and Blockchain lexicons:
-
-```sh
-swift run lexicon search-evaluate Examples/search-quality.json \
-	--mode hybrid \
-	--embedding-provider none \
-	--limit 10
-```
-
-For semantic model comparison, run the same judgments with ONNX:
-
-```sh
-swift run --traits ONNXSearch lexicon search-evaluate Examples/search-quality.json \
-	--mode semantic \
-	--embedding-provider onnx \
-	--embedding-model-preset bge-small-en-v1.5 \
-	--limit 10
-```
-
-Use the reported MRR@10, nDCG@10, recall@10, per-query latency, index time, and cache size to choose a default model. Do not pick a model by leaderboard alone; use the local Sky/blockchain/demo judgments because Lexicon search has graph structure and domain terms that generic embedding benchmarks do not measure.
-
-Current local snapshot over `Examples/search-quality.json`:
-
-| Mode/provider | Preset | MRR@10 | nDCG@10 | Recall@10 |
-| --- | --- | ---: | ---: | ---: |
-| `hybrid` / `none` | none | 0.9583 | 0.9527 | 0.8333 |
-| `semantic` / `onnx` | `all-MiniLM-L6-v2` | 0.6694 | 0.6747 | 0.7778 |
-| `semantic` / `onnx` | `bge-small-en-v1.5` | 0.9583 | 0.8640 | 0.8889 |
-| `semantic` / `onnx` | `gte-small` | 0.9028 | 0.8191 | 0.8889 |
-| `semantic` / `onnx` | `e5-small-v2` | 0.8611 | 0.8287 | 0.8611 |
-
-BGE is the strongest semantic default candidate in this small local harness. The default search mode should still stay `hybrid` because token and lexical scoring carry exact graph names better than embeddings alone.
-
 ## Cache Identity
 
 The embedding cache is keyed by the provider descriptor and document search fingerprint. For semantic search, the descriptor includes:
@@ -217,6 +181,6 @@ Before calling ONNX search stable, add CI jobs that install runtime artifacts an
 The main model-correctness gaps after this spike are:
 
 - tokenizer expansion beyond WordPiece for models that need SentencePiece, Unigram, or custom tokenizers
-- measured preset comparison from `search-evaluate` over local judgments
+- measured preset comparison over local judgments outside the product CLI
 - Windows `ORTCHAR_T` path bridging and runtime loading validation
 - optional ONNX Runtime Mobile/reduced builds for app-size-sensitive Android deployments

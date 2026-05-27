@@ -15,7 +15,6 @@ struct LexiconCommand: AsyncParsableCommand {
 			Inspect.self,
 			Tree.self,
 			Search.self,
-			SearchEvaluate.self,
 			Refs.self,
 			Excerpt.self,
 			Format.self,
