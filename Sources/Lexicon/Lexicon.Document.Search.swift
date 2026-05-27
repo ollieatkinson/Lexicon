@@ -118,7 +118,17 @@ public extension Lexicon.Search {
 		public var dimensions: Int?
 		public var normalized: Bool
 		public var pooling: String
-		public private(set) var identifier: String
+		public var identifier: String {
+			Self.identifier(
+				provider: provider,
+				model: model,
+				modelRevision: modelRevision,
+				tokenizer: tokenizer,
+				dimensions: dimensions,
+				normalized: normalized,
+				pooling: pooling
+			)
+		}
 
 		private enum CodingKeys: String, CodingKey {
 			case provider
@@ -147,15 +157,6 @@ public extension Lexicon.Search {
 			self.dimensions = dimensions
 			self.normalized = normalized
 			self.pooling = pooling
-			self.identifier = Self.identifier(
-				provider: provider,
-				model: model,
-				modelRevision: modelRevision,
-				tokenizer: tokenizer,
-				dimensions: dimensions,
-				normalized: normalized,
-				pooling: pooling
-			)
 		}
 
 		public init(from decoder: Decoder) throws {

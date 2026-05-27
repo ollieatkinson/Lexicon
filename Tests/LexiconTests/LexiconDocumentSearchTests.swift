@@ -115,6 +115,32 @@ final class LexiconDocumentSearchTests: Hopes {
 		let sizes = await recorder.sizes
 		hope(sizes) == expectedBatches
 	}
+
+	func test_embedding_descriptor_identifier_is_derived_from_current_fields() throws {
+		var descriptor = Lexicon.Search.EmbeddingDescriptor(
+			provider: "test",
+			model: "first",
+			modelRevision: "one",
+			tokenizer: "wordpiece",
+			dimensions: 384,
+			normalized: true,
+			pooling: "mean"
+		)
+		let firstIdentifier = descriptor.identifier
+
+		descriptor.model = "second"
+		descriptor.modelRevision = "two"
+
+		hope.false(descriptor.identifier == firstIdentifier)
+		hope.true(descriptor.identifier.contains("second"))
+		hope.true(descriptor.identifier.contains("two"))
+
+		let decoded = try JSONDecoder().decode(
+			Lexicon.Search.EmbeddingDescriptor.self,
+			from: JSONEncoder().encode(descriptor)
+		)
+		hope(decoded.identifier) == descriptor.identifier
+	}
 }
 
 private extension LexiconDocumentSearchTests {

@@ -20,12 +20,6 @@ enum SearchEmbeddingProviderSelection: String {
 	}
 }
 
-struct SearchEmbeddingCachePreparation {
-	var cache: Lexicon.Search.EmbeddingCache
-	var url: URL
-	var reused: Bool
-}
-
 extension Lexicon.Search.Index {
 
 	func search(
@@ -101,7 +95,7 @@ extension Lexicon.Search.Index {
 			input: input,
 			descriptor: provider.descriptor
 		)
-		let preparation = try await index.embeddingCache(
+		let cache = try await index.embeddingCache(
 			at: cacheURL,
 			provider: provider,
 			rebuild: rebuildEmbeddings
@@ -111,19 +105,19 @@ extension Lexicon.Search.Index {
 			return try await index.search(
 				query,
 				in: document,
-				embeddingCache: preparation.cache,
+				embeddingCache: cache,
 				queryVector: queryVector,
 				contextEmbeddingProvider: provider
 			)
 		}
-		return index.search(query, embeddingCache: preparation.cache, queryVector: queryVector)
+		return index.search(query, embeddingCache: cache, queryVector: queryVector)
 	}
 
 	private func embeddingCache(
 		at url: URL,
 		provider: some Lexicon.Search.EmbeddingProvider,
 		rebuild: Bool
-	) async throws -> SearchEmbeddingCachePreparation {
+	) async throws -> Lexicon.Search.EmbeddingCache {
 		if !rebuild,
 		   let cache = try? JSONDecoder().decode(
 			Lexicon.Search.EmbeddingCache.self,
@@ -132,7 +126,7 @@ extension Lexicon.Search.Index {
 		   cache.descriptor == provider.descriptor,
 		   cache.fingerprint == fingerprint
 		{
-			return .init(cache: cache, url: url, reused: true)
+			return cache
 		}
 
 		FileHandle.standardError.write(Data(
@@ -146,7 +140,7 @@ extension Lexicon.Search.Index {
 		let encoder = JSONEncoder()
 		encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
 		try encoder.encode(cache).write(to: url)
-		return .init(cache: cache, url: url, reused: false)
+		return cache
 	}
 	#endif
 
@@ -156,7 +150,7 @@ extension Lexicon.Search.Index {
 	) throws -> URL {
 		let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
 			?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".cache", isDirectory: true)
-		let model = descriptor.identifier.fileSafeSearchCacheComponent
+		let model = descriptor.identifier.searchCacheFileComponent
 		let name = "\(input.lastPathComponent).\(fingerprint).\(model).embeddings.json"
 		return base
 			.appendingPathComponent("Lexicon", isDirectory: true)
@@ -172,5 +166,20 @@ private extension String {
 			character.isLetter || character.isNumber ? String(character) : "-"
 		}
 		.joined()
+	}
+
+	var searchCacheFileComponent: String {
+		let safe = fileSafeSearchCacheComponent
+		let prefix = safe.prefix(80)
+		return "\(prefix)-\(fnv1a64Hex)"
+	}
+
+	var fnv1a64Hex: String {
+		var hash: UInt64 = 0xcbf29ce484222325
+		for byte in utf8 {
+			hash ^= UInt64(byte)
+			hash &*= 0x100000001b3
+		}
+		return String(hash, radix: 16)
 	}
 }

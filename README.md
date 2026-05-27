@@ -337,7 +337,7 @@ swift run --traits MLXSearch lexicon search commerce.lexicon "order submit" \
 
 MLX document embeddings are cached under the user cache directory by default. The first semantic search builds the cache and logs indexing progress to stderr; pass `--embedding-cache` or `--rebuild-embeddings` to control that cache.
 
-See [`docs/search.md`](docs/search.md) for the search mode guide and demo lexicon examples. See [`docs/search-platforms.md`](docs/search-platforms.md) for Linux, Android, Windows, and ONNX backend notes.
+See [`docs/search.md`](docs/search.md) for the search mode guide and demo lexicon examples.
 
 Editing commands print the updated document to stdout by default. Pass `-o` or `--output` to write another file.
 
