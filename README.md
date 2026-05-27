@@ -337,6 +337,22 @@ swift run --traits MLXSearch lexicon search commerce.lexicon "order submit" \
 
 MLX document embeddings are cached under the user cache directory by default. The first semantic search builds the cache and logs indexing progress to stderr; pass `--embedding-cache` or `--rebuild-embeddings` to control that cache.
 
+For a portable ONNX Runtime backend, fetch the model/runtime artifacts with the SwiftPM command plugin, then build with the `ONNXSearch` trait:
+
+```sh
+swift package --disable-sandbox --allow-writing-to-package-directory \
+	setup-onnx-search-artifacts -- \
+	--preset bge-small-en-v1.5 \
+	--runtime linux-x64
+
+swift run --traits ONNXSearch lexicon search commerce.lexicon "order submit" \
+	--mode semantic \
+	--embedding-provider onnx \
+	--embedding-model-preset bge-small-en-v1.5
+```
+
+ONNX presets currently include MiniLM, BGE-small, GTE-small and E5-small-v2. `lexicon search-evaluate` runs JSON query judgments and reports MRR@10, nDCG@10, recall@10, query latency, index time and cache size when an explicit cache path is supplied, so model choices can be measured against real lexicons before changing defaults.
+
 See [`docs/search.md`](docs/search.md) for the search mode guide and demo lexicon examples. See [`docs/search-platforms.md`](docs/search-platforms.md) for Linux, Android, Windows, and ONNX backend notes.
 
 Editing commands print the updated document to stdout by default. Pass `-o` or `--output` to write another file.
@@ -384,12 +400,15 @@ Event payloads are JSON-backed and decode through `JSONDecoder`, so generated le
 | `Lexicon` | Core document, graph, parser, composition, branch and CRDT model. |
 | `SwiftLexicon` | Runtime support for generated Swift lexicons and event streams. |
 | `LexiconGenerators` | Code generators and generator registry. |
+| `LexiconSearchMLX` | Optional MLX embedding provider for semantic search. |
+| `LexiconSearchONNX` | Optional ONNX Runtime embedding provider for semantic search. |
 | `_JSON` | JSON value and decoder-backed typed access. |
 | `_Collections` | Internal collection utilities, including sorted dictionary support. |
 | `lexicon` | CLI for validating, inspecting, formatting, diffing and editing lexicons. |
 | `lexicon-generate` | CLI for generating source artefacts. |
 | `SwiftLibraryGeneratorPlugin` | SwiftPM plugin for generated Swift that depends on `SwiftLexicon`. |
 | `SwiftStandAloneGeneratorPlugin` | SwiftPM plugin for stand-alone generated Swift. |
+| `ONNXSearchArtifactsPlugin` | SwiftPM command plugin for downloading ONNX search model and runtime artifacts. |
 
 ## Installation
 
@@ -412,9 +431,9 @@ The package currently declares Swift 6.3, Swift language mode 6, macOS 15 and iO
 
 ## Platform Support
 
-CI runs SwiftPM tests on macOS and Linux. It also runs tests on an Android emulator and cross-builds Android ARM64.
+CI runs SwiftPM builds and tests on macOS and Linux for pull requests. Android runs on `trunk` pushes and manual workflow dispatches to keep pull requests fast.
 
-On Apple platforms, sentence graph generation uses NaturalLanguage. On Linux and Android, Lexicon uses a deterministic fallback so the API remains available.
+On Apple platforms, sentence graph generation uses NaturalLanguage. On Linux and Android, Lexicon uses a deterministic fallback so the API remains available. Semantic search can use MLX on Apple platforms or ONNX Runtime through the optional `ONNXSearch` trait; the ONNX C shim is designed for Linux and Android now, with Windows runtime artifacts present but session path bridging still to finish.
 
 See [`docs/platforms.md`](docs/platforms.md) for details.
 

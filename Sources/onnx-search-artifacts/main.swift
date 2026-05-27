@@ -25,6 +25,10 @@ struct ONNXSearchArtifacts {
 			at: modelDirectory,
 			withIntermediateDirectories: true
 		)
+		let revisionURL = modelDirectory.appendingPathComponent("REVISION")
+		let installedRevision = try? String(contentsOf: revisionURL, encoding: .utf8)
+			.trimmingCharacters(in: .whitespacesAndNewlines)
+		let force = force || installedRevision != model.revision
 		try await download(
 			path: artifact.modelPath,
 			to: model.localModelURL(in: output),
@@ -38,7 +42,7 @@ struct ONNXSearchArtifacts {
 			force: force
 		)
 		try model.revision.write(
-			to: modelDirectory.appendingPathComponent("REVISION"),
+			to: revisionURL,
 			atomically: true,
 			encoding: .utf8
 		)

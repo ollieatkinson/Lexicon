@@ -50,7 +50,7 @@ public extension Lexicon.Search {
 		public var pooling: String
 		public var queryPrefix: String
 		public var documentPrefix: String
-		public private(set) var identifier: String
+		public var identifier: String { get }
 	}
 }
 ```

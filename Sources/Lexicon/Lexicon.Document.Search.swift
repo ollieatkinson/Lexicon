@@ -120,7 +120,19 @@ public extension Lexicon.Search {
 		public var pooling: String
 		public var queryPrefix: String
 		public var documentPrefix: String
-		public private(set) var identifier: String
+		public var identifier: String {
+			Self.identifier(
+				provider: provider,
+				model: model,
+				modelRevision: modelRevision,
+				tokenizer: tokenizer,
+				dimensions: dimensions,
+				normalized: normalized,
+				pooling: pooling,
+				queryPrefix: queryPrefix,
+				documentPrefix: documentPrefix
+			)
+		}
 
 		private enum CodingKeys: String, CodingKey {
 			case provider
@@ -155,17 +167,6 @@ public extension Lexicon.Search {
 			self.pooling = pooling
 			self.queryPrefix = queryPrefix
 			self.documentPrefix = documentPrefix
-			self.identifier = Self.identifier(
-				provider: provider,
-				model: model,
-				modelRevision: modelRevision,
-				tokenizer: tokenizer,
-				dimensions: dimensions,
-				normalized: normalized,
-				pooling: pooling,
-				queryPrefix: queryPrefix,
-				documentPrefix: documentPrefix
-			)
 		}
 
 		public init(from decoder: Decoder) throws {
