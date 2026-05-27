@@ -44,6 +44,18 @@ struct TreeOutput: Codable {
 	var root: TreeNode
 }
 
+struct SearchOutput: Codable {
+	var query: String
+	var count: Int
+	var results: [Lexicon.SearchResult]
+
+	init(query: String, results: [Lexicon.SearchResult]) {
+		self.query = query
+		self.count = results.count
+		self.results = results
+	}
+}
+
 struct TreeNode: Codable {
 	var id: String
 	var name: String
@@ -270,6 +282,7 @@ struct InteractiveHelp: Codable {
 		"inspect [id]",
 		"ls [id] [--metadata]",
 		"tree [id] [--depth n] [--inherited] [--metadata]",
+		"search query [--mode hybrid|token|lexical|semantic] [--scope own|live|full] [--depth n] [--budget n] [--limit n] [--root id]",
 		"refs id",
 		"excerpt id",
 		"add parent name",

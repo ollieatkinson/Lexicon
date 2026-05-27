@@ -19,11 +19,18 @@ let package = Package(
 		.plugin(name: "SwiftStandAloneGeneratorPlugin", targets: ["SwiftStandAloneGeneratorPlugin"]),
 		.plugin(name: "SwiftLibraryGeneratorPlugin", targets: ["SwiftLibraryGeneratorPlugin"]),
 	],
+	traits: [
+		.trait(name: "MLXSearch"),
+	],
 	dependencies: [
 		.package(url: "https://github.com/screensailor/Hope", branch: "trunk"),
 		.package(url: "https://github.com/apple/swift-collections", from: "1.5.1"),
 		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.7.1"),
-		.package(url: "https://github.com/apple/swift-async-algorithms", from: "1.1.3")
+		.package(url: "https://github.com/apple/swift-async-algorithms", from: "1.1.3"),
+		.package(url: "https://github.com/ml-explore/mlx-swift", .upToNextMinor(from: "0.31.3")),
+		.package(url: "https://github.com/ml-explore/mlx-swift-lm", .upToNextMajor(from: "3.31.3")),
+		.package(url: "https://github.com/DePasqualeOrg/swift-hf-api-mlx", exact: "0.2.0"),
+		.package(url: "https://github.com/DePasqualeOrg/swift-tokenizers", from: "0.6.3"),
 	],
 	targets: [
 		.target(
@@ -103,7 +110,12 @@ let package = Package(
 			dependencies: [
 				"Lexicon",
 				"LexiconGenerators",
-				.product(name: "ArgumentParser", package: "swift-argument-parser")
+				.product(name: "ArgumentParser", package: "swift-argument-parser"),
+				.product(name: "MLX", package: "mlx-swift", condition: .when(traits: ["MLXSearch"])),
+				.product(name: "MLXEmbedders", package: "mlx-swift-lm", condition: .when(traits: ["MLXSearch"])),
+				.product(name: "MLXLMCommon", package: "mlx-swift-lm", condition: .when(traits: ["MLXSearch"])),
+				.product(name: "MLXEmbeddersHFAPI", package: "swift-hf-api-mlx", condition: .when(traits: ["MLXSearch"])),
+				.product(name: "Tokenizers", package: "swift-tokenizers", condition: .when(traits: ["MLXSearch"])),
 			]
 		),
 		.plugin(

@@ -93,6 +93,99 @@ struct Tree: AsyncParsableCommand {
 	}
 }
 
+struct Search: AsyncParsableCommand {
+	static let configuration = CommandConfiguration(
+		commandName: "search",
+		abstract: "Search lemma IDs, names, references, defaults, notes, and comments."
+	)
+
+	@Argument(help: "TaskPaper lexicon path.")
+	var input: URL
+
+	@Argument(help: "Search query terms.")
+	var query: [String]
+
+	@Option(help: "Maximum results to include. Use 0 for no limit.")
+	var limit = 50
+
+	@Option(help: "Restrict results to this root or subtree lemma ID.")
+	var root: String?
+
+	@Option(help: "Search mode: hybrid, token, lexical, or semantic.")
+	var mode = Lexicon.SearchMode.hybrid.rawValue
+
+	@Option(help: "Search scope: own, live, or full.")
+	var scope = Lexicon.SearchScope.own.rawValue
+
+	@Option(help: "Minimum cosine similarity for semantic matches.")
+	var semanticThreshold = 0.42
+
+	@Option(help: "Semantic embedding provider: auto, system, mlx, or none.")
+	var embeddingProvider = "auto"
+
+	@Option(help: "Embedding model ID for MLX semantic search.")
+	var embeddingModel = "TaylorAI/bge-micro-v2"
+
+	@Option(help: "Embedding cache path. Defaults to the user cache directory.")
+	var embeddingCache: URL?
+
+	@Flag(help: "Regenerate cached document embeddings before searching.")
+	var rebuildEmbeddings = false
+
+	@Flag(help: "Only search lemma IDs and names.")
+	var namesOnly = false
+
+	@Option(help: "Maximum resolved child depth to inspect when --scope live or --scope full.")
+	var depth = Lexicon.SearchBounds.defaultDepth
+
+	@Option(help: "Maximum own-index candidates to expand when --scope live.")
+	var candidates = Lexicon.SearchBounds.defaultCandidates
+
+	@Option(help: "Maximum resolved lemmas or child contexts to inspect when --scope live or --scope full.")
+	var budget = Lexicon.SearchBounds.defaultBudget
+
+	@Flag(help: "Search the source document without composing imports.")
+	var sourceOnly = false
+
+	mutating func run() async throws {
+		let query = query.joined(separator: " ")
+		guard query.trimmingCharacters(in: .whitespacesAndNewlines).isNotEmpty else {
+			throw ValidationError("Search requires a query.")
+		}
+		let document = try sourceOnly ? input.lexiconDocument() : input.composedLexiconDocument()
+		if let root {
+			_ = try document.node(root)
+		}
+		let options = Lexicon.SearchOptions(
+			limit: limit,
+			root: root,
+			mode: try Lexicon.SearchMode(agentArgument: mode),
+			scope: try Lexicon.SearchScope(agentArgument: scope),
+			includeReferences: !namesOnly,
+			includeMetadata: !namesOnly,
+			includeDefaults: !namesOnly,
+			includeConnections: !namesOnly,
+			semanticThreshold: semanticThreshold,
+			bounds: .init(
+				depth: depth,
+				candidates: candidates,
+				budget: budget
+			)
+		)
+		let index = Lexicon.SearchIndex(document: document, options: options)
+		let results = try await index.search(
+			query,
+			in: document,
+			input: input,
+			embeddingProvider: try SearchEmbeddingProviderSelection(agentArgument: embeddingProvider),
+			embeddingModel: embeddingModel,
+			embeddingCache: embeddingCache,
+			rebuildEmbeddings: rebuildEmbeddings
+		)
+		try AgentJSON.print(SearchOutput(query: query, results: results))
+	}
+}
+
 struct Refs: ParsableCommand {
 	static let configuration = CommandConfiguration(
 		commandName: "refs",
@@ -525,4 +618,3 @@ struct ClearComments: ParsableCommand {
 		try AgentWriter.write(document, output: output)
 	}
 }
-

@@ -40,6 +40,26 @@ enum AgentWriter {
 	}
 }
 
+extension Lexicon.SearchMode {
+
+	init(agentArgument value: String) throws {
+		guard let mode = Self(rawValue: value) else {
+			throw ValidationError("Unknown search mode '\(value)'. Expected hybrid, token, lexical, or semantic.")
+		}
+		self = mode
+	}
+}
+
+extension Lexicon.SearchScope {
+
+	init(agentArgument value: String) throws {
+		guard let scope = Self(rawValue: value) else {
+			throw ValidationError("Unknown search scope '\(value)'. Expected own, live, or full.")
+		}
+		self = scope
+	}
+}
+
 extension URL: @retroactive ExpressibleByArgument {
 
 	public init?(argument: String) {
