@@ -36,6 +36,16 @@ swift run --traits MLXSearch lexicon search Examples/search-demo.lexicon "custom
 
 The first MLX semantic search writes a local embedding cache and logs indexing progress to stderr. The semantic examples below were generated with `TaylorAI/bge-micro-v2`; another model can rank close matches differently.
 
+For ONNX semantic runs, first fetch the pinned MiniLM fixture through the package plugin:
+
+```sh
+swift package --disable-sandbox --allow-writing-to-package-directory setup-onnx-search-artifacts
+swift run --traits ONNXSearch lexicon search Examples/search-demo.lexicon "late delivery after carrier delay" \
+	--mode semantic \
+	--embedding-provider onnx \
+	--limit 3
+```
+
 See [`search-platforms.md`](search-platforms.md) for Linux, Android, Windows, and ONNX backend notes.
 
 ## Hybrid Examples

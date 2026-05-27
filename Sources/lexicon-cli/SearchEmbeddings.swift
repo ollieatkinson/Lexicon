@@ -5,16 +5,20 @@ import Lexicon
 #if MLXSearch
 import LexiconSearchMLX
 #endif
+#if ONNXSearch
+import LexiconSearchONNX
+#endif
 
 enum SearchEmbeddingProviderSelection: String {
 	case auto
 	case system
 	case mlx
+	case onnx
 	case none
 
 	init(agentArgument value: String) throws {
 		guard let selection = Self(rawValue: value) else {
-			throw ValidationError("Unknown embedding provider '\(value)'. Expected auto, system, mlx, or none.")
+			throw ValidationError("Unknown embedding provider '\(value)'. Expected auto, system, mlx, onnx, or none.")
 		}
 		self = selection
 	}
@@ -34,6 +38,8 @@ extension Lexicon.Search.Index {
 		input: URL,
 		embeddingProvider selection: SearchEmbeddingProviderSelection,
 		embeddingModel: String,
+		embeddingVocabulary: URL?,
+		embeddingModelRevision: String,
 		embeddingCache cacheURL: URL?,
 		rebuildEmbeddings: Bool
 	) async throws -> [Lexicon.Search.Result] {
@@ -53,7 +59,20 @@ extension Lexicon.Search.Index {
 						rebuildEmbeddings: rebuildEmbeddings
 					)
 				#else
+				#if ONNXSearch
+					return try await searchWithONNX(
+						query,
+						input: input,
+						document: document,
+						modelPath: embeddingModel,
+						vocabularyURL: embeddingVocabulary,
+						modelRevision: embeddingModelRevision,
+						cacheURL: cacheURL,
+						rebuildEmbeddings: rebuildEmbeddings
+					)
+				#else
 				return try await searchLocally(query, in: document)
+				#endif
 				#endif
 			case .system:
 				return try await searchLocally(query, in: document)
@@ -71,6 +90,21 @@ extension Lexicon.Search.Index {
 				)
 				#else
 				throw ValidationError("MLX semantic search is not available. Rebuild with --traits MLXSearch.")
+				#endif
+			case .onnx:
+				#if ONNXSearch
+				return try await searchWithONNX(
+					query,
+					input: input,
+					document: document,
+					modelPath: embeddingModel,
+					vocabularyURL: embeddingVocabulary,
+					modelRevision: embeddingModelRevision,
+					cacheURL: cacheURL,
+					rebuildEmbeddings: rebuildEmbeddings
+				)
+				#else
+				throw ValidationError("ONNX semantic search is not available. Rebuild with --traits ONNXSearch.")
 				#endif
 		}
 	}
@@ -118,7 +152,9 @@ extension Lexicon.Search.Index {
 		}
 		return index.search(query, embeddingCache: preparation.cache, queryVector: queryVector)
 	}
+	#endif
 
+	#if MLXSearch || ONNXSearch
 	private func embeddingCache(
 		at url: URL,
 		provider: some Lexicon.Search.EmbeddingProvider,
@@ -150,6 +186,50 @@ extension Lexicon.Search.Index {
 	}
 	#endif
 
+	#if ONNXSearch
+	private func searchWithONNX(
+		_ query: String,
+		input: URL,
+		document: Lexicon.Document,
+		modelPath: String,
+		vocabularyURL: URL?,
+		modelRevision: String,
+		cacheURL: URL?,
+		rebuildEmbeddings: Bool
+	) async throws -> [Lexicon.SearchResult] {
+		let modelURL = modelPath.onnxModelURL
+		let vocabularyURL = vocabularyURL ?? modelURL
+			.deletingLastPathComponent()
+			.appendingPathComponent("vocab.txt")
+		let provider = try ONNXSearchEmbeddingProvider(
+			model: modelURL,
+			vocabulary: vocabularyURL,
+			modelRevision: modelRevision
+		)
+		let index = options.scope == .full ? try await materialized(in: document) : self
+		let cacheURL = try cacheURL ?? index.defaultEmbeddingCacheURL(
+			input: input,
+			descriptor: provider.descriptor
+		)
+		let preparation = try await index.embeddingCache(
+			at: cacheURL,
+			provider: provider,
+			rebuild: rebuildEmbeddings
+		)
+		let queryVector = try await provider.embed(["search_query: \(query)"]).first
+		if index.options.scope == .live {
+			return try await index.search(
+				query,
+				in: document,
+				embeddingCache: preparation.cache,
+				queryVector: queryVector,
+				contextEmbeddingProvider: provider
+			)
+		}
+		return index.search(query, embeddingCache: preparation.cache, queryVector: queryVector)
+	}
+	#endif
+
 	private func defaultEmbeddingCacheURL(
 		input: URL,
 		descriptor: Lexicon.Search.EmbeddingDescriptor
@@ -166,6 +246,18 @@ extension Lexicon.Search.Index {
 }
 
 private extension String {
+	static let defaultMLXSearchModel = "TaylorAI/bge-micro-v2"
+
+	var onnxModelURL: URL {
+		if self == Self.defaultMLXSearchModel {
+			return URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+				.appendingPathComponent(".build", isDirectory: true)
+				.appendingPathComponent("onnx-search", isDirectory: true)
+				.appendingPathComponent("all-MiniLM-L6-v2", isDirectory: true)
+				.appendingPathComponent("model.onnx")
+		}
+		return URL(fileURLWithPath: self)
+	}
 
 	var fileSafeSearchCacheComponent: String {
 		map { character in

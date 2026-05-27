@@ -13,15 +13,18 @@ let package = Package(
 		.library(name: "_JSON", targets: ["_JSON"]),
 		.library(name: "Lexicon", targets: ["Lexicon"]),
 		.library(name: "LexiconSearchMLX", targets: ["LexiconSearchMLX"]),
+		.library(name: "LexiconSearchONNX", targets: ["LexiconSearchONNX"]),
 		.library(name: "SwiftLexicon", targets: ["SwiftLexicon"]),
 		.library(name: "LexiconGenerators", targets: ["LexiconGenerators"]),
 		.executable(name: "lexicon-generate", targets: ["lexicon-generate"]),
 		.executable(name: "lexicon", targets: ["lexicon-cli"]),
 		.plugin(name: "SwiftStandAloneGeneratorPlugin", targets: ["SwiftStandAloneGeneratorPlugin"]),
 		.plugin(name: "SwiftLibraryGeneratorPlugin", targets: ["SwiftLibraryGeneratorPlugin"]),
+		.plugin(name: "ONNXSearchArtifactsPlugin", targets: ["ONNXSearchArtifactsPlugin"]),
 	],
 	traits: [
 		.trait(name: "MLXSearch"),
+		.trait(name: "ONNXSearch"),
 	],
 	dependencies: [
 		.package(url: "https://github.com/screensailor/Hope", branch: "trunk"),
@@ -33,6 +36,7 @@ let package = Package(
 		.package(url: "https://github.com/ml-explore/mlx-swift-lm", .upToNextMajor(from: "3.31.3")),
 		.package(url: "https://github.com/DePasqualeOrg/swift-hf-api-mlx", exact: "0.2.0"),
 		.package(url: "https://github.com/DePasqualeOrg/swift-tokenizers", from: "0.6.3"),
+		.package(url: "https://github.com/microsoft/onnxruntime-swift-package-manager", exact: "1.24.2"),
 	],
 	targets: [
 		.target(
@@ -113,6 +117,7 @@ let package = Package(
 			dependencies: [
 				"Lexicon",
 				.target(name: "LexiconSearchMLX", condition: .when(traits: ["MLXSearch"])),
+				.target(name: "LexiconSearchONNX", condition: .when(traits: ["ONNXSearch"])),
 				"LexiconGenerators",
 				.product(name: "ArgumentParser", package: "swift-argument-parser"),
 			]
@@ -127,6 +132,40 @@ let package = Package(
 				.product(name: "MLXEmbeddersHFAPI", package: "swift-hf-api-mlx", condition: .when(traits: ["MLXSearch"])),
 				.product(name: "Tokenizers", package: "swift-tokenizers", condition: .when(traits: ["MLXSearch"])),
 			]
+		),
+		.target(
+			name: "LexiconSearchONNX",
+			dependencies: [
+				"Lexicon",
+				.product(
+					name: "onnxruntime",
+					package: "onnxruntime-swift-package-manager",
+					condition: .when(traits: ["ONNXSearch"])
+				),
+			]
+		),
+		.testTarget(
+			name: "LexiconSearchONNXTests",
+			dependencies: [
+				"Lexicon",
+				"LexiconSearchONNX",
+			]
+		),
+		.executableTarget(
+			name: "onnx-search-artifacts"
+		),
+		.plugin(
+			name: "ONNXSearchArtifactsPlugin",
+			capability: .command(
+				intent: .custom(
+					verb: "setup-onnx-search-artifacts",
+					description: "Download ONNX search model fixtures."
+				),
+				permissions: [
+					.writeToPackageDirectory(reason: "Stores ONNX search model fixtures under .build/onnx-search.")
+				]
+			),
+			dependencies: ["onnx-search-artifacts"]
 		),
 		.plugin(
 			name: "SwiftStandAloneGeneratorPlugin",
