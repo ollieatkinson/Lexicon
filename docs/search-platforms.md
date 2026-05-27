@@ -50,19 +50,22 @@ The public search design should not depend on SwiftPM traits. Traits are useful 
 Keep the core design like this:
 
 ```swift
-public protocol SearchEmbeddingProvider: Sendable {
-	var descriptor: SearchEmbeddingDescriptor { get }
-	func embed(_ texts: [String]) async throws -> [[Double]]
-}
+public extension Lexicon.Search {
+	protocol EmbeddingProvider: Sendable {
+		var descriptor: EmbeddingDescriptor { get }
+		func embed(_ texts: [String]) async throws -> [[Double]]
+	}
 
-public struct SearchEmbeddingDescriptor: Hashable, Sendable, Codable {
-	public var provider: String
-	public var model: String
-	public var modelRevision: String?
-	public var tokenizer: String
-	public var dimensions: Int?
-	public var normalized: Bool
-	public var pooling: String
+	struct EmbeddingDescriptor: Hashable, Sendable, Codable {
+		public var provider: String
+		public var model: String
+		public var modelRevision: String?
+		public var tokenizer: String
+		public var dimensions: Int?
+		public var normalized: Bool
+		public var pooling: String
+		public private(set) var identifier: String
+	}
 }
 ```
 
@@ -106,8 +109,8 @@ Linux can link against a downloaded or system-provided `libonnxruntime.so`. Andr
 ### 2. Add a Swift provider target
 
 ```swift
-public struct ONNXSearchEmbeddingProvider: SearchEmbeddingProvider {
-	public var descriptor: SearchEmbeddingDescriptor
+public struct ONNXSearchEmbeddingProvider: Lexicon.Search.EmbeddingProvider {
+	public var descriptor: Lexicon.Search.EmbeddingDescriptor
 
 	private let runtime: ONNXRuntime
 	private let tokenizer: any SearchTokenizerProvider

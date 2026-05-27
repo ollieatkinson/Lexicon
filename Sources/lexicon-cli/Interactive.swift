@@ -158,13 +158,13 @@ struct InteractiveSession {
 	private mutating func handleSearch(_ arguments: [String]) async throws {
 		var limit = 20
 		var root: String?
-		var mode = Lexicon.SearchMode.hybrid
-		var scope = Lexicon.SearchScope.own
+		var mode = Lexicon.Search.Mode.hybrid
+		var scope = Lexicon.Search.Scope.own
 		var semanticThreshold = 0.42
 		var namesOnly = false
-		var depth = Lexicon.SearchBounds.defaultDepth
-		var candidates = Lexicon.SearchBounds.defaultCandidates
-		var budget = Lexicon.SearchBounds.defaultBudget
+		var depth = Lexicon.Search.Bounds.defaultDepth
+		var candidates = Lexicon.Search.Bounds.defaultCandidates
+		var budget = Lexicon.Search.Bounds.defaultBudget
 		var queryParts: [String] = []
 		var iterator = arguments.makeIterator()
 		while let argument = iterator.next() {
@@ -177,9 +177,9 @@ struct InteractiveSession {
 				case "--root":
 					root = try iterator.next().try()
 				case "--mode":
-					mode = try Lexicon.SearchMode(agentArgument: iterator.next().try())
+					mode = try Lexicon.Search.Mode(agentArgument: iterator.next().try())
 				case "--scope":
-					scope = try Lexicon.SearchScope(agentArgument: iterator.next().try())
+					scope = try Lexicon.Search.Scope(agentArgument: iterator.next().try())
 				case "--semantic-threshold":
 					guard let value = iterator.next(), let parsed = Double(value) else {
 						throw ValidationError("--semantic-threshold requires a number.")
@@ -215,7 +215,7 @@ struct InteractiveSession {
 		if let root {
 			_ = try resolved.node(root)
 		}
-		let options = Lexicon.SearchOptions(
+		let options = Lexicon.Search.Options(
 			limit: limit,
 			root: root,
 			mode: mode,
@@ -231,7 +231,7 @@ struct InteractiveSession {
 				budget: budget
 			)
 		)
-		let index = Lexicon.SearchIndex(document: resolved, options: options)
+		let index = Lexicon.Search.Index(document: resolved, options: options)
 		let results = scope == .own
 			? index.search(query)
 			: try await index.search(query, in: resolved)

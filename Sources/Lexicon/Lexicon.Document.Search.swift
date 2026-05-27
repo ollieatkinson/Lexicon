@@ -3,26 +3,43 @@
 //
 
 import Foundation
+import Algorithms
 #if canImport(NaturalLanguage)
 import NaturalLanguage
 #endif
 
 public extension Lexicon {
 
-	enum SearchMode: String, Codable, Hashable, Sendable {
-		case lexical
-		case token
-		case semantic
-		case hybrid
+	struct Search: Sendable {
+		private init() {}
+	}
+}
+
+public extension Lexicon.Search {
+
+	struct Mode: OptionSet, Codable, Hashable, Sendable {
+		public var rawValue: Int
+
+		public init(rawValue: Int) {
+			self.rawValue = rawValue
+		}
+
+		public static let lexical = Mode(rawValue: 1 << 0)
+		public static let token = Mode(rawValue: 1 << 1)
+		public static let semantic = Mode(rawValue: 1 << 2)
+		public static let hybrid: Mode = [.lexical, .token, .semantic]
 	}
 
-	enum SearchScope: String, Codable, Hashable, Sendable {
+	enum Scope: String, Codable, Hashable, Sendable {
+		/// Search only lemmas declared in the document graph.
 		case own
+		/// Search the document graph first, then expand likely matches through resolved inherited context.
 		case live
+		/// Materialize the resolved graph search space, bounded by depth and budget, before searching.
 		case full
 	}
 
-	enum SearchField: String, Codable, Hashable, Sendable {
+	enum Field: String, Codable, Hashable, Sendable {
 		case id
 		case name
 		case type
@@ -36,7 +53,7 @@ public extension Lexicon {
 		case contextChild
 	}
 
-	struct SearchBounds: Hashable, Sendable {
+	struct Bounds: Hashable, Sendable {
 		public static let defaultDepth = Int.max
 		public static let defaultCandidates = 100
 		public static let defaultBudget = 50_000
@@ -56,29 +73,29 @@ public extension Lexicon {
 		}
 	}
 
-	struct SearchOptions: Hashable, Sendable {
+	struct Options: Hashable, Sendable {
 		public var limit: Int
 		public var root: Lemma.ID?
-		public var mode: SearchMode
-		public var scope: SearchScope
+		public var mode: Mode
+		public var scope: Scope
 		public var includeReferences: Bool
 		public var includeMetadata: Bool
 		public var includeDefaults: Bool
 		public var includeConnections: Bool
 		public var semanticThreshold: Double
-		public var bounds: SearchBounds
+		public var bounds: Bounds
 
 		public init(
 			limit: Int = 50,
 			root: Lemma.ID? = nil,
-			mode: SearchMode = .hybrid,
-			scope: SearchScope = .own,
+			mode: Mode = .hybrid,
+			scope: Scope = .own,
 			includeReferences: Bool = true,
 			includeMetadata: Bool = true,
 			includeDefaults: Bool = true,
 			includeConnections: Bool = true,
 			semanticThreshold: Double = 0.42,
-			bounds: SearchBounds = .init()
+			bounds: Bounds = .init()
 		) {
 			self.limit = limit
 			self.root = root
@@ -93,7 +110,7 @@ public extension Lexicon {
 		}
 	}
 
-	struct SearchEmbeddingDescriptor: Codable, Hashable, Sendable {
+	struct EmbeddingDescriptor: Codable, Hashable, Sendable {
 		public var provider: String
 		public var model: String
 		public var modelRevision: String?
@@ -101,6 +118,18 @@ public extension Lexicon {
 		public var dimensions: Int?
 		public var normalized: Bool
 		public var pooling: String
+		public private(set) var identifier: String
+
+		private enum CodingKeys: String, CodingKey {
+			case provider
+			case model
+			case modelRevision
+			case tokenizer
+			case dimensions
+			case normalized
+			case pooling
+			case identifier
+		}
 
 		public init(
 			provider: String,
@@ -118,9 +147,51 @@ public extension Lexicon {
 			self.dimensions = dimensions
 			self.normalized = normalized
 			self.pooling = pooling
+			self.identifier = Self.identifier(
+				provider: provider,
+				model: model,
+				modelRevision: modelRevision,
+				tokenizer: tokenizer,
+				dimensions: dimensions,
+				normalized: normalized,
+				pooling: pooling
+			)
 		}
 
-		public var identifier: String {
+		public init(from decoder: Decoder) throws {
+			let values = try decoder.container(keyedBy: CodingKeys.self)
+			try self.init(
+				provider: values.decode(String.self, forKey: .provider),
+				model: values.decode(String.self, forKey: .model),
+				modelRevision: values.decodeIfPresent(String.self, forKey: .modelRevision),
+				tokenizer: values.decode(String.self, forKey: .tokenizer),
+				dimensions: values.decodeIfPresent(Int.self, forKey: .dimensions),
+				normalized: values.decode(Bool.self, forKey: .normalized),
+				pooling: values.decode(String.self, forKey: .pooling)
+			)
+		}
+
+		public func encode(to encoder: Encoder) throws {
+			var values = encoder.container(keyedBy: CodingKeys.self)
+			try values.encode(provider, forKey: .provider)
+			try values.encode(model, forKey: .model)
+			try values.encodeIfPresent(modelRevision, forKey: .modelRevision)
+			try values.encode(tokenizer, forKey: .tokenizer)
+			try values.encodeIfPresent(dimensions, forKey: .dimensions)
+			try values.encode(normalized, forKey: .normalized)
+			try values.encode(pooling, forKey: .pooling)
+			try values.encode(identifier, forKey: .identifier)
+		}
+
+		private static func identifier(
+			provider: String,
+			model: String,
+			modelRevision: String?,
+			tokenizer: String,
+			dimensions: Int?,
+			normalized: Bool,
+			pooling: String
+		) -> String {
 			[
 				provider,
 				model,
@@ -133,15 +204,15 @@ public extension Lexicon {
 		}
 	}
 
-	struct SearchEmbeddingCache: Codable, Hashable, Sendable {
+	struct EmbeddingCache: Codable, Hashable, Sendable {
 		public var version: Int
-		public var descriptor: SearchEmbeddingDescriptor
+		public var descriptor: EmbeddingDescriptor
 		public var fingerprint: String
 		public var vectors: [Lemma.ID: [Double]]
 
 		public init(
 			version: Int = 2,
-			descriptor: SearchEmbeddingDescriptor,
+			descriptor: EmbeddingDescriptor,
 			fingerprint: String,
 			vectors: [Lemma.ID: [Double]]
 		) {
@@ -152,12 +223,12 @@ public extension Lexicon {
 		}
 	}
 
-	protocol SearchEmbeddingProvider: Sendable {
-		var descriptor: SearchEmbeddingDescriptor { get }
+	protocol EmbeddingProvider: Sendable {
+		var descriptor: EmbeddingDescriptor { get }
 		func embed(_ texts: [String]) async throws -> [[Double]]
 	}
 
-	struct SearchScores: Codable, Hashable, Sendable {
+	struct Scores: Codable, Hashable, Sendable {
 		public var lexical: Double
 		public var token: Double
 		public var semantic: Double?
@@ -171,11 +242,11 @@ public extension Lexicon {
 		}
 	}
 
-	struct SearchResult: Codable, Hashable, Sendable {
+	struct Result: Codable, Hashable, Sendable {
 		public var id: Lemma.ID
 		public var name: Lemma.Name
 		public var score: Double
-		public var scores: SearchScores
+		public var scores: Scores
 		public var matches: [Match]
 		public var type: [Lemma.ID]
 		public var protonym: Lemma.ID?
@@ -188,7 +259,7 @@ public extension Lexicon {
 			id: Lemma.ID,
 			name: Lemma.Name,
 			score: Double,
-			scores: SearchScores,
+			scores: Scores,
 			matches: [Match],
 			type: [Lemma.ID],
 			protonym: Lemma.ID?,
@@ -212,15 +283,15 @@ public extension Lexicon {
 	}
 }
 
-public extension Lexicon.SearchResult {
+public extension Lexicon.Search.Result {
 
 	struct Match: Codable, Hashable, Sendable {
-		public var field: Lexicon.SearchField
+		public var field: Lexicon.Search.Field
 		public var term: String
 		public var value: String
 		public var kind: String
 
-		public init(field: Lexicon.SearchField, term: String, value: String, kind: String) {
+		public init(field: Lexicon.Search.Field, term: String, value: String, kind: String) {
 			self.field = field
 			self.term = term
 			self.value = value
@@ -231,28 +302,28 @@ public extension Lexicon.SearchResult {
 
 public extension Lexicon.Document {
 
-	func search(_ query: String, options: Lexicon.SearchOptions = .init()) -> [Lexicon.SearchResult] {
-		Lexicon.SearchIndex(document: self, options: options).search(query)
+	func search(_ query: String, options: Lexicon.Search.Options = .init()) -> [Lexicon.Search.Result] {
+		Lexicon.Search.Index(document: self, options: options).search(query)
 	}
 
-	func search<Terms>(_ terms: Terms, options: Lexicon.SearchOptions = .init()) -> [Lexicon.SearchResult]
+	func search<Terms>(_ terms: Terms, options: Lexicon.Search.Options = .init()) -> [Lexicon.Search.Result]
 	where Terms: Collection, Terms.Element == String {
 		search(terms.joined(separator: " "), options: options)
 	}
 }
 
-public extension Lexicon.SearchEmbeddingProvider {
+public extension Lexicon.Search.EmbeddingProvider {
 
 	var identifier: String {
 		descriptor.identifier
 	}
 }
 
-public extension Lexicon {
+public extension Lexicon.Search {
 
-	struct SearchIndex: Sendable {
-		public var entries: [SearchEntry]
-		public var options: SearchOptions
+	struct Index: Sendable {
+		public var entries: [Entry]
+		public var options: Options
 		public var fingerprint: String {
 			var hash = StableHash()
 			for entry in entries.sorted(by: { $0.id < $1.id }) {
@@ -262,21 +333,21 @@ public extension Lexicon {
 			return hash.hex
 		}
 
-		public init(document: Lexicon.Document, options: SearchOptions = .init()) {
+		public init(document: Lexicon.Document, options: Options = .init()) {
 			self.options = options
 			self.entries = document.searchEntries(options: options)
 		}
 
-		public init(entries: [SearchEntry], options: SearchOptions = .init()) {
+		public init(entries: [Entry], options: Options = .init()) {
 			self.options = options
 			self.entries = entries
 		}
 
 		public func search(
 			_ query: String,
-			embeddingCache: SearchEmbeddingCache? = nil,
+			embeddingCache: EmbeddingCache? = nil,
 			queryVector: [Double]? = nil
-		) -> [SearchResult] {
+		) -> [Result] {
 			let query = SearchQuery(query)
 			guard query.hasTerms, options.limit != 0 else {
 				return []
@@ -311,9 +382,9 @@ public extension Lexicon {
 		public func search(
 			_ rawQuery: String,
 			in document: Lexicon.Document,
-			embeddingCache: SearchEmbeddingCache? = nil,
+			embeddingCache: EmbeddingCache? = nil,
 			queryVector: [Double]? = nil
-		) async throws -> [SearchResult] {
+		) async throws -> [Result] {
 			switch options.scope {
 				case .own:
 					return search(rawQuery, embeddingCache: embeddingCache, queryVector: queryVector)
@@ -338,13 +409,13 @@ public extension Lexicon {
 			}
 		}
 
-		public func search<Provider: SearchEmbeddingProvider>(
+		public func search<Provider: EmbeddingProvider>(
 			_ rawQuery: String,
 			in document: Lexicon.Document,
-			embeddingCache: SearchEmbeddingCache? = nil,
+			embeddingCache: EmbeddingCache? = nil,
 			queryVector: [Double]? = nil,
 			contextEmbeddingProvider provider: Provider
-		) async throws -> [SearchResult] {
+		) async throws -> [Result] {
 			switch options.scope {
 				case .own:
 					return search(rawQuery, embeddingCache: embeddingCache, queryVector: queryVector)
@@ -365,7 +436,7 @@ public extension Lexicon {
 					)
 				case .full:
 					let index = try await materialized(in: document)
-					let cache: SearchEmbeddingCache?
+					let cache: EmbeddingCache?
 					if embeddingCache?.fingerprint == index.fingerprint {
 						cache = embeddingCache
 					} else if options.mode.usesSemanticSearch {
@@ -377,7 +448,7 @@ public extension Lexicon {
 			}
 		}
 
-		public func materialized(in document: Lexicon.Document) async throws -> SearchIndex {
+		public func materialized(in document: Lexicon.Document) async throws -> Index {
 			guard options.scope == .full else {
 				return self
 			}
@@ -390,9 +461,9 @@ public extension Lexicon {
 			)
 		}
 
-		public func embeddingCache<Provider: SearchEmbeddingProvider>(
+		public func embeddingCache<Provider: EmbeddingProvider>(
 			using provider: Provider
-		) async throws -> SearchEmbeddingCache {
+		) async throws -> EmbeddingCache {
 			let entries = entries.sorted { $0.id < $1.id }
 			let vectors = try await embeddingVectors(for: entries, using: provider)
 			return .init(
@@ -405,9 +476,9 @@ public extension Lexicon {
 		private func liveSearchContext(
 			_ rawQuery: String,
 			document: Lexicon.Document,
-			embeddingCache: SearchEmbeddingCache?,
+			embeddingCache: EmbeddingCache?,
 			queryVector: [Double]?
-		) async throws -> (query: SearchQuery, ownResults: [SearchResult], contextEntries: [SearchEntry]) {
+		) async throws -> (query: SearchQuery, ownResults: [Result], contextEntries: [Entry]) {
 			let query = SearchQuery(rawQuery)
 			guard query.hasTerms, options.limit != 0 else {
 				return (query, [], [])
@@ -416,7 +487,7 @@ public extension Lexicon {
 			var candidateOptions = options
 			candidateOptions.scope = .own
 			candidateOptions.limit = max(1, options.bounds.candidates)
-			let candidateIndex = SearchIndex(document: document, options: candidateOptions)
+			let candidateIndex = Index(document: document, options: candidateOptions)
 			let ownResults = candidateIndex.search(
 				rawQuery,
 				embeddingCache: embeddingCache,
@@ -429,10 +500,10 @@ public extension Lexicon {
 		private func rankedContextResults(
 			query: SearchQuery,
 			queryVector: [Double]?,
-			ownResults: [SearchResult],
-			contextEntries: [SearchEntry],
+			ownResults: [Result],
+			contextEntries: [Entry],
 			contextVectors: [Lemma.ID: [Double]]
-		) -> [SearchResult] {
+		) -> [Result] {
 			let queryVector = queryVector ?? self.queryVector(for: query)
 			let contextResults = contextEntries.compactMap { entry in
 				let entryVector = contextVectors[entry.id]
@@ -445,7 +516,7 @@ public extension Lexicon {
 				)
 			}
 			let sorted = (ownResults + contextResults)
-				.reduce(into: [Lemma.ID: SearchResult]()) { results, result in
+				.reduce(into: [Lemma.ID: Result]()) { results, result in
 					guard let existing = results[result.id] else {
 						results[result.id] = result
 						return
@@ -472,8 +543,8 @@ public extension Lexicon {
 			options.mode.usesSemanticSearch ? SemanticEmbedding.vector(for: query.embeddingText) : nil
 		}
 
-		private func embeddingVectors<Provider: SearchEmbeddingProvider>(
-			for entries: [SearchEntry],
+		private func embeddingVectors<Provider: EmbeddingProvider>(
+			for entries: [Entry],
 			using provider: Provider
 		) async throws -> [Lemma.ID: [Double]] {
 			var vectors: [Lemma.ID: [Double]] = [:]
@@ -488,8 +559,8 @@ public extension Lexicon {
 
 		@LexiconActor private func contextEntries(
 			in document: Lexicon.Document,
-			seedResults: [SearchResult]
-		) async throws -> [SearchEntry] {
+			seedResults: [Result]
+		) async throws -> [Entry] {
 			guard seedResults.isNotEmpty else {
 				return []
 			}
@@ -532,7 +603,7 @@ public extension Lexicon {
 			}
 
 			var budget = max(0, options.bounds.budget)
-			var entries: [SearchEntry] = []
+			var entries: [Entry] = []
 			for id in selected.prefix(max(1, options.bounds.candidates)) {
 				guard budget > 0, let lemma = lexicon[id] else {
 					continue
@@ -546,7 +617,7 @@ public extension Lexicon {
 			return entries
 		}
 
-		@LexiconActor private func resolvedSearchEntries(in document: Lexicon.Document) throws -> [SearchEntry] {
+		@LexiconActor private func resolvedSearchEntries(in document: Lexicon.Document) throws -> [Entry] {
 			let rootName = options.root?
 				.split(separator: ".", maxSplits: 1)
 				.first
@@ -563,7 +634,7 @@ public extension Lexicon {
 			let childContextDepth = min(maxDepth, 1)
 			let childContextBudget = max(0, min(options.bounds.budget, 1_024))
 			var remaining = max(0, options.bounds.budget)
-			var entries: [SearchEntry] = []
+			var entries: [Entry] = []
 			var seenEntries: Set<Lemma.ID> = []
 
 			for root in roots {
@@ -584,10 +655,10 @@ public extension Lexicon {
 		}
 	}
 
-	struct SearchEntry: Hashable, Sendable {
+	struct Entry: Hashable, Sendable {
 		public var id: Lemma.ID
 		public var name: Lemma.Name
-		public var fields: [SearchDocument]
+		public var fields: [Document]
 		public var type: [Lemma.ID]
 		public var protonym: Lemma.ID?
 		public var defaultValue: Lexicon.Graph.Node.DefaultValue.JSON?
@@ -598,7 +669,7 @@ public extension Lexicon {
 		public init(
 			id: Lemma.ID,
 			name: Lemma.Name,
-			fields: [SearchDocument],
+			fields: [Document],
 			type: [Lemma.ID],
 			protonym: Lemma.ID?,
 			defaultValue: Lexicon.Graph.Node.DefaultValue.JSON?,
@@ -618,15 +689,15 @@ public extension Lexicon {
 		}
 	}
 
-	struct SearchDocument: Hashable, Sendable {
-		public var field: SearchField
+	struct Document: Hashable, Sendable {
+		public var field: Field
 		public var value: String
 		public var weight: Double
 		public var tokens: [String]
 		public var tokenSet: Set<String>
 		public var normalizedText: String
 
-		public init(field: SearchField, value: String, weight: Double) {
+		public init(field: Field, value: String, weight: Double) {
 			let tokens = SearchTokenizer.tokens(in: value)
 			self.field = field
 			self.value = value
@@ -638,7 +709,7 @@ public extension Lexicon {
 	}
 }
 
-public extension Lexicon.SearchEntry {
+public extension Lexicon.Search.Entry {
 
 	var embeddingText: String {
 		fields
@@ -650,8 +721,8 @@ public extension Lexicon.SearchEntry {
 
 private extension Lexicon.Document {
 
-	func searchEntries(options: Lexicon.SearchOptions) -> [Lexicon.SearchEntry] {
-		var entries: [Lexicon.SearchEntry] = []
+	func searchEntries(options: Lexicon.Search.Options) -> [Lexicon.Search.Entry] {
+		var entries: [Lexicon.Search.Entry] = []
 		for root in roots.values {
 			root.traverse { id, _, node in
 				guard options.root.map({ id.isSameOrDescendant(of: $0) }) ?? true else {
@@ -685,15 +756,15 @@ private extension Lexicon.Graph.Node {
 		].joined(separator: ":")
 	}
 
-	func searchEntry(id: String, options: Lexicon.SearchOptions) -> Lexicon.SearchEntry {
+	func searchEntry(id: String, options: Lexicon.Search.Options) -> Lexicon.Search.Entry {
 		var fields = [
-			Lexicon.SearchDocument(field: .id, value: id, weight: 6.0),
-			Lexicon.SearchDocument(field: .name, value: name, weight: 8.0),
+			Lexicon.Search.Document(field: .id, value: id, weight: 6.0),
+			Lexicon.Search.Document(field: .name, value: name, weight: 8.0),
 		]
 
 		if options.includeReferences {
 			fields.append(contentsOf: type.sorted().map {
-				Lexicon.SearchDocument(field: .type, value: $0, weight: 4.0)
+				Lexicon.Search.Document(field: .type, value: $0, weight: 4.0)
 			})
 			if let protonym {
 				fields.append(.init(field: .protonym, value: protonym, weight: 4.0))
@@ -711,16 +782,16 @@ private extension Lexicon.Graph.Node {
 
 		if options.includeMetadata {
 			fields.append(contentsOf: notes.map {
-				Lexicon.SearchDocument(field: .note, value: $0, weight: 2.5)
+				Lexicon.Search.Document(field: .note, value: $0, weight: 2.5)
 			})
 			fields.append(contentsOf: comments.map {
-				Lexicon.SearchDocument(field: .comment, value: $0, weight: 1.5)
+				Lexicon.Search.Document(field: .comment, value: $0, weight: 1.5)
 			})
 		}
 
 		if options.includeConnections {
 			fields.append(contentsOf: connections.map {
-				Lexicon.SearchDocument(field: .connection, value: $0.reference, weight: 2.0)
+				Lexicon.Search.Document(field: .connection, value: $0.reference, weight: 2.0)
 			})
 		}
 
@@ -785,10 +856,10 @@ private extension Lemma {
 	}
 
 	func contextSearchEntry(
-		options: Lexicon.SearchOptions,
+		options: Lexicon.Search.Options,
 		depth: Int,
 		budget: inout Int
-	) -> Lexicon.SearchEntry {
+	) -> Lexicon.Search.Entry {
 		let base = node.searchEntry(id: id, options: options)
 		var fields = base.fields
 
@@ -844,7 +915,7 @@ private extension Lemma {
 
 private extension Lexicon.Graph.Node.DefaultValue {
 
-	func searchDocument(weight: Double) -> Lexicon.SearchDocument {
+	func searchDocument(weight: Double) -> Lexicon.Search.Document {
 		switch self {
 			case .reference(let id):
 				return .init(field: .defaultReference, value: id, weight: weight)
@@ -854,14 +925,14 @@ private extension Lexicon.Graph.Node.DefaultValue {
 	}
 }
 
-private extension Lexicon.SearchEntry {
+private extension Lexicon.Search.Entry {
 
 	func result(
 		for query: SearchQuery,
 		queryVector: [Double]?,
 		entryVector: [Double]?,
-		options: Lexicon.SearchOptions
-	) -> Lexicon.SearchResult? {
+		options: Lexicon.Search.Options
+	) -> Lexicon.Search.Result? {
 		let lexical = options.mode.usesLexicalSearch ? lexicalScore(for: query) : .empty
 		let token = options.mode.usesTokenSearch ? tokenScore(for: query) : .empty
 		let semantic = options.mode.usesSemanticSearch
@@ -872,24 +943,17 @@ private extension Lexicon.SearchEntry {
 		let tokenAccepted = token.matchedTerms.isSuperset(of: query.tokens)
 		let lexicalAccepted = lexical.score > 0
 
-		let accepted: Bool
-		switch options.mode {
-			case .lexical:
-				accepted = lexicalAccepted
-			case .token:
-				accepted = tokenAccepted
-			case .semantic:
-				accepted = semanticAccepted
-			case .hybrid:
-				accepted = tokenAccepted || semanticAccepted || lexicalAccepted
-		}
+		let accepted =
+			(options.mode.usesLexicalSearch && lexicalAccepted)
+			|| (options.mode.usesTokenSearch && tokenAccepted)
+			|| (options.mode.usesSemanticSearch && semanticAccepted)
 		guard accepted else {
 			return nil
 		}
 
 		let semanticScore = semantic.map { $0 * 1000 }
 		let total = lexical.score + token.score + (semanticScore ?? 0)
-		let scores = Lexicon.SearchScores(
+		let scores = Lexicon.Search.Scores(
 			lexical: lexical.score,
 			token: token.score,
 			semantic: semantic,
@@ -918,7 +982,7 @@ private extension Lexicon.SearchEntry {
 
 	func lexicalScore(for query: SearchQuery) -> SearchScore {
 		var score = 0.0
-		var matches: [Lexicon.SearchResult.Match] = []
+		var matches: [Lexicon.Search.Result.Match] = []
 		let phrase = query.normalizedPhrase
 
 		for field in fields {
@@ -949,10 +1013,10 @@ private extension Lexicon.SearchEntry {
 	func tokenScore(for query: SearchQuery) -> SearchScore {
 		var score = 0.0
 		var matchedTerms: Set<String> = []
-		var matches: [Lexicon.SearchResult.Match] = []
+		var matches: [Lexicon.Search.Result.Match] = []
 
 		for token in query.tokens {
-			var best: (score: Double, match: Lexicon.SearchResult.Match)?
+			var best: (score: Double, match: Lexicon.Search.Result.Match)?
 			for field in fields {
 				guard let candidate = field.bestMatch(for: token) else {
 					continue
@@ -992,7 +1056,7 @@ private extension Lexicon.SearchEntry {
 	}
 }
 
-private extension Lexicon.SearchDocument {
+private extension Lexicon.Search.Document {
 
 	func bestMatch(for queryToken: String) -> (score: Double, kind: String)? {
 		var best: (score: Double, kind: String)?
@@ -1053,7 +1117,7 @@ private struct SearchQuery {
 private struct SearchScore {
 	var score: Double
 	var matchedTerms: Set<String>
-	var matches: [Lexicon.SearchResult.Match]
+	var matches: [Lexicon.Search.Result.Match]
 
 	static let empty = SearchScore(score: 0, matchedTerms: [], matches: [])
 }
@@ -1092,33 +1156,18 @@ private enum SemanticEmbedding {
 	}
 }
 
-private extension Lexicon.SearchMode {
+private extension Lexicon.Search.Mode {
 
 	var usesLexicalSearch: Bool {
-		switch self {
-			case .lexical, .hybrid:
-				return true
-			case .token, .semantic:
-				return false
-		}
+		contains(.lexical)
 	}
 
 	var usesTokenSearch: Bool {
-		switch self {
-			case .token, .hybrid:
-				return true
-			case .lexical, .semantic:
-				return false
-		}
+		contains(.token)
 	}
 
 	var usesSemanticSearch: Bool {
-		switch self {
-			case .semantic, .hybrid:
-				return true
-			case .lexical, .token:
-				return false
-		}
+		contains(.semantic)
 	}
 }
 
@@ -1222,23 +1271,6 @@ private extension Array where Element == Double {
 			return 0
 		}
 		return dot / (left.squareRoot() * right.squareRoot())
-	}
-}
-
-private extension Array {
-
-	func chunks(ofCount count: Int) -> [[Element]] {
-		guard count > 0 else {
-			return [self]
-		}
-		var chunks: [[Element]] = []
-		var index = startIndex
-		while index < endIndex {
-			let end = self.index(index, offsetBy: count, limitedBy: endIndex) ?? endIndex
-			chunks.append(Array(self[index..<end]))
-			index = end
-		}
-		return chunks
 	}
 }
 

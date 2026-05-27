@@ -42,13 +42,27 @@ final class LexiconDocumentSearchTests: Hopes {
 		hope.true(results.allSatisfy { $0.id.hasPrefix("root.downloads") })
 	}
 
+	func test_search_mode_can_compose_scoring_lenses() throws {
+		let document = try Self.fixture()
+
+		let results = document.search("shown in settings", options: .init(mode: [.lexical, .token]))
+		let ids = results.map(\.id)
+		let notice = results.first { $0.id == "root.notice" }
+		let settings = results.first { $0.id == "root.device.settings" }
+
+		hope.true(ids.contains("root.notice"))
+		hope.true(ids.contains("root.device.settings"))
+		hope.true((notice?.scores.lexical ?? 0) > 0)
+		hope.true((settings?.scores.token ?? 0) > 0)
+	}
+
 	func test_live_scope_search_reranks_candidates_with_inherited_children() async throws {
 		let document = try Self.inheritedFixture()
-		let ownIndex = Lexicon.SearchIndex(document: document, options: .init(mode: .token))
+		let ownIndex = Lexicon.Search.Index(document: document, options: .init(mode: .token))
 		let ownResults = ownIndex.search("entitlement")
 		hope.false(ownResults.map(\.id).contains("root.offer"))
 
-		let fullIndex = Lexicon.SearchIndex(
+		let fullIndex = Lexicon.Search.Index(
 			document: document,
 			options: .init(mode: .token, scope: .live, bounds: .init(depth: 3))
 		)
@@ -61,7 +75,7 @@ final class LexiconDocumentSearchTests: Hopes {
 
 	func test_full_scope_materializes_resolved_graph_with_recursion_detection() async throws {
 		let document = try Self.recursiveFixture()
-		let index = Lexicon.SearchIndex(
+		let index = Lexicon.Search.Index(
 			document: document,
 			options: .init(mode: .token, scope: .full, bounds: .init(depth: .max, budget: 30))
 		)
@@ -86,7 +100,7 @@ final class LexiconDocumentSearchTests: Hopes {
 
 	func test_embedding_cache_batches_document_embedding_requests() async throws {
 		let document = try Self.largeFixture()
-		let index = Lexicon.SearchIndex(document: document, options: .init(mode: .semantic))
+		let index = Lexicon.Search.Index(document: document, options: .init(mode: .semantic))
 		let recorder = EmbeddingBatchRecorder()
 		let provider = RecordingEmbeddingProvider(recorder: recorder)
 
@@ -192,9 +206,9 @@ private actor EmbeddingBatchRecorder {
 	}
 }
 
-private struct RecordingEmbeddingProvider: Lexicon.SearchEmbeddingProvider {
+private struct RecordingEmbeddingProvider: Lexicon.Search.EmbeddingProvider {
 	var recorder: EmbeddingBatchRecorder
-	var descriptor: Lexicon.SearchEmbeddingDescriptor {
+	var descriptor: Lexicon.Search.EmbeddingDescriptor {
 		.init(
 			provider: "test",
 			model: "embedding-provider",

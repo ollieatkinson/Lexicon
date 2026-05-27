@@ -25,6 +25,7 @@ let package = Package(
 	],
 	dependencies: [
 		.package(url: "https://github.com/screensailor/Hope", branch: "trunk"),
+		.package(url: "https://github.com/apple/swift-algorithms", from: "1.2.0"),
 		.package(url: "https://github.com/apple/swift-collections", from: "1.5.1"),
 		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.7.1"),
 		.package(url: "https://github.com/apple/swift-async-algorithms", from: "1.1.3"),
@@ -47,6 +48,7 @@ let package = Package(
 			name: "Lexicon",
 			dependencies: [
 				"_Collections",
+				.product(name: "Algorithms", package: "swift-algorithms"),
 				.product(name: "Collections", package: "swift-collections")
 			],
 			swiftSettings: [.define("EDITOR")] // TODO: make this opt in

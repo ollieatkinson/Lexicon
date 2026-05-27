@@ -47,9 +47,9 @@ struct TreeOutput: Codable {
 struct SearchOutput: Codable {
 	var query: String
 	var count: Int
-	var results: [Lexicon.SearchResult]
+	var results: [Lexicon.Search.Result]
 
-	init(query: String, results: [Lexicon.SearchResult]) {
+	init(query: String, results: [Lexicon.Search.Result]) {
 		self.query = query
 		self.count = results.count
 		self.results = results

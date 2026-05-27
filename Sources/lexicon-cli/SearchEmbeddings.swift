@@ -21,12 +21,12 @@ enum SearchEmbeddingProviderSelection: String {
 }
 
 struct SearchEmbeddingCachePreparation {
-	var cache: Lexicon.SearchEmbeddingCache
+	var cache: Lexicon.Search.EmbeddingCache
 	var url: URL
 	var reused: Bool
 }
 
-extension Lexicon.SearchIndex {
+extension Lexicon.Search.Index {
 
 	func search(
 		_ query: String,
@@ -36,8 +36,8 @@ extension Lexicon.SearchIndex {
 		embeddingModel: String,
 		embeddingCache cacheURL: URL?,
 		rebuildEmbeddings: Bool
-	) async throws -> [Lexicon.SearchResult] {
-		guard options.mode == .semantic || options.mode == .hybrid else {
+	) async throws -> [Lexicon.Search.Result] {
+		guard options.mode.contains(.semantic) else {
 			return try await searchLocally(query, in: document)
 		}
 
@@ -79,7 +79,7 @@ extension Lexicon.SearchIndex {
 		_ query: String,
 		in document: Lexicon.Document,
 		queryVector: [Double]? = nil
-	) async throws -> [Lexicon.SearchResult] {
+	) async throws -> [Lexicon.Search.Result] {
 		if options.scope != .own {
 			return try await search(query, in: document, queryVector: queryVector)
 		}
@@ -94,7 +94,7 @@ extension Lexicon.SearchIndex {
 		modelID: String,
 		cacheURL: URL?,
 		rebuildEmbeddings: Bool
-	) async throws -> [Lexicon.SearchResult] {
+	) async throws -> [Lexicon.Search.Result] {
 		let provider = try await MLXSearchEmbeddingProvider(modelID: modelID)
 		let index = options.scope == .full ? try await materialized(in: document) : self
 		let cacheURL = try cacheURL ?? index.defaultEmbeddingCacheURL(
@@ -121,12 +121,12 @@ extension Lexicon.SearchIndex {
 
 	private func embeddingCache(
 		at url: URL,
-		provider: some Lexicon.SearchEmbeddingProvider,
+		provider: some Lexicon.Search.EmbeddingProvider,
 		rebuild: Bool
 	) async throws -> SearchEmbeddingCachePreparation {
 		if !rebuild,
 		   let cache = try? JSONDecoder().decode(
-			Lexicon.SearchEmbeddingCache.self,
+			Lexicon.Search.EmbeddingCache.self,
 			from: Data(contentsOf: url)
 		   ),
 		   cache.descriptor == provider.descriptor,
@@ -152,7 +152,7 @@ extension Lexicon.SearchIndex {
 
 	private func defaultEmbeddingCacheURL(
 		input: URL,
-		descriptor: Lexicon.SearchEmbeddingDescriptor
+		descriptor: Lexicon.Search.EmbeddingDescriptor
 	) throws -> URL {
 		let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
 			?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".cache", isDirectory: true)

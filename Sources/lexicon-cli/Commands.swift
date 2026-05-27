@@ -111,11 +111,11 @@ struct Search: AsyncParsableCommand {
 	@Option(help: "Restrict results to this root or subtree lemma ID.")
 	var root: String?
 
-	@Option(help: "Search mode: hybrid, token, lexical, or semantic.")
-	var mode = Lexicon.SearchMode.hybrid.rawValue
+	@Option(help: "Search mode: hybrid, token, lexical, semantic, or a comma-separated combination.")
+	var mode = "hybrid"
 
 	@Option(help: "Search scope: own, live, or full.")
-	var scope = Lexicon.SearchScope.own.rawValue
+	var scope = Lexicon.Search.Scope.own.rawValue
 
 	@Option(help: "Minimum cosine similarity for semantic matches.")
 	var semanticThreshold = 0.42
@@ -136,13 +136,13 @@ struct Search: AsyncParsableCommand {
 	var namesOnly = false
 
 	@Option(help: "Maximum resolved child depth to inspect when --scope live or --scope full.")
-	var depth = Lexicon.SearchBounds.defaultDepth
+	var depth = Lexicon.Search.Bounds.defaultDepth
 
 	@Option(help: "Maximum own-index candidates to expand when --scope live.")
-	var candidates = Lexicon.SearchBounds.defaultCandidates
+	var candidates = Lexicon.Search.Bounds.defaultCandidates
 
 	@Option(help: "Maximum resolved lemmas or child contexts to inspect when --scope live or --scope full.")
-	var budget = Lexicon.SearchBounds.defaultBudget
+	var budget = Lexicon.Search.Bounds.defaultBudget
 
 	@Flag(help: "Search the source document without composing imports.")
 	var sourceOnly = false
@@ -156,11 +156,11 @@ struct Search: AsyncParsableCommand {
 		if let root {
 			_ = try document.node(root)
 		}
-		let options = Lexicon.SearchOptions(
+		let options = Lexicon.Search.Options(
 			limit: limit,
 			root: root,
-			mode: try Lexicon.SearchMode(agentArgument: mode),
-			scope: try Lexicon.SearchScope(agentArgument: scope),
+			mode: try Lexicon.Search.Mode(agentArgument: mode),
+			scope: try Lexicon.Search.Scope(agentArgument: scope),
 			includeReferences: !namesOnly,
 			includeMetadata: !namesOnly,
 			includeDefaults: !namesOnly,
@@ -172,7 +172,7 @@ struct Search: AsyncParsableCommand {
 				budget: budget
 			)
 		)
-		let index = Lexicon.SearchIndex(document: document, options: options)
+		let index = Lexicon.Search.Index(document: document, options: options)
 		let results = try await index.search(
 			query,
 			in: document,

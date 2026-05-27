@@ -8,8 +8,8 @@ import MLXEmbeddersHFAPI
 import MLXLMCommon
 import Tokenizers
 
-public struct MLXSearchEmbeddingProvider: Lexicon.SearchEmbeddingProvider {
-	public var descriptor: Lexicon.SearchEmbeddingDescriptor
+public struct MLXSearchEmbeddingProvider: Lexicon.Search.EmbeddingProvider {
+	public var descriptor: Lexicon.Search.EmbeddingDescriptor
 	private var container: EmbedderModelContainer
 
 	public init(modelID: String) async throws {
