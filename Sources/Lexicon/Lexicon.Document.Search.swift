@@ -118,6 +118,8 @@ public extension Lexicon.Search {
 		public var dimensions: Int?
 		public var normalized: Bool
 		public var pooling: String
+		public var queryPrefix: String
+		public var documentPrefix: String
 		public private(set) var identifier: String
 
 		private enum CodingKeys: String, CodingKey {
@@ -128,6 +130,8 @@ public extension Lexicon.Search {
 			case dimensions
 			case normalized
 			case pooling
+			case queryPrefix
+			case documentPrefix
 			case identifier
 		}
 
@@ -138,7 +142,9 @@ public extension Lexicon.Search {
 			tokenizer: String,
 			dimensions: Int? = nil,
 			normalized: Bool,
-			pooling: String
+			pooling: String,
+			queryPrefix: String = "",
+			documentPrefix: String = ""
 		) {
 			self.provider = provider
 			self.model = model
@@ -147,6 +153,8 @@ public extension Lexicon.Search {
 			self.dimensions = dimensions
 			self.normalized = normalized
 			self.pooling = pooling
+			self.queryPrefix = queryPrefix
+			self.documentPrefix = documentPrefix
 			self.identifier = Self.identifier(
 				provider: provider,
 				model: model,
@@ -154,7 +162,9 @@ public extension Lexicon.Search {
 				tokenizer: tokenizer,
 				dimensions: dimensions,
 				normalized: normalized,
-				pooling: pooling
+				pooling: pooling,
+				queryPrefix: queryPrefix,
+				documentPrefix: documentPrefix
 			)
 		}
 
@@ -167,7 +177,9 @@ public extension Lexicon.Search {
 				tokenizer: values.decode(String.self, forKey: .tokenizer),
 				dimensions: values.decodeIfPresent(Int.self, forKey: .dimensions),
 				normalized: values.decode(Bool.self, forKey: .normalized),
-				pooling: values.decode(String.self, forKey: .pooling)
+				pooling: values.decode(String.self, forKey: .pooling),
+				queryPrefix: values.decodeIfPresent(String.self, forKey: .queryPrefix) ?? "",
+				documentPrefix: values.decodeIfPresent(String.self, forKey: .documentPrefix) ?? ""
 			)
 		}
 
@@ -180,6 +192,8 @@ public extension Lexicon.Search {
 			try values.encodeIfPresent(dimensions, forKey: .dimensions)
 			try values.encode(normalized, forKey: .normalized)
 			try values.encode(pooling, forKey: .pooling)
+			try values.encode(queryPrefix, forKey: .queryPrefix)
+			try values.encode(documentPrefix, forKey: .documentPrefix)
 			try values.encode(identifier, forKey: .identifier)
 		}
 
@@ -190,7 +204,9 @@ public extension Lexicon.Search {
 			tokenizer: String,
 			dimensions: Int?,
 			normalized: Bool,
-			pooling: String
+			pooling: String,
+			queryPrefix: String,
+			documentPrefix: String
 		) -> String {
 			[
 				provider,
@@ -200,6 +216,8 @@ public extension Lexicon.Search {
 				dimensions.map(String.init) ?? "unknown-dimensions",
 				normalized ? "normalized" : "raw",
 				pooling,
+				queryPrefix.isEmpty ? "no-query-prefix" : queryPrefix,
+				documentPrefix.isEmpty ? "no-document-prefix" : documentPrefix,
 			].joined(separator: "/")
 		}
 	}
@@ -549,7 +567,7 @@ public extension Lexicon.Search {
 		) async throws -> [Lemma.ID: [Double]] {
 			var vectors: [Lemma.ID: [Double]] = [:]
 			for batch in entries.chunks(ofCount: 32) {
-				let embeddings = try await provider.embed(batch.map { "search_document: \($0.embeddingText)" })
+				let embeddings = try await provider.embed(batch.map(\.embeddingText))
 				for (entry, vector) in zip(batch, embeddings) {
 					vectors[entry.id] = vector
 				}

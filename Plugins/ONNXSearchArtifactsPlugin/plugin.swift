@@ -6,13 +6,21 @@ struct ONNXSearchArtifactsPlugin: CommandPlugin {
 
 	func performCommand(context: PluginContext, arguments: [String]) async throws {
 		let tool = try context.tool(named: "onnx-search-artifacts")
+		var arguments = arguments
+		if arguments.first == "--" {
+			arguments.removeFirst()
+		}
 		let output = context.package.directoryURL
 			.appendingPathComponent(".build", isDirectory: true)
 			.appendingPathComponent("onnx-search", isDirectory: true)
+		let runtimeOutput = context.package.directoryURL
+			.appendingPathComponent(".build", isDirectory: true)
+			.appendingPathComponent("onnx-runtime", isDirectory: true)
 		let process = try Process.run(
 			tool.url,
 			arguments: [
 				"--output", output.path,
+				"--runtime-output", runtimeOutput.path,
 			] + arguments
 		)
 		process.waitUntilExit()

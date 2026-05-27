@@ -5,6 +5,7 @@ public struct WordPieceSearchTokenizer: Sendable {
 	public var maxLength: Int
 
 	private var vocabulary: [String: Int64]
+	private var lowercased: Bool
 	private var unknownTokenID: Int64
 	private var clsTokenID: Int64
 	private var sepTokenID: Int64
@@ -13,7 +14,8 @@ public struct WordPieceSearchTokenizer: Sendable {
 	public init(
 		vocabulary url: URL,
 		revision: String,
-		maxLength: Int = 128
+		maxLength: Int = 128,
+		lowercased: Bool = true
 	) throws {
 		let contents = try String(contentsOf: url, encoding: .utf8)
 		var vocabulary: [String: Int64] = [:]
@@ -28,9 +30,10 @@ public struct WordPieceSearchTokenizer: Sendable {
 		else {
 			throw ONNXRuntimeError("Vocabulary is missing required BERT special tokens.")
 		}
-		self.identifier = "wordpiece:\(url.lastPathComponent):\(revision)"
+		self.identifier = "wordpiece:\(url.lastPathComponent):\(revision):max-\(maxLength):\(lowercased ? "lower" : "case")"
 		self.maxLength = maxLength
 		self.vocabulary = vocabulary
+		self.lowercased = lowercased
 		self.unknownTokenID = unknownTokenID
 		self.clsTokenID = clsTokenID
 		self.sepTokenID = sepTokenID
@@ -69,7 +72,8 @@ public struct WordPieceSearchTokenizer: Sendable {
 	private func basicTokens(in text: String) -> [String] {
 		var tokens: [String] = []
 		var current = ""
-		for scalar in text.lowercased().unicodeScalars {
+		let normalized = lowercased ? text.lowercased() : text
+		for scalar in normalized.unicodeScalars {
 			if CharacterSet.whitespacesAndNewlines.contains(scalar) {
 				append(&current, to: &tokens)
 			} else if CharacterSet.punctuationCharacters.contains(scalar) || CharacterSet.symbols.contains(scalar) {

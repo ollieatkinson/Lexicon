@@ -11,14 +11,24 @@ import Tokenizers
 public struct MLXSearchEmbeddingProvider: Lexicon.Search.EmbeddingProvider {
 	public var descriptor: Lexicon.Search.EmbeddingDescriptor
 	private var container: EmbedderModelContainer
+	private var queryPrefix: String
+	private var documentPrefix: String
 
-	public init(modelID: String) async throws {
+	public init(
+		modelID: String,
+		queryPrefix: String = "search_query: ",
+		documentPrefix: String = "search_document: "
+	) async throws {
+		self.queryPrefix = queryPrefix
+		self.documentPrefix = documentPrefix
 		self.descriptor = .init(
 			provider: "mlx",
 			model: modelID,
 			tokenizer: "swift-tokenizers/auto",
 			normalized: true,
-			pooling: "mlx-embedders"
+			pooling: "mlx-embedders",
+			queryPrefix: queryPrefix,
+			documentPrefix: documentPrefix
 		)
 		let configuration = ModelConfiguration(id: modelID)
 		self.container = try await EmbedderModelFactory.shared.loadContainer(
@@ -29,6 +39,18 @@ public struct MLXSearchEmbeddingProvider: Lexicon.Search.EmbeddingProvider {
 	}
 
 	public func embed(_ texts: [String]) async throws -> [[Double]] {
+		try await embedDocuments(texts)
+	}
+
+	public func embedQuery(_ query: String) async throws -> [Double]? {
+		try await embedRaw([queryPrefix + query]).first
+	}
+
+	public func embedDocuments(_ texts: [String]) async throws -> [[Double]] {
+		try await embedRaw(texts.map { documentPrefix + $0 })
+	}
+
+	private func embedRaw(_ texts: [String]) async throws -> [[Double]] {
 		await container.perform { context in
 			let inputs = texts.map {
 				context.tokenizer.encode(text: $0, addSpecialTokens: true)

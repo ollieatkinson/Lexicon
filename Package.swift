@@ -1,6 +1,48 @@
 // swift-tools-version: 6.3
 
 import PackageDescription
+import class Foundation.ProcessInfo
+import struct Foundation.URL
+
+let environment = ProcessInfo.processInfo.environment
+let packageRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().path
+
+func packagePath(_ path: String) -> String {
+	path.hasPrefix("/") ? path : "\(packageRoot)/\(path)"
+}
+
+let onnxRuntimeRoot = packagePath(environment["LEXICON_ONNX_RUNTIME_ROOT"] ?? ".build/onnx-runtime/current")
+let onnxRuntimePlatform = environment["LEXICON_ONNX_RUNTIME_PLATFORM"] ?? "linux-x64"
+let onnxRuntimeInclude = packagePath(environment["LEXICON_ONNX_RUNTIME_INCLUDE"] ?? "\(onnxRuntimeRoot)/include")
+let onnxRuntimeLibrary = packagePath(environment["LEXICON_ONNX_RUNTIME_LIB"] ?? "\(onnxRuntimeRoot)/lib/\(onnxRuntimePlatform)")
+let onnxRuntimeLibraryName = onnxRuntimePlatform == "windows-x64" ? "onnxruntime.dll" : "libonnxruntime.so"
+#if os(macOS)
+let useAppleONNXRuntimeBindings = (environment["LEXICON_ONNX_USE_APPLE_BINDINGS"] ?? "1") != "0"
+	&& environment["LEXICON_ONNX_RUNTIME_PLATFORM"] == nil
+	&& environment["LEXICON_ONNX_RUNTIME_INCLUDE"] == nil
+	&& environment["LEXICON_ONNX_RUNTIME_LIB"] == nil
+#else
+let useAppleONNXRuntimeBindings = false
+#endif
+let onnxRuntimeDependencies: [Target.Dependency] = useAppleONNXRuntimeBindings
+	? [
+		.product(
+			name: "onnxruntime",
+			package: "onnxruntime-swift-package-manager",
+			condition: .when(traits: ["ONNXSearch"])
+		)
+	]
+	: [
+		.target(
+			name: "CLexiconONNXRuntime",
+			condition: .when(traits: ["ONNXSearch"])
+		)
+	]
+let onnxPackageDependencies: [Package.Dependency] = useAppleONNXRuntimeBindings
+	? [
+		.package(url: "https://github.com/microsoft/onnxruntime-swift-package-manager", exact: "1.24.2")
+	]
+	: []
 
 let package = Package(
 	name: "Lexicon",
@@ -36,8 +78,7 @@ let package = Package(
 		.package(url: "https://github.com/ml-explore/mlx-swift-lm", .upToNextMajor(from: "3.31.3")),
 		.package(url: "https://github.com/DePasqualeOrg/swift-hf-api-mlx", exact: "0.2.0"),
 		.package(url: "https://github.com/DePasqualeOrg/swift-tokenizers", from: "0.6.3"),
-		.package(url: "https://github.com/microsoft/onnxruntime-swift-package-manager", exact: "1.24.2"),
-	],
+	] + onnxPackageDependencies,
 	targets: [
 		.target(
 			name: "_Collections",
@@ -135,13 +176,15 @@ let package = Package(
 		),
 		.target(
 			name: "LexiconSearchONNX",
-			dependencies: [
-				"Lexicon",
-				.product(
-					name: "onnxruntime",
-					package: "onnxruntime-swift-package-manager",
-					condition: .when(traits: ["ONNXSearch"])
-				),
+			dependencies: ["Lexicon"] + onnxRuntimeDependencies
+		),
+		.target(
+			name: "CLexiconONNXRuntime",
+			publicHeadersPath: "include",
+			cSettings: [
+				.define("LEXICON_ONNX_RUNTIME_REQUIRED", .when(traits: ["ONNXSearch"])),
+				.define("LEXICON_ONNX_RUNTIME_LIBRARY_PATH", to: "\"\(onnxRuntimeLibrary)/\(onnxRuntimeLibraryName)\""),
+				.unsafeFlags(["-I", onnxRuntimeInclude])
 			]
 		),
 		.testTarget(
@@ -152,17 +195,18 @@ let package = Package(
 			]
 		),
 		.executableTarget(
-			name: "onnx-search-artifacts"
+			name: "onnx-search-artifacts",
+			dependencies: ["LexiconSearchONNX"]
 		),
 		.plugin(
 			name: "ONNXSearchArtifactsPlugin",
 			capability: .command(
 				intent: .custom(
 					verb: "setup-onnx-search-artifacts",
-					description: "Download ONNX search model fixtures."
+					description: "Download ONNX search model and runtime artifacts."
 				),
 				permissions: [
-					.writeToPackageDirectory(reason: "Stores ONNX search model fixtures under .build/onnx-search.")
+					.writeToPackageDirectory(reason: "Stores ONNX search artifacts under .build/onnx-search and .build/onnx-runtime.")
 				]
 			),
 			dependencies: ["onnx-search-artifacts"]

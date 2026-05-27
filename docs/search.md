@@ -36,7 +36,7 @@ swift run --traits MLXSearch lexicon search Examples/search-demo.lexicon "custom
 
 The first MLX semantic search writes a local embedding cache and logs indexing progress to stderr. The semantic examples below were generated with `TaylorAI/bge-micro-v2`; another model can rank close matches differently.
 
-For ONNX semantic runs, first fetch the pinned MiniLM fixture through the package plugin:
+For ONNX semantic runs, first fetch a model fixture through the package plugin. The default preset is `all-MiniLM-L6-v2`:
 
 ```sh
 swift package --disable-sandbox --allow-writing-to-package-directory setup-onnx-search-artifacts
@@ -46,7 +46,72 @@ swift run --traits ONNXSearch lexicon search Examples/search-demo.lexicon "late 
 	--limit 3
 ```
 
+The setup command also accepts `--preset`, `--manifest`, or explicit Hugging Face artifact fields:
+
+```sh
+swift package --disable-sandbox --allow-writing-to-package-directory setup-onnx-search-artifacts -- \
+	--preset all-MiniLM-L6-v2
+swift package --disable-sandbox --allow-writing-to-package-directory setup-onnx-search-artifacts -- \
+	--preset bge-small-en-v1.5
+swift package --disable-sandbox --allow-writing-to-package-directory setup-onnx-search-artifacts -- \
+	--repository sentence-transformers/all-MiniLM-L6-v2 \
+	--revision c9745ed1d9f207416be6d2e6f8de32d1f16199bf \
+	--model-path onnx/model.onnx \
+	--vocabulary-path vocab.txt \
+	--id all-MiniLM-L6-v2
+```
+
+For Linux or Android ONNX runs, install the matching runtime artifact through the same plugin:
+
+```sh
+swift package --disable-sandbox --allow-writing-to-package-directory setup-onnx-search-artifacts -- \
+	--skip-model \
+	--runtime linux-x64
+LEXICON_ONNX_RUNTIME_PLATFORM=linux-x64 swift build --traits ONNXSearch
+
+swift package --disable-sandbox --allow-writing-to-package-directory setup-onnx-search-artifacts -- \
+	--skip-model \
+	--runtime android
+LEXICON_ONNX_RUNTIME_PLATFORM=android-arm64-v8a swift build --traits ONNXSearch --swift-sdk swift-6.3.1-RELEASE_android
+```
+
+The CLI can then use a preset, a generated `model.json` manifest, or direct local paths:
+
+```sh
+swift run --traits ONNXSearch lexicon search Examples/search-demo.lexicon "late delivery after carrier delay" \
+	--mode semantic \
+	--embedding-provider onnx \
+	--embedding-model-preset all-MiniLM-L6-v2
+swift run --traits ONNXSearch lexicon search Examples/search-demo.lexicon "late delivery after carrier delay" \
+	--mode semantic \
+	--embedding-provider onnx \
+	--embedding-model-manifest .build/onnx-search/all-MiniLM-L6-v2/model.json
+swift run --traits ONNXSearch lexicon search Examples/search-demo.lexicon "late delivery after carrier delay" \
+	--mode semantic \
+	--embedding-provider onnx \
+	--embedding-model .build/onnx-search/all-MiniLM-L6-v2/model.onnx \
+	--embedding-vocabulary .build/onnx-search/all-MiniLM-L6-v2/vocab.txt
+```
+
 See [`search-platforms.md`](search-platforms.md) for Linux, Android, Windows, and ONNX backend notes.
+
+## Quality Harness
+
+Search quality should be measured against local judgments, not guessed from generic model leaderboards. [`Examples/search-quality.json`](../Examples/search-quality.json) includes demo, Sky, and Blockchain query suites:
+
+```sh
+swift run lexicon search-evaluate Examples/search-quality.json \
+	--mode hybrid \
+	--embedding-provider none \
+	--limit 10
+swift run --traits ONNXSearch lexicon search-evaluate Examples/search-quality.json \
+	--mode semantic \
+	--embedding-provider onnx \
+	--embedding-model-preset bge-small-en-v1.5 \
+	--limit 10
+```
+
+The output reports MRR@10, nDCG@10, recall@10, per-query latency, document load time, index time, and cache size.
 
 ## Hybrid Examples
 

@@ -8,7 +8,8 @@ final class ONNXSearchEmbeddingProviderTests: XCTestCase {
 		let fixture = try fixtureURLs()
 		let provider = try ONNXSearchEmbeddingProvider(
 			model: fixture.model,
-			vocabulary: fixture.vocabulary
+			vocabulary: fixture.vocabulary,
+			configuration: fixture.configuration
 		)
 		let vectors = try await provider.embed([
 			"late delivery after carrier delay",
@@ -24,14 +25,15 @@ final class ONNXSearchEmbeddingProviderTests: XCTestCase {
 	func test_provider_can_search_demo_lexicon() async throws {
 		let fixture = try fixtureURLs()
 		let document = try TaskPaper(Data(contentsOf: fixture.lexicon)).decodeDocument()
-		let options = Lexicon.SearchOptions(limit: 5, mode: .semantic, scope: .own)
-		let index = Lexicon.SearchIndex(document: document, options: options)
+		let options = Lexicon.Search.Options(limit: 5, mode: .semantic, scope: .own)
+		let index = Lexicon.Search.Index(document: document, options: options)
 		let provider = try ONNXSearchEmbeddingProvider(
 			model: fixture.model,
-			vocabulary: fixture.vocabulary
+			vocabulary: fixture.vocabulary,
+			configuration: fixture.configuration
 		)
 		let cache = try await index.embeddingCache(using: provider)
-		let queryVector = try await provider.embed(["search_query: late delivery after carrier delay"]).first
+		let queryVector = try await provider.embedQuery("late delivery after carrier delay")
 		let results = index.search(
 			"late delivery after carrier delay",
 			embeddingCache: cache,
@@ -43,15 +45,22 @@ final class ONNXSearchEmbeddingProviderTests: XCTestCase {
 
 	private func fixtureURLs() throws -> FixtureURLs {
 		let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-		let model = root.appendingPathComponent(".build/onnx-search/all-MiniLM-L6-v2/model.onnx")
-		let vocabulary = root.appendingPathComponent(".build/onnx-search/all-MiniLM-L6-v2/vocab.txt")
+		let artifactRoot = root.appendingPathComponent(".build/onnx-search")
+		let configuration = ONNXSearchModel.default
+		let model = configuration.localModelURL(in: artifactRoot)
+		let vocabulary = configuration.localVocabularyURL(in: artifactRoot)
 		let lexicon = root.appendingPathComponent("Examples/search-demo.lexicon").standardizedFileURL
 		guard FileManager.default.fileExists(atPath: model.path),
 		      FileManager.default.fileExists(atPath: vocabulary.path)
 		else {
-			throw XCTSkip("Run swift package setup-onnx-search-artifacts before ONNX spike tests.")
+			throw XCTSkip("Run swift package setup-onnx-search-artifacts before ONNX provider tests.")
 		}
-		return .init(model: model, vocabulary: vocabulary, lexicon: lexicon)
+		return .init(
+			model: model,
+			vocabulary: vocabulary,
+			lexicon: lexicon,
+			configuration: configuration
+		)
 	}
 
 	private func norm(_ vector: [Double]) -> Double {
@@ -63,5 +72,6 @@ private struct FixtureURLs {
 	var model: URL
 	var vocabulary: URL
 	var lexicon: URL
+	var configuration: ONNXSearchModel
 }
 #endif

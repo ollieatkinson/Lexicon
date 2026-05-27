@@ -1,4 +1,4 @@
-#if ONNXSearch
+#if ONNXSearch && canImport(OnnxRuntimeBindings)
 import Foundation
 import OnnxRuntimeBindings
 
@@ -25,15 +25,15 @@ public final class ONNXRuntimeSession: @unchecked Sendable {
 		self.outputNames = try session.outputNames()
 	}
 
-	public func run(batch: ONNXTokenBatch) throws -> ONNXFloatTensor {
+	public func run(batch: ONNXTokenBatch, model: ONNXSearchModel) throws -> ONNXFloatTensor {
 		guard
-			let inputIDsName = preferredName("input_ids", in: inputNames),
-			let attentionMaskName = preferredName("attention_mask", in: inputNames)
+			let inputIDsName = preferredName(model.inputIDsName, in: inputNames),
+			let attentionMaskName = preferredName(model.attentionMaskName, in: inputNames)
 		else {
-			throw ONNXRuntimeError("Model inputs \(inputNames) do not include input_ids and attention_mask.")
+			throw ONNXRuntimeError("Model inputs \(inputNames) do not include \(model.inputIDsName) and \(model.attentionMaskName).")
 		}
-		let tokenTypeIDsName = preferredName("token_type_ids", in: inputNames)
-		let outputName = preferredOutputName()
+		let tokenTypeIDsName = model.tokenTypeIDsName.flatMap { preferredName($0, in: inputNames) }
+		let outputName = preferredOutputName(model.outputName)
 		var inputs = [
 			inputIDsName: try int64Tensor(batch.inputIDs),
 			attentionMaskName: try int64Tensor(batch.attentionMask),
@@ -88,8 +88,8 @@ public final class ONNXRuntimeSession: @unchecked Sendable {
 		names.first { $0 == name }
 	}
 
-	private func preferredOutputName() -> String {
-		for name in ["sentence_embedding", "last_hidden_state", "token_embeddings"] {
+	private func preferredOutputName(_ configured: String) -> String {
+		for name in [configured, "sentence_embedding", "last_hidden_state", "token_embeddings"] {
 			if outputNames.contains(name) {
 				return name
 			}

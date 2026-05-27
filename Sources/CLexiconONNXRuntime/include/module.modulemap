@@ -1,0 +1,4 @@
+module CLexiconONNXRuntime [system] {
+	header "LexiconONNXRuntime.h"
+	export *
+}

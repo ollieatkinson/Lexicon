@@ -1,0 +1,107 @@
+{
+  "suites" : [
+    {
+      "name" : "demo",
+      "input" : "search-demo.lexicon",
+      "queries" : [
+        {
+          "query" : "customer asks for money back after purchase",
+          "relevant" : {
+            "demo.api.refund.request" : 3,
+            "demo.api.refund.status" : 2
+          }
+        },
+        {
+          "query" : "late delivery after carrier delay",
+          "relevant" : {
+            "demo.fulfillment.delivery.delay" : 3,
+            "demo.analytics.event.delivery_delayed" : 2
+          }
+        },
+        {
+          "query" : "card issuer rejected transaction",
+          "relevant" : {
+            "demo.api.payment.decline" : 3,
+            "demo.ui.checkout.error.payment_declined" : 2
+          }
+        },
+        {
+          "query" : "inventory reservation during checkout",
+          "relevant" : {
+            "demo.api.inventory.reservation" : 3,
+            "demo.api.inventory.stock" : 1
+          }
+        }
+      ]
+    },
+    {
+      "name" : "sky-local",
+      "input" : "~/Downloads/sky.taskpaper",
+      "queries" : [
+        {
+          "query" : "programme synopsis",
+          "relevant" : {
+            "sky.api.entity.programme.synopsis" : 3,
+            "sky.api.entity.programme" : 1
+          }
+        },
+        {
+          "query" : "download programme to device",
+          "relevant" : {
+            "sky.api.remote.download.programme.to.device" : 3,
+            "sky.api.remote.download.programme.to.device.success" : 2
+          }
+        },
+        {
+          "query" : "viewing card ids",
+          "relevant" : {
+            "sky.api.remote.viewing.card.ids" : 3,
+            "sky.api.remote.viewing.card" : 2
+          }
+        },
+        {
+          "query" : "recommended product broadband",
+          "relevant" : {
+            "sky.ux.target.recommended.product.broadband" : 3,
+            "sky.ux.target.recommended.product.broadband.essential" : 1,
+            "sky.ux.target.recommended.product.broadband.ultrafast" : 1
+          }
+        }
+      ]
+    },
+    {
+      "name" : "blockchain-local",
+      "input" : "~/src/github.com/ollieatkinson/blockchain-app/Modules/BlockchainNamespace/Sources/BlockchainNamespace/blockchain.lexicon",
+      "queries" : [
+        {
+          "query" : "wallet balance",
+          "relevant" : {
+            "blockchain.user.pkw.asset.wallet.balance" : 3,
+            "blockchain.coin.core.account.balance" : 2
+          }
+        },
+        {
+          "query" : "bitcoin transaction status",
+          "relevant" : {
+            "blockchain.ux.transaction.execution.status" : 3,
+            "blockchain.ux.transaction.event.execution.status" : 2,
+            "blockchain.ux.transaction.event.execution.status.in.progress" : 1
+          }
+        },
+        {
+          "query" : "hot wallet address dynamic",
+          "relevant" : {
+            "blockchain.app.configuration.hot.wallet.address.is.dynamic" : 3
+          }
+        },
+        {
+          "query" : "currency exchange quote",
+          "relevant" : {
+            "blockchain.ux.currency.exchange.dex.config.quote" : 3,
+            "blockchain.ux.currency.exchange.dex.config.quote.by" : 2
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -37,9 +37,11 @@ extension Lexicon.Search.Index {
 		in document: Lexicon.Document,
 		input: URL,
 		embeddingProvider selection: SearchEmbeddingProviderSelection,
-		embeddingModel: String,
+		embeddingModel: String?,
+		embeddingModelPreset: String?,
+		embeddingModelManifest: URL?,
 		embeddingVocabulary: URL?,
-		embeddingModelRevision: String,
+		embeddingModelRevision: String?,
 		embeddingCache cacheURL: URL?,
 		rebuildEmbeddings: Bool
 	) async throws -> [Lexicon.Search.Result] {
@@ -54,7 +56,7 @@ extension Lexicon.Search.Index {
 						query,
 						input: input,
 						document: document,
-						modelID: embeddingModel,
+						modelID: embeddingModel ?? .defaultMLXSearchModel,
 						cacheURL: cacheURL,
 						rebuildEmbeddings: rebuildEmbeddings
 					)
@@ -65,6 +67,8 @@ extension Lexicon.Search.Index {
 						input: input,
 						document: document,
 						modelPath: embeddingModel,
+						modelPreset: embeddingModelPreset,
+						modelManifest: embeddingModelManifest,
 						vocabularyURL: embeddingVocabulary,
 						modelRevision: embeddingModelRevision,
 						cacheURL: cacheURL,
@@ -84,7 +88,7 @@ extension Lexicon.Search.Index {
 					query,
 					input: input,
 					document: document,
-					modelID: embeddingModel,
+					modelID: embeddingModel ?? .defaultMLXSearchModel,
 					cacheURL: cacheURL,
 					rebuildEmbeddings: rebuildEmbeddings
 				)
@@ -98,6 +102,8 @@ extension Lexicon.Search.Index {
 					input: input,
 					document: document,
 					modelPath: embeddingModel,
+					modelPreset: embeddingModelPreset,
+					modelManifest: embeddingModelManifest,
 					vocabularyURL: embeddingVocabulary,
 					modelRevision: embeddingModelRevision,
 					cacheURL: cacheURL,
@@ -140,7 +146,7 @@ extension Lexicon.Search.Index {
 			provider: provider,
 			rebuild: rebuildEmbeddings
 		)
-		let queryVector = try await provider.embed(["search_query: \(query)"]).first
+		let queryVector = try await provider.embedQuery(query)
 		if index.options.scope == .live {
 			return try await index.search(
 				query,
@@ -191,20 +197,25 @@ extension Lexicon.Search.Index {
 		_ query: String,
 		input: URL,
 		document: Lexicon.Document,
-		modelPath: String,
+		modelPath: String?,
+		modelPreset: String?,
+		modelManifest: URL?,
 		vocabularyURL: URL?,
-		modelRevision: String,
+		modelRevision: String?,
 		cacheURL: URL?,
 		rebuildEmbeddings: Bool
-	) async throws -> [Lexicon.SearchResult] {
-		let modelURL = modelPath.onnxModelURL
-		let vocabularyURL = vocabularyURL ?? modelURL
-			.deletingLastPathComponent()
-			.appendingPathComponent("vocab.txt")
-		let provider = try ONNXSearchEmbeddingProvider(
-			model: modelURL,
-			vocabulary: vocabularyURL,
+	) async throws -> [Lexicon.Search.Result] {
+		let selection = try ONNXSearchSelection(
+			modelPath: modelPath,
+			modelPreset: modelPreset,
+			modelManifest: modelManifest,
+			vocabularyURL: vocabularyURL,
 			modelRevision: modelRevision
+		)
+		let provider = try ONNXSearchEmbeddingProvider(
+			model: selection.modelURL,
+			vocabulary: selection.vocabularyURL,
+			configuration: selection.configuration
 		)
 		let index = options.scope == .full ? try await materialized(in: document) : self
 		let cacheURL = try cacheURL ?? index.defaultEmbeddingCacheURL(
@@ -216,7 +227,7 @@ extension Lexicon.Search.Index {
 			provider: provider,
 			rebuild: rebuildEmbeddings
 		)
-		let queryVector = try await provider.embed(["search_query: \(query)"]).first
+		let queryVector = try await provider.embedQuery(query)
 		if index.options.scope == .live {
 			return try await index.search(
 				query,
@@ -236,7 +247,7 @@ extension Lexicon.Search.Index {
 	) throws -> URL {
 		let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
 			?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".cache", isDirectory: true)
-		let model = descriptor.identifier.fileSafeSearchCacheComponent
+		let model = descriptor.identifier.searchCacheFileComponent
 		let name = "\(input.lastPathComponent).\(fingerprint).\(model).embeddings.json"
 		return base
 			.appendingPathComponent("Lexicon", isDirectory: true)
@@ -245,19 +256,79 @@ extension Lexicon.Search.Index {
 	}
 }
 
+#if ONNXSearch
+private struct ONNXSearchSelection {
+	var configuration: ONNXSearchModel
+	var modelURL: URL
+	var vocabularyURL: URL
+
+	init(
+		modelPath: String?,
+		modelPreset: String?,
+		modelManifest: URL?,
+		vocabularyURL: URL?,
+		modelRevision: String?
+	) throws {
+		var configuration = try Self.configuration(
+			modelPreset: modelPreset,
+			modelManifest: modelManifest,
+			modelRevision: modelRevision
+		)
+		if let modelPath {
+			let modelURL = URL(fileURLWithPath: modelPath)
+			if modelPreset == nil, modelManifest == nil {
+				configuration = .init(
+					id: modelURL.onnxSearchModelID,
+					revision: modelRevision ?? "local",
+					dimensions: configuration.dimensions,
+					maxLength: configuration.maxLength
+				)
+			}
+			self.modelURL = modelURL
+			self.vocabularyURL = vocabularyURL ?? modelURL
+				.deletingLastPathComponent()
+				.appendingPathComponent("vocab.txt")
+		} else {
+			if let modelManifest {
+				let directory = modelManifest.deletingLastPathComponent()
+				self.modelURL = directory.appendingPathComponent("model.onnx")
+				self.vocabularyURL = vocabularyURL ?? directory.appendingPathComponent("vocab.txt")
+			} else {
+				let base = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+					.appendingPathComponent(".build", isDirectory: true)
+					.appendingPathComponent("onnx-search", isDirectory: true)
+				self.modelURL = configuration.localModelURL(in: base)
+				self.vocabularyURL = vocabularyURL ?? configuration.localVocabularyURL(in: base)
+			}
+		}
+		self.configuration = configuration
+	}
+
+	private static func configuration(
+		modelPreset: String?,
+		modelManifest: URL?,
+		modelRevision: String?
+	) throws -> ONNXSearchModel {
+		var configuration: ONNXSearchModel
+		if let modelManifest {
+			configuration = try JSONDecoder().decode(
+				ONNXSearchModel.self,
+				from: Data(contentsOf: modelManifest)
+			)
+		} else {
+			let preset = modelPreset ?? ONNXSearchModel.default.id
+			guard let selected = ONNXSearchModel.preset(named: preset) else {
+				throw ValidationError("Unknown ONNX embedding model preset: \(preset)")
+			}
+			configuration = selected
+		}
+		return configuration.withRevision(modelRevision)
+	}
+}
+#endif
+
 private extension String {
 	static let defaultMLXSearchModel = "TaylorAI/bge-micro-v2"
-
-	var onnxModelURL: URL {
-		if self == Self.defaultMLXSearchModel {
-			return URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-				.appendingPathComponent(".build", isDirectory: true)
-				.appendingPathComponent("onnx-search", isDirectory: true)
-				.appendingPathComponent("all-MiniLM-L6-v2", isDirectory: true)
-				.appendingPathComponent("model.onnx")
-		}
-		return URL(fileURLWithPath: self)
-	}
 
 	var fileSafeSearchCacheComponent: String {
 		map { character in
@@ -265,4 +336,31 @@ private extension String {
 		}
 		.joined()
 	}
+
+	var searchCacheFileComponent: String {
+		let safe = fileSafeSearchCacheComponent
+		let prefix = safe.prefix(80)
+		return "\(prefix)-\(fnv1a64Hex)"
+	}
+
+	var fnv1a64Hex: String {
+		var hash: UInt64 = 0xcbf29ce484222325
+		for byte in utf8 {
+			hash ^= UInt64(byte)
+			hash &*= 0x100000001b3
+		}
+		return String(hash, radix: 16)
+	}
 }
+
+#if ONNXSearch
+private extension URL {
+	var onnxSearchModelID: String {
+		let directory = deletingLastPathComponent().lastPathComponent
+		if directory.isEmpty {
+			return deletingPathExtension().lastPathComponent
+		}
+		return directory
+	}
+}
+#endif

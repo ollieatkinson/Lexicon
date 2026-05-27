@@ -124,13 +124,19 @@ struct Search: AsyncParsableCommand {
 	var embeddingProvider = "auto"
 
 	@Option(help: "Embedding model ID for MLX, or model path for ONNX semantic search.")
-	var embeddingModel = "TaylorAI/bge-micro-v2"
+	var embeddingModel: String?
+
+	@Option(help: "ONNX embedding model preset. Defaults to all-MiniLM-L6-v2.")
+	var embeddingModelPreset: String?
+
+	@Option(help: "ONNX embedding model manifest JSON path.")
+	var embeddingModelManifest: URL?
 
 	@Option(help: "Vocabulary path for ONNX semantic search.")
 	var embeddingVocabulary: URL?
 
 	@Option(help: "Model revision used in ONNX embedding cache identity.")
-	var embeddingModelRevision = "c9745ed1d9f207416be6d2e6f8de32d1f16199bf"
+	var embeddingModelRevision: String?
 
 	@Option(help: "Embedding cache path. Defaults to the user cache directory.")
 	var embeddingCache: URL?
@@ -185,6 +191,8 @@ struct Search: AsyncParsableCommand {
 			input: input,
 			embeddingProvider: try SearchEmbeddingProviderSelection(agentArgument: embeddingProvider),
 			embeddingModel: embeddingModel,
+			embeddingModelPreset: embeddingModelPreset,
+			embeddingModelManifest: embeddingModelManifest,
 			embeddingVocabulary: embeddingVocabulary,
 			embeddingModelRevision: embeddingModelRevision,
 			embeddingCache: embeddingCache,
