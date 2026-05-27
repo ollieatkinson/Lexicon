@@ -40,6 +40,41 @@ enum AgentWriter {
 	}
 }
 
+extension Lexicon.Search.Mode {
+
+	init(agentArgument value: String) throws {
+		var mode: Self = []
+		for component in value.split(whereSeparator: { $0 == "," || $0 == "+" }) {
+			switch component.trimmingCharacters(in: .whitespacesAndNewlines) {
+				case "hybrid":
+					mode.formUnion(.hybrid)
+				case "token":
+					mode.formUnion(.token)
+				case "lexical":
+					mode.formUnion(.lexical)
+				case "semantic":
+					mode.formUnion(.semantic)
+				default:
+					throw ValidationError("Unknown search mode '\(value)'. Expected hybrid, token, lexical, semantic, or a comma-separated combination.")
+			}
+		}
+		guard mode.isEmpty == false else {
+			throw ValidationError("Search mode cannot be empty.")
+		}
+		self = mode
+	}
+}
+
+extension Lexicon.Search.Scope {
+
+	init(agentArgument value: String) throws {
+		guard let scope = Self(rawValue: value) else {
+			throw ValidationError("Unknown search scope '\(value)'. Expected own, live, or full.")
+		}
+		self = scope
+	}
+}
+
 extension URL: @retroactive ExpressibleByArgument {
 
 	public init?(argument: String) {

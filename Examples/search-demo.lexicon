@@ -1,0 +1,221 @@
+# Search demo vocabulary for CLI and semantic search examples.
+demo:
+> Commerce demo lexicon with API, UI, analytics, support, fulfillment and campaign language.
+	type:
+		workflow:
+		action:
+			request:
+			response:
+		component:
+			button:
+			banner:
+			badge:
+			card:
+			label:
+		state:
+			pending:
+			completed:
+			failed:
+		money:
+			amount:
+			currency:
+		channel:
+			email:
+			push:
+	api:
+		order:
+			submit:
+			+ demo.type.action.request
+			> Customer submits an order from the checkout flow.
+			status:
+			+ demo.type.state.pending
+			> Current order progress for shoppers and support agents.
+			cancel:
+			+ demo.type.action.request
+			> Shopper cancels an order before warehouse packing starts.
+		payment:
+			authorize:
+			+ demo.type.action.request
+			> Payment authorization asks the card issuer to reserve funds.
+			capture:
+			+ demo.type.action.request
+			> Payment capture collects money after the order is accepted.
+			decline:
+			+ demo.type.state.failed
+			> Payment declined because the card issuer rejected the transaction.
+		refund:
+			request:
+			+ demo.type.action.request
+			> Customer asks for money back after a purchase.
+			status:
+			+ demo.type.state.pending
+			> Refund request status displayed to support agents.
+		customer:
+			profile:
+			+ demo.type.workflow
+			> Customer profile stores account identity and preferences.
+			loyalty:
+			+ demo.type.workflow
+			> Loyalty account tracks points, rewards and membership tier.
+		inventory:
+			stock:
+			+ demo.type.state.pending
+			> Stock availability tells shoppers when an item is nearly sold out.
+			reservation:
+			+ demo.type.action.request
+			> Inventory reservation holds units while checkout completes.
+	ui:
+		checkout:
+			button:
+				primary:
+				+ demo.type.component.button
+				+ demo.api.order.submit
+				> Primary checkout button that submits the order.
+			error:
+				payment_declined:
+				+ demo.type.component.label
+				+ demo.api.payment.decline
+				> Error copy shown when payment fails after card rejection.
+			banner:
+				free_shipping:
+				+ demo.type.component.banner
+				> Free shipping banner displayed during checkout.
+		product:
+			card:
+			+ demo.type.component.card
+				title:
+				+ demo.type.component.label
+				price:
+					sale:
+					+ demo.type.money.amount
+					> Sale price label shown on promotional product cards.
+				badge:
+					low_stock:
+					+ demo.type.component.badge
+					+ demo.api.inventory.stock
+					> Low stock badge warns shoppers when quantity is limited.
+		account:
+			settings:
+				notifications:
+				+ demo.type.channel.email
+				+ demo.type.channel.push
+				> Notification settings control email and push messages.
+		support:
+			case:
+				form:
+				+ demo.type.component.card
+				> Support case form gathers billing, delivery and refund details.
+	analytics:
+		event:
+			checkout_started:
+			+ demo.type.workflow
+			> Analytics event fired when checkout begins.
+			purchase_completed:
+			+ demo.type.state.completed
+			> Analytics event fired when a buyer completes a purchase.
+			refund_requested:
+			+ demo.api.refund.request
+			> Analytics event recorded when a refund is requested.
+			search_performed:
+			+ demo.type.workflow
+			> Analytics event records a shopper search query.
+			delivery_delayed:
+			+ demo.fulfillment.delivery.delay
+			> Analytics event emitted after carrier delay.
+	support:
+		ticket:
+			create:
+			+ demo.type.action.request
+			> Create a support ticket from customer contact.
+			assign:
+			+ demo.type.action.request
+			> Assign a support ticket to the right agent queue.
+			escalate:
+			+ demo.type.action.request
+			> Escalate urgent billing or payment issues to specialists.
+			status:
+			+ demo.type.state.pending
+			? "open"
+			> Open ticket status visible in the support dashboard.
+		knowledge_base:
+			article:
+			+ demo.type.component.card
+			> Help article answers common checkout and delivery questions.
+			search:
+			+ demo.type.workflow
+			> Search the help center for support articles.
+		agent:
+			queue:
+				billing:
+				+ demo.type.workflow
+				> Billing queue receives payment, refund and invoice cases.
+	fulfillment:
+		warehouse:
+			pick:
+			+ demo.type.action.request
+			> Warehouse pick task selects items from inventory.
+			pack:
+			+ demo.type.action.request
+			> Warehouse pack task prepares the parcel.
+			ship:
+			+ demo.type.action.request
+			> Warehouse ship task hands the parcel to the carrier.
+		delivery:
+			estimate:
+			+ demo.type.state.pending
+			> Delivery estimate predicts arrival date for an order.
+			delay:
+			+ demo.type.state.failed
+			> Late delivery notification shown after carrier delay.
+			tracking:
+			+ demo.type.workflow
+			> Tracking page follows the package from carrier pickup to delivery.
+	feature:
+		checkout:
+			express:
+			+ demo.type.workflow
+			> Express checkout lets returning customers buy faster.
+			guest:
+			+ demo.type.workflow
+			> Guest checkout allows purchase without account creation.
+			save_card:
+			+ demo.type.action.request
+			> Save payment method for a future checkout.
+		recommendation:
+			personalized:
+			+ demo.type.workflow
+			> Personalized recommendations use customer behavior and purchase history.
+			trending:
+			+ demo.type.workflow
+			> Trending recommendations promote popular products.
+			seasonal:
+			+ demo.type.workflow
+			> Seasonal recommendations promote products for holidays and weather.
+		campaign:
+			black_friday:
+			+ demo.type.workflow
+			> Black Friday campaign discounts seasonal product collections.
+			free_shipping:
+			+ demo.type.workflow
+			> Free shipping campaign removes delivery cost above a basket threshold.
+			winback:
+			+ demo.type.workflow
+			> Winback campaign emails lapsed customers with a returning-shopper offer.
+	content:
+		product:
+			title:
+			+ demo.type.component.label
+			> Product title appears on product cards and detail pages.
+			description:
+			+ demo.type.component.label
+			> Product description explains benefits, fit and materials.
+			hero_image:
+			+ demo.type.component.card
+			> Hero image shows the product in context.
+		campaign:
+			email:
+			+ demo.type.channel.email
+			> Campaign email copy announces discounts and shipping offers.
+			push:
+			+ demo.type.channel.push
+			> Campaign push notification brings shoppers back to the app.

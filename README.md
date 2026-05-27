@@ -320,11 +320,24 @@ swift run lexicon validate commerce.lexicon
 swift run lexicon lint commerce.lexicon
 swift run lexicon inspect commerce.lexicon commerce.ui.product.card
 swift run lexicon tree commerce.lexicon commerce --depth 4 --inherited --metadata
+swift run lexicon search commerce.lexicon order submit --mode hybrid --limit 10
 swift run lexicon refs commerce.lexicon commerce.ui.product.card.buy.enabled
 swift run lexicon excerpt commerce.lexicon commerce.ui.product.card
 swift run lexicon format commerce.lexicon --write
 swift run lexicon diff before.lexicon after.lexicon
 ```
+
+Search supports lexical phrase matching, token matching over IDs and metadata, and semantic ranking. The default `hybrid` mode is the normal entry point; use `--mode token`, `--mode lexical` or `--mode semantic` when you need a narrower lens. `--scope own` searches the declared graph, `--scope live` expands likely hits through resolved lemma context, and `--scope full` materializes the resolved search space with recursion detection. Use `--depth`, `--candidates`, and `--budget` to bound live and full traversal. On Apple platforms the base build can use NaturalLanguage sentence embeddings. To enable the MLX embedder backend, build the CLI with the `MLXSearch` package trait:
+
+```sh
+swift run --traits MLXSearch lexicon search commerce.lexicon "order submit" \
+	--embedding-provider mlx \
+	--embedding-model TaylorAI/bge-micro-v2
+```
+
+MLX document embeddings are cached under the user cache directory by default. The first semantic search builds the cache and logs indexing progress to stderr; pass `--embedding-cache` or `--rebuild-embeddings` to control that cache.
+
+See [`docs/search.md`](docs/search.md) for the search mode guide and demo lexicon examples.
 
 Editing commands print the updated document to stdout by default. Pass `-o` or `--output` to write another file.
 

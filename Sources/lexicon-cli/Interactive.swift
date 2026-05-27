@@ -77,6 +77,8 @@ struct InteractiveSession {
 					try await handleTree(arguments)
 				case "tree":
 					try await handleTree(rest)
+				case "search":
+					try await handleSearch(rest)
 				case "refs":
 					let id = try rest.required(0, named: "id")
 					try emit(RefsOutput(document: try composedDocument(), id: id))
@@ -151,6 +153,89 @@ struct InteractiveSession {
 			try? emit(InteractiveError(message: "\(error)"))
 			return true
 		}
+	}
+
+	private mutating func handleSearch(_ arguments: [String]) async throws {
+		var limit = 20
+		var root: String?
+		var mode = Lexicon.Search.Mode.hybrid
+		var scope = Lexicon.Search.Scope.own
+		var semanticThreshold = 0.42
+		var namesOnly = false
+		var depth = Lexicon.Search.Bounds.defaultDepth
+		var candidates = Lexicon.Search.Bounds.defaultCandidates
+		var budget = Lexicon.Search.Bounds.defaultBudget
+		var queryParts: [String] = []
+		var iterator = arguments.makeIterator()
+		while let argument = iterator.next() {
+			switch argument {
+				case "--limit":
+					guard let value = iterator.next(), let parsed = Int(value) else {
+						throw ValidationError("--limit requires an integer.")
+					}
+					limit = parsed
+				case "--root":
+					root = try iterator.next().try()
+				case "--mode":
+					mode = try Lexicon.Search.Mode(agentArgument: iterator.next().try())
+				case "--scope":
+					scope = try Lexicon.Search.Scope(agentArgument: iterator.next().try())
+				case "--semantic-threshold":
+					guard let value = iterator.next(), let parsed = Double(value) else {
+						throw ValidationError("--semantic-threshold requires a number.")
+					}
+					semanticThreshold = parsed
+				case "--names-only":
+					namesOnly = true
+				case "--depth", "--full-depth":
+					guard let value = iterator.next(), let parsed = Int(value) else {
+						throw ValidationError("--depth requires an integer.")
+					}
+					depth = parsed
+				case "--candidates", "--full-candidates":
+					guard let value = iterator.next(), let parsed = Int(value) else {
+						throw ValidationError("--candidates requires an integer.")
+					}
+					candidates = parsed
+				case "--budget", "--full-expansions":
+					guard let value = iterator.next(), let parsed = Int(value) else {
+						throw ValidationError("--budget requires an integer.")
+					}
+					budget = parsed
+				default:
+					queryParts.append(argument)
+			}
+		}
+
+		let query = queryParts.joined(separator: " ")
+		guard query.trimmingCharacters(in: .whitespacesAndNewlines).isNotEmpty else {
+			throw ValidationError("Search requires a query.")
+		}
+		let resolved = try composedDocument()
+		if let root {
+			_ = try resolved.node(root)
+		}
+		let options = Lexicon.Search.Options(
+			limit: limit,
+			root: root,
+			mode: mode,
+			scope: scope,
+			includeReferences: !namesOnly,
+			includeMetadata: !namesOnly,
+			includeDefaults: !namesOnly,
+			includeConnections: !namesOnly,
+			semanticThreshold: semanticThreshold,
+			bounds: .init(
+				depth: depth,
+				candidates: candidates,
+				budget: budget
+			)
+		)
+		let index = Lexicon.Search.Index(document: resolved, options: options)
+		let results = scope == .own
+			? index.search(query)
+			: try await index.search(query, in: resolved)
+		try emit(SearchOutput(query: query, results: results))
 	}
 
 	private mutating func handleTree(_ arguments: [String]) async throws {
@@ -248,6 +333,8 @@ enum InteractiveText {
 				return help.commands.joined(separator: "\n")
 			case let tree as TreeOutput:
 				return render(tree.root)
+			case let search as SearchOutput:
+				return render(search)
 			case let refs as RefsOutput:
 				return render(refs)
 			case let inspection as NodeInspection:
@@ -272,5 +359,17 @@ enum InteractiveText {
 		let outgoing = refs.outgoing.map { "  \($0.kind) \($0.reference) -> \($0.resolved ?? "unresolved")" }
 		let incoming = refs.incoming.map { "  \($0.kind) \($0.path) -> \($0.reference)" }
 		return (["Outgoing:"] + outgoing + ["Incoming:"] + incoming).joined(separator: "\n")
+	}
+
+	private static func render(_ search: SearchOutput) -> String {
+		search.results.map { result in
+			var seenFields: Set<String> = []
+			let score = String(format: "%.3f", result.score)
+			let fields = result.matches
+				.map(\.field.rawValue)
+				.filter { seenFields.insert($0).inserted }
+				.joined(separator: ",")
+			return "\(result.id)\t\(score)\t\(fields)"
+		}.joined(separator: "\n")
 	}
 }

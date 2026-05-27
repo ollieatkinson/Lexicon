@@ -14,6 +14,7 @@ struct LexiconCommand: AsyncParsableCommand {
 			Lint.self,
 			Inspect.self,
 			Tree.self,
+			Search.self,
 			Refs.self,
 			Excerpt.self,
 			Format.self,
@@ -32,4 +33,3 @@ struct LexiconCommand: AsyncParsableCommand {
 		]
 	)
 }
-

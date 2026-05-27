@@ -27,6 +27,38 @@ final class LexiconCLICommandTests: Hopes {
 		hope.true(refs.contains("\"kind\" : \"type\""))
 		hope.true(refs.contains("\"resolved\" : \"root.type\""))
 
+		let search = try Self.lexicon(
+			"search",
+			source.path,
+			"root.type",
+			"item",
+			"--mode",
+			"token",
+			"--limit",
+			"5",
+			"--embedding-provider",
+			"none"
+		).stdout
+		hope.true(search.contains("\"query\" : \"root.type item\""))
+		hope.true(search.contains("\"id\" : \"root.item\""))
+		hope.true(search.contains("\"field\" : \"type\""))
+
+		let fullSearch = try Self.lexicon(
+			"search",
+			source.path,
+			"inherited",
+			"--mode",
+			"token",
+			"--scope",
+			"full",
+			"--depth",
+			"2",
+			"--embedding-provider",
+			"none"
+		).stdout
+		hope.true(fullSearch.contains("\"id\" : \"root.item\""))
+		hope.true(fullSearch.contains("\"field\" : \"contextChild\""))
+
 		let format = try Self.lexicon("format", source.path, "--check").stdout
 		hope.true(format.contains("\"changed\" : true"))
 
@@ -64,9 +96,10 @@ final class LexiconCLICommandTests: Hopes {
 			"interactive",
 			source.path,
 			"--json",
-			stdin: "inspect root.item\nquit\n"
+			stdin: "search root.type item --mode token\ninspect root.item\nquit\n"
 		)
 		hope.true(json.stdout.contains("\"event\":\"ready\""))
+		hope.true(json.stdout.contains("\"query\":\"root.type item\""))
 		hope.true(json.stdout.contains("\"id\":\"root.item\""))
 	}
 
@@ -167,6 +200,7 @@ private extension LexiconCLICommandTests {
 	static let fixture = """
 	root:
 		type:
+			inherited:
 		item:
 		+ root.type
 		alias:
