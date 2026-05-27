@@ -12,6 +12,7 @@ let package = Package(
 		.library(name: "_Collections", targets: ["_Collections"]),
 		.library(name: "_JSON", targets: ["_JSON"]),
 		.library(name: "Lexicon", targets: ["Lexicon"]),
+		.library(name: "LexiconSearchMLX", targets: ["LexiconSearchMLX"]),
 		.library(name: "SwiftLexicon", targets: ["SwiftLexicon"]),
 		.library(name: "LexiconGenerators", targets: ["LexiconGenerators"]),
 		.executable(name: "lexicon-generate", targets: ["lexicon-generate"]),
@@ -109,8 +110,15 @@ let package = Package(
 			name: "lexicon-cli",
 			dependencies: [
 				"Lexicon",
+				.target(name: "LexiconSearchMLX", condition: .when(traits: ["MLXSearch"])),
 				"LexiconGenerators",
 				.product(name: "ArgumentParser", package: "swift-argument-parser"),
+			]
+		),
+		.target(
+			name: "LexiconSearchMLX",
+			dependencies: [
+				"Lexicon",
 				.product(name: "MLX", package: "mlx-swift", condition: .when(traits: ["MLXSearch"])),
 				.product(name: "MLXEmbedders", package: "mlx-swift-lm", condition: .when(traits: ["MLXSearch"])),
 				.product(name: "MLXLMCommon", package: "mlx-swift-lm", condition: .when(traits: ["MLXSearch"])),

@@ -60,7 +60,7 @@ public struct SearchEmbeddingDescriptor: Hashable, Sendable, Codable {
 	public var model: String
 	public var modelRevision: String?
 	public var tokenizer: String
-	public var dimensions: Int
+	public var dimensions: Int?
 	public var normalized: Bool
 	public var pooling: String
 }
@@ -145,7 +145,7 @@ The spike only needs to prove one model, one tokenizer, CPU execution, and deter
 
 ### 3. Extend cache keys
 
-The current embedding cache is keyed by model string plus document fingerprint. For portable semantic search, the cache identity should include:
+The embedding cache should be keyed by a provider descriptor plus document fingerprint. For portable semantic search, that descriptor should include:
 
 - provider name and runtime version
 - model id and revision/hash
@@ -179,10 +179,11 @@ Android should come after Linux. First prove the provider can cross-build with t
 
 ## Recommendation
 
-Keep the current PR's MLX path as an Apple semantic backend, but document it as one provider, not the search architecture. The next implementation step should be:
+Keep MLX as an Apple semantic backend, but treat it as one provider, not the search architecture. This branch already exposes the embedding provider abstraction from `Lexicon` and moves the MLX implementation into `LexiconSearchMLX`.
 
-1. Make `SearchEmbeddingProvider` public enough for external provider targets.
-2. Move MLX-specific code out of the CLI file into a provider target or provider module.
-3. Add `docs/search-platforms.md` as the contract for Linux/Android/Windows support.
-4. Build a small `LexiconSearchONNX` PoC against one known ONNX sentence-embedding model.
-5. Only after the PoC is proven, decide whether the CLI should use traits, separate executable products, or dynamic provider discovery for heavyweight runtimes.
+The next implementation step should be:
+
+1. Build a small `LexiconSearchONNX` PoC against one known ONNX sentence-embedding model.
+2. Prove the provider on Linux first with a downloaded ONNX Runtime CPU package.
+3. Prove Android linking next by unpacking the ONNX Runtime AAR for the matching ABI.
+4. Decide whether the CLI should keep traits, expose separate executable products, or support dynamic provider discovery for heavyweight runtimes.

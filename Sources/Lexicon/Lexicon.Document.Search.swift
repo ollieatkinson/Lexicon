@@ -93,27 +93,67 @@ public extension Lexicon {
 		}
 	}
 
+	struct SearchEmbeddingDescriptor: Codable, Hashable, Sendable {
+		public var provider: String
+		public var model: String
+		public var modelRevision: String?
+		public var tokenizer: String
+		public var dimensions: Int?
+		public var normalized: Bool
+		public var pooling: String
+
+		public init(
+			provider: String,
+			model: String,
+			modelRevision: String? = nil,
+			tokenizer: String,
+			dimensions: Int? = nil,
+			normalized: Bool,
+			pooling: String
+		) {
+			self.provider = provider
+			self.model = model
+			self.modelRevision = modelRevision
+			self.tokenizer = tokenizer
+			self.dimensions = dimensions
+			self.normalized = normalized
+			self.pooling = pooling
+		}
+
+		public var identifier: String {
+			[
+				provider,
+				model,
+				modelRevision ?? "default",
+				tokenizer,
+				dimensions.map(String.init) ?? "unknown-dimensions",
+				normalized ? "normalized" : "raw",
+				pooling,
+			].joined(separator: "/")
+		}
+	}
+
 	struct SearchEmbeddingCache: Codable, Hashable, Sendable {
 		public var version: Int
-		public var model: String
+		public var descriptor: SearchEmbeddingDescriptor
 		public var fingerprint: String
 		public var vectors: [Lemma.ID: [Double]]
 
 		public init(
-			version: Int = 1,
-			model: String,
+			version: Int = 2,
+			descriptor: SearchEmbeddingDescriptor,
 			fingerprint: String,
 			vectors: [Lemma.ID: [Double]]
 		) {
 			self.version = version
-			self.model = model
+			self.descriptor = descriptor
 			self.fingerprint = fingerprint
 			self.vectors = vectors
 		}
 	}
 
 	protocol SearchEmbeddingProvider: Sendable {
-		var identifier: String { get }
+		var descriptor: SearchEmbeddingDescriptor { get }
 		func embed(_ texts: [String]) async throws -> [[Double]]
 	}
 
@@ -198,6 +238,13 @@ public extension Lexicon.Document {
 	func search<Terms>(_ terms: Terms, options: Lexicon.SearchOptions = .init()) -> [Lexicon.SearchResult]
 	where Terms: Collection, Terms.Element == String {
 		search(terms.joined(separator: " "), options: options)
+	}
+}
+
+public extension Lexicon.SearchEmbeddingProvider {
+
+	var identifier: String {
+		descriptor.identifier
 	}
 }
 
@@ -349,7 +396,7 @@ public extension Lexicon {
 			let entries = entries.sorted { $0.id < $1.id }
 			let vectors = try await embeddingVectors(for: entries, using: provider)
 			return .init(
-				model: provider.identifier,
+				descriptor: provider.descriptor,
 				fingerprint: fingerprint,
 				vectors: vectors
 			)

@@ -3,11 +3,7 @@ import Foundation
 import Lexicon
 
 #if MLXSearch
-import MLX
-import MLXEmbedders
-import MLXEmbeddersHFAPI
-import MLXLMCommon
-import Tokenizers
+import LexiconSearchMLX
 #endif
 
 enum SearchEmbeddingProviderSelection: String {
@@ -101,7 +97,10 @@ extension Lexicon.SearchIndex {
 	) async throws -> [Lexicon.SearchResult] {
 		let provider = try await MLXSearchEmbeddingProvider(modelID: modelID)
 		let index = options.scope == .full ? try await materialized(in: document) : self
-		let cacheURL = try cacheURL ?? index.defaultEmbeddingCacheURL(input: input, modelID: modelID)
+		let cacheURL = try cacheURL ?? index.defaultEmbeddingCacheURL(
+			input: input,
+			descriptor: provider.descriptor
+		)
 		let preparation = try await index.embeddingCache(
 			at: cacheURL,
 			provider: provider,
@@ -122,7 +121,7 @@ extension Lexicon.SearchIndex {
 
 	private func embeddingCache(
 		at url: URL,
-		provider: MLXSearchEmbeddingProvider,
+		provider: some Lexicon.SearchEmbeddingProvider,
 		rebuild: Bool
 	) async throws -> SearchEmbeddingCachePreparation {
 		if !rebuild,
@@ -130,14 +129,14 @@ extension Lexicon.SearchIndex {
 			Lexicon.SearchEmbeddingCache.self,
 			from: Data(contentsOf: url)
 		   ),
-		   cache.model == provider.identifier,
+		   cache.descriptor == provider.descriptor,
 		   cache.fingerprint == fingerprint
 		{
 			return .init(cache: cache, url: url, reused: true)
 		}
 
 		FileHandle.standardError.write(Data(
-			"indexing search embeddings: \(entries.count) entries, model \(provider.identifier)\n".utf8
+			"indexing search embeddings: \(entries.count) entries, model \(provider.descriptor.model)\n".utf8
 		))
 		let cache = try await embeddingCache(using: provider)
 		try FileManager.default.createDirectory(
@@ -151,12 +150,13 @@ extension Lexicon.SearchIndex {
 	}
 	#endif
 
-	private func defaultEmbeddingCacheURL(input: URL, modelID: String) throws -> URL {
+	private func defaultEmbeddingCacheURL(
+		input: URL,
+		descriptor: Lexicon.SearchEmbeddingDescriptor
+	) throws -> URL {
 		let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
 			?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".cache", isDirectory: true)
-		let model = modelID
-			.replacingOccurrences(of: "/", with: "-")
-			.replacingOccurrences(of: ":", with: "-")
+		let model = descriptor.identifier.fileSafeSearchCacheComponent
 		let name = "\(input.lastPathComponent).\(fingerprint).\(model).embeddings.json"
 		return base
 			.appendingPathComponent("Lexicon", isDirectory: true)
@@ -165,111 +165,12 @@ extension Lexicon.SearchIndex {
 	}
 }
 
-#if MLXSearch
-struct MLXSearchEmbeddingProvider: Lexicon.SearchEmbeddingProvider {
-	var identifier: String
-	private var container: EmbedderModelContainer
+private extension String {
 
-	init(modelID: String) async throws {
-		self.identifier = modelID
-		let configuration = ModelConfiguration(id: modelID)
-		self.container = try await EmbedderModelFactory.shared.loadContainer(
-			from: HubClient.default,
-			using: LexiconTokenizersLoader(),
-			configuration: configuration
-		)
-	}
-
-	func embed(_ texts: [String]) async throws -> [[Double]] {
-		await container.perform { context in
-			let inputs = texts.map {
-				context.tokenizer.encode(text: $0, addSpecialTokens: true)
-			}
-			let maxLength = inputs.reduce(into: 16) { length, input in
-				length = max(length, input.count)
-			}
-			let padded = stacked(inputs.map { input in
-				MLXArray(input + Array(
-					repeating: context.tokenizer.eosTokenId ?? 0,
-					count: maxLength - input.count
-				))
-			})
-			let mask = padded .!= (context.tokenizer.eosTokenId ?? 0)
-			let tokenTypes = MLXArray.zeros(like: padded)
-			let embeddings = context.pooling(
-				context.model(
-					padded,
-					positionIds: nil,
-					tokenTypeIds: tokenTypes,
-					attentionMask: mask
-				),
-				normalize: true,
-				applyLayerNorm: true
-			)
-			embeddings.eval()
-			return embeddings.map { row in
-				row.asArray(Float.self).map(Double.init)
-			}
+	var fileSafeSearchCacheComponent: String {
+		map { character in
+			character.isLetter || character.isNumber ? String(character) : "-"
 		}
+		.joined()
 	}
 }
-
-private struct LexiconTokenizersLoader: TokenizerLoader {
-	func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
-		let tokenizer = try await AutoTokenizer.from(directory: directory)
-		return LexiconTokenizerBridge(tokenizer)
-	}
-}
-
-private struct LexiconTokenizerBridge: MLXLMCommon.Tokenizer {
-	private let upstream: any Tokenizers.Tokenizer
-
-	init(_ upstream: any Tokenizers.Tokenizer) {
-		self.upstream = upstream
-	}
-
-	func encode(text: String, addSpecialTokens: Bool) -> [Int] {
-		(try? upstream.encode(text: text, addSpecialTokens: addSpecialTokens)) ?? []
-	}
-
-	func decode(tokenIds: [Int], skipSpecialTokens: Bool) -> String {
-		(try? upstream.decode(tokenIds: tokenIds, skipSpecialTokens: skipSpecialTokens)) ?? ""
-	}
-
-	func convertTokenToId(_ token: String) -> Int? {
-		upstream.convertTokenToId(token)
-	}
-
-	func convertIdToToken(_ id: Int) -> String? {
-		upstream.convertIdToToken(id)
-	}
-
-	var bosToken: String? {
-		upstream.bosToken
-	}
-
-	var eosToken: String? {
-		upstream.eosToken
-	}
-
-	var unknownToken: String? {
-		upstream.unknownToken
-	}
-
-	func applyChatTemplate(
-		messages: [[String: any Sendable]],
-		tools: [[String: any Sendable]]?,
-		additionalContext: [String: any Sendable]?
-	) throws -> [Int] {
-		do {
-			return try upstream.applyChatTemplate(
-				messages: messages,
-				tools: tools,
-				additionalContext: additionalContext
-			)
-		} catch Tokenizers.TokenizerError.missingChatTemplate {
-			throw MLXLMCommon.TokenizerError.missingChatTemplate
-		}
-	}
-}
-#endif

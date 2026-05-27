@@ -95,7 +95,8 @@ final class LexiconDocumentSearchTests: Hopes {
 		let expectedBatches = stride(from: 0, to: index.entries.count, by: 32).map {
 			min(32, index.entries.count - $0)
 		}
-		hope(cache.model) == "test-embedding-provider"
+		hope(cache.descriptor.provider) == "test"
+		hope(cache.descriptor.model) == "embedding-provider"
 		hope(cache.vectors.count) == index.entries.count
 		let sizes = await recorder.sizes
 		hope(sizes) == expectedBatches
@@ -193,7 +194,16 @@ private actor EmbeddingBatchRecorder {
 
 private struct RecordingEmbeddingProvider: Lexicon.SearchEmbeddingProvider {
 	var recorder: EmbeddingBatchRecorder
-	var identifier: String { "test-embedding-provider" }
+	var descriptor: Lexicon.SearchEmbeddingDescriptor {
+		.init(
+			provider: "test",
+			model: "embedding-provider",
+			tokenizer: "count",
+			dimensions: 1,
+			normalized: false,
+			pooling: "length"
+		)
+	}
 
 	func embed(_ texts: [String]) async throws -> [[Double]] {
 		await recorder.record(texts.count)
