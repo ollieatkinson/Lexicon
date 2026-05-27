@@ -47,6 +47,33 @@ struct LexiconDocumentSearchTests {
 		#expect(results.allSatisfy { $0.id.hasPrefix("root.downloads") })
 	}
 
+	#if canImport(NaturalLanguage)
+	@Test
+	func test_repeated_hybrid_searches_on_one_index_are_stable() async throws {
+		let document = try Self.searchDemoFixture()
+		let index = Lexicon.Search.Index(document: document, options: .init(mode: .hybrid))
+		let queries = [
+			"submit order",
+			"demo ui product card badge low stock",
+			"card issuer rejected the transaction",
+		]
+		let expected = queries.map { index.search($0).map(\.id) }
+
+		await withTaskGroup(of: (Int, [String]).self) { group in
+			for iteration in 0..<24 {
+				group.addTask {
+					let queryIndex = iteration % queries.count
+					return (queryIndex, index.search(queries[queryIndex]).map(\.id))
+				}
+			}
+
+			for await (queryIndex, ids) in group {
+				#expect(ids == expected[queryIndex])
+			}
+		}
+	}
+	#endif
+
 	@Test
 	func test_search_mode_can_compose_scoring_lenses() throws {
 		let document = try Self.fixture()

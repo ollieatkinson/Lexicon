@@ -4,6 +4,7 @@
 
 import Foundation
 import Algorithms
+import Synchronization
 #if canImport(NaturalLanguage)
 import NaturalLanguage
 #endif
@@ -325,6 +326,7 @@ public extension Lexicon.Search {
 	struct Index: Sendable {
 		public var entries: [Entry]
 		public var options: Options
+		private let semanticEmbeddingCache: SemanticEmbeddingVectorCache?
 		public var fingerprint: String {
 			var hash = StableHash()
 			for entry in entries.sorted(by: { $0.id < $1.id }) {
@@ -337,11 +339,13 @@ public extension Lexicon.Search {
 		public init(document: Lexicon.Document, options: Options = .init()) {
 			self.options = options
 			self.entries = document.searchEntries(options: options)
+			self.semanticEmbeddingCache = options.mode.usesSemanticSearch ? .init() : nil
 		}
 
 		public init(entries: [Entry], options: Options = .init()) {
 			self.options = options
 			self.entries = entries
+			self.semanticEmbeddingCache = options.mode.usesSemanticSearch ? .init() : nil
 		}
 
 		public func search(
@@ -359,7 +363,7 @@ public extension Lexicon.Search {
 				: nil)
 			let results = entries.compactMap { entry in
 				let entryVector = embeddingCache?.vectors[entry.id]
-					?? (queryVector?.isEmpty == false ? SemanticEmbedding.vector(for: entry.embeddingText) : nil)
+					?? semanticVector(for: entry, queryVector: queryVector)
 				return entry.result(
 					for: query,
 					queryVector: queryVector,
@@ -552,7 +556,7 @@ public extension Lexicon.Search {
 			let queryVector = queryVector ?? self.queryVector(for: query)
 			let contextResults = contextEntries.compactMap { entry in
 				let entryVector = contextVectors[entry.id]
-					?? (queryVector?.isEmpty == false ? SemanticEmbedding.vector(for: entry.embeddingText) : nil)
+					?? semanticVector(for: entry, queryVector: queryVector)
 				return entry.result(
 					for: query,
 					queryVector: queryVector,
@@ -586,6 +590,13 @@ public extension Lexicon.Search {
 
 		private func queryVector(for query: SearchQuery) -> [Double]? {
 			options.mode.usesSemanticSearch ? SemanticEmbedding.vector(for: query.embeddingText) : nil
+		}
+
+		private func semanticVector(for entry: Entry, queryVector: [Double]?) -> [Double]? {
+			guard queryVector?.isEmpty == false else {
+				return nil
+			}
+			return semanticEmbeddingCache?.vector(for: entry) ?? SemanticEmbedding.vector(for: entry.embeddingText)
 		}
 
 		private func embeddingVectors<Provider: EmbeddingProvider>(
@@ -775,6 +786,44 @@ public extension Lexicon.Search.Entry {
 			.map(\.normalizedText)
 			.filter(\.isNotEmpty)
 			.joined(separator: " ")
+	}
+}
+
+private final class SemanticEmbeddingVectorCache: Sendable {
+
+	private struct CachedVector: Sendable {
+		var text: String
+		var vector: [Double]?
+	}
+
+	private struct State: Sendable {
+		var vectors: [Lemma.ID: CachedVector] = [:]
+	}
+
+	private let state = Mutex(State())
+
+	func vector(for entry: Lexicon.Search.Entry) -> [Double]? {
+		let text = entry.embeddingText
+		if let cached = cachedVector(for: entry.id, text: text) {
+			return cached.vector
+		}
+
+		let vector = SemanticEmbedding.vector(for: text)
+		cache(vector, for: entry.id, text: text)
+		return vector
+	}
+
+	private func cachedVector(for id: Lemma.ID, text: String) -> CachedVector? {
+		guard let cached = state.withLock({ $0.vectors[id] }), cached.text == text else {
+			return nil
+		}
+		return cached
+	}
+
+	private func cache(_ vector: [Double]?, for id: Lemma.ID, text: String) {
+		state.withLock {
+			$0.vectors[id] = .init(text: text, vector: vector)
+		}
 	}
 }
 
@@ -1202,18 +1251,33 @@ private enum SearchTokenizer {
 
 private enum SemanticEmbedding {
 
+	#if canImport(NaturalLanguage)
+	private static let sentenceEmbedding = NaturalLanguageSentenceEmbedding()
+	#endif
+
 	static func vector(for text: String) -> [Double]? {
 		let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
 		guard text.isNotEmpty else {
 			return nil
 		}
 		#if canImport(NaturalLanguage)
-		return NLEmbedding.sentenceEmbedding(for: .english)?.vector(for: text)
+		return sentenceEmbedding.vector(for: text)
 		#else
 		return nil
 		#endif
 	}
 }
+
+#if canImport(NaturalLanguage)
+private final class NaturalLanguageSentenceEmbedding: Sendable {
+
+	private let embedding = Mutex(NLEmbedding.sentenceEmbedding(for: .english))
+
+	func vector(for text: String) -> [Double]? {
+		embedding.withLock { $0?.vector(for: text) }
+	}
+}
+#endif
 
 private extension Lexicon.Search.Mode {
 
