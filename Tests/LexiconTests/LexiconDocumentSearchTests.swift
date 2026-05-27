@@ -116,6 +116,47 @@ final class LexiconDocumentSearchTests: Hopes {
 		hope(sizes) == expectedBatches
 	}
 
+	func test_provider_backed_semantic_search_embeds_query_for_live_and_full_scope() async throws {
+		let document = try Self.providerBackedSemanticFixture()
+		let provider = KeywordEmbeddingProvider()
+
+		for scope in [Lexicon.Search.Scope.live, .full] {
+			let index = Lexicon.Search.Index(
+				document: document,
+				options: .init(
+					limit: 1,
+					mode: .semantic,
+					scope: scope,
+					semanticThreshold: 0.9
+				)
+			)
+
+			let results = try await index.search(
+				"provider query",
+				in: document,
+				contextEmbeddingProvider: provider
+			)
+
+			hope(results.first?.id) == "root.target"
+			hope.true((results.first?.scores.semantic ?? 0) > 0.99)
+		}
+	}
+
+	func test_embedding_provider_vector_count_mismatch_throws() async throws {
+		let document = try Self.providerBackedSemanticFixture()
+		let index = Lexicon.Search.Index(document: document, options: .init(mode: .semantic))
+		let provider = ShortEmbeddingProvider()
+		var message: String?
+
+		do {
+			_ = try await index.embeddingCache(using: provider)
+		} catch {
+			message = "\(error)"
+		}
+
+		hope.true(message?.contains("Embedding provider returned") ?? false)
+	}
+
 	func test_embedding_descriptor_identifier_is_derived_from_current_fields() throws {
 		var descriptor = Lexicon.Search.EmbeddingDescriptor(
 			provider: "test",
@@ -207,6 +248,16 @@ private extension LexiconDocumentSearchTests {
 			""").decodeDocument()
 	}
 
+	static func providerBackedSemanticFixture() throws -> Lexicon.Document {
+		try TaskPaper("""
+			root:
+				target:
+				> Semantic provider destination.
+				other:
+				> Unrelated document.
+			""").decodeDocument()
+	}
+
 	static func searchDemoFixture() throws -> Lexicon.Document {
 		let url = packageRoot().appendingPathComponent("Examples/search-demo.lexicon")
 		return try TaskPaper(Data(contentsOf: url)).decodeDocument()
@@ -248,5 +299,46 @@ private struct RecordingEmbeddingProvider: Lexicon.Search.EmbeddingProvider {
 	func embed(_ texts: [String]) async throws -> [[Double]] {
 		await recorder.record(texts.count)
 		return texts.map { [Double($0.count)] }
+	}
+}
+
+private struct KeywordEmbeddingProvider: Lexicon.Search.EmbeddingProvider {
+	var descriptor: Lexicon.Search.EmbeddingDescriptor {
+		.init(
+			provider: "test",
+			model: "keyword",
+			tokenizer: "test",
+			dimensions: 2,
+			normalized: true,
+			pooling: "test"
+		)
+	}
+
+	func embed(_ texts: [String]) async throws -> [[Double]] {
+		texts.map { text in
+			if text.localizedCaseInsensitiveContains("provider query") ||
+				text.localizedCaseInsensitiveContains("semantic provider destination")
+			{
+				return [1, 0]
+			}
+			return [0, 1]
+		}
+	}
+}
+
+private struct ShortEmbeddingProvider: Lexicon.Search.EmbeddingProvider {
+	var descriptor: Lexicon.Search.EmbeddingDescriptor {
+		.init(
+			provider: "test",
+			model: "short",
+			tokenizer: "test",
+			dimensions: 1,
+			normalized: false,
+			pooling: "test"
+		)
+	}
+
+	func embed(_ texts: [String]) async throws -> [[Double]] {
+		Array(repeating: [0], count: max(0, texts.count - 1))
 	}
 }

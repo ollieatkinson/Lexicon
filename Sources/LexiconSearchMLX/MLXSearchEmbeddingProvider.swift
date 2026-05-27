@@ -42,8 +42,11 @@ public struct MLXSearchEmbeddingProvider: Lexicon.Search.EmbeddingProvider {
 		try await embedDocuments(texts)
 	}
 
-	public func embedQuery(_ query: String) async throws -> [Double]? {
-		try await embedRaw([queryPrefix + query]).first
+	public func embedQuery(_ query: String) async throws -> [Double] {
+		guard let vector = try await embedRaw([queryPrefix + query]).first else {
+			throw "MLX search did not return a query embedding."
+		}
+		return vector
 	}
 
 	public func embedDocuments(_ texts: [String]) async throws -> [[Double]] {

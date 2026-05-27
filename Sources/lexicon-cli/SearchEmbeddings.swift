@@ -24,12 +24,6 @@ enum SearchEmbeddingProviderSelection: String {
 	}
 }
 
-struct SearchEmbeddingCachePreparation {
-	var cache: Lexicon.Search.EmbeddingCache
-	var url: URL
-	var reused: Bool
-}
-
 extension Lexicon.Search.Index {
 
 	func search(
@@ -141,22 +135,17 @@ extension Lexicon.Search.Index {
 			input: input,
 			descriptor: provider.descriptor
 		)
-		let preparation = try await index.embeddingCache(
+		let cache = try await index.embeddingCache(
 			at: cacheURL,
 			provider: provider,
 			rebuild: rebuildEmbeddings
 		)
-		let queryVector = try await provider.embedQuery(query)
-		if index.options.scope == .live {
-			return try await index.search(
-				query,
-				in: document,
-				embeddingCache: preparation.cache,
-				queryVector: queryVector,
-				contextEmbeddingProvider: provider
-			)
-		}
-		return index.search(query, embeddingCache: preparation.cache, queryVector: queryVector)
+		return try await index.search(
+			query,
+			in: document,
+			embeddingCache: cache,
+			contextEmbeddingProvider: provider
+		)
 	}
 	#endif
 
@@ -165,7 +154,7 @@ extension Lexicon.Search.Index {
 		at url: URL,
 		provider: some Lexicon.Search.EmbeddingProvider,
 		rebuild: Bool
-	) async throws -> SearchEmbeddingCachePreparation {
+	) async throws -> Lexicon.Search.EmbeddingCache {
 		if !rebuild,
 		   let cache = try? JSONDecoder().decode(
 			Lexicon.Search.EmbeddingCache.self,
@@ -174,7 +163,7 @@ extension Lexicon.Search.Index {
 		   cache.descriptor == provider.descriptor,
 		   cache.fingerprint == fingerprint
 		{
-			return .init(cache: cache, url: url, reused: true)
+			return cache
 		}
 
 		FileHandle.standardError.write(Data(
@@ -188,7 +177,7 @@ extension Lexicon.Search.Index {
 		let encoder = JSONEncoder()
 		encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
 		try encoder.encode(cache).write(to: url)
-		return .init(cache: cache, url: url, reused: false)
+		return cache
 	}
 	#endif
 
@@ -222,22 +211,17 @@ extension Lexicon.Search.Index {
 			input: input,
 			descriptor: provider.descriptor
 		)
-		let preparation = try await index.embeddingCache(
+		let cache = try await index.embeddingCache(
 			at: cacheURL,
 			provider: provider,
 			rebuild: rebuildEmbeddings
 		)
-		let queryVector = try await provider.embedQuery(query)
-		if index.options.scope == .live {
-			return try await index.search(
-				query,
-				in: document,
-				embeddingCache: preparation.cache,
-				queryVector: queryVector,
-				contextEmbeddingProvider: provider
-			)
-		}
-		return index.search(query, embeddingCache: preparation.cache, queryVector: queryVector)
+		return try await index.search(
+			query,
+			in: document,
+			embeddingCache: cache,
+			contextEmbeddingProvider: provider
+		)
 	}
 	#endif
 

@@ -37,6 +37,8 @@ public extension Lexicon.Search {
 	protocol EmbeddingProvider: Sendable {
 		var descriptor: EmbeddingDescriptor { get }
 		func embed(_ texts: [String]) async throws -> [[Double]]
+		func embedQuery(_ query: String) async throws -> [Double]
+		func embedDocuments(_ texts: [String]) async throws -> [[Double]]
 	}
 
 	struct EmbeddingDescriptor: Hashable, Sendable, Codable {
@@ -53,6 +55,8 @@ public extension Lexicon.Search {
 	}
 }
 ```
+
+The default provider implementations route `embedQuery` and `embedDocuments` through `embed`, so lightweight providers can stay minimal. Providers with model-specific instructions can override those role methods and keep prefixes out of the search core.
 
 Package targets then decide which providers are available:
 
