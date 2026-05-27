@@ -2,11 +2,15 @@
 // github.com/screensailor 2026
 //
 
+import Testing
 #if !os(Android)
 import Foundation
 
-final class LexiconCLICommandTests: Hopes {
+@Suite
 
+struct LexiconCLICommandTests {
+
+	@Test
 	func test_tree_refs_format_and_diff_commands() throws {
 		let directory = FileManager.default.temporaryDirectory
 			.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -20,12 +24,12 @@ final class LexiconCLICommandTests: Hopes {
 		try Data(Self.fixture.utf8).write(to: source)
 
 		let tree = try Self.lexicon("tree", source.path, "root", "--depth", "1", "--metadata").stdout
-		hope.true(tree.contains("\"id\" : \"root.item\""))
-		hope.true(tree.contains("\"type\" : ["))
+		#expect(tree.contains("\"id\" : \"root.item\""))
+		#expect(tree.contains("\"type\" : ["))
 
 		let refs = try Self.lexicon("refs", source.path, "root.item").stdout
-		hope.true(refs.contains("\"kind\" : \"type\""))
-		hope.true(refs.contains("\"resolved\" : \"root.type\""))
+		#expect(refs.contains("\"kind\" : \"type\""))
+		#expect(refs.contains("\"resolved\" : \"root.type\""))
 
 		let search = try Self.lexicon(
 			"search",
@@ -39,9 +43,9 @@ final class LexiconCLICommandTests: Hopes {
 			"--embedding-provider",
 			"none"
 		).stdout
-		hope.true(search.contains("\"query\" : \"root.type item\""))
-		hope.true(search.contains("\"id\" : \"root.item\""))
-		hope.true(search.contains("\"field\" : \"type\""))
+		#expect(search.contains("\"query\" : \"root.type item\""))
+		#expect(search.contains("\"id\" : \"root.item\""))
+		#expect(search.contains("\"field\" : \"type\""))
 
 		let fullSearch = try Self.lexicon(
 			"search",
@@ -56,21 +60,22 @@ final class LexiconCLICommandTests: Hopes {
 			"--embedding-provider",
 			"none"
 		).stdout
-		hope.true(fullSearch.contains("\"id\" : \"root.item\""))
-		hope.true(fullSearch.contains("\"field\" : \"contextChild\""))
+		#expect(fullSearch.contains("\"id\" : \"root.item\""))
+		#expect(fullSearch.contains("\"field\" : \"contextChild\""))
 
 		let format = try Self.lexicon("format", source.path, "--check").stdout
-		hope.true(format.contains("\"changed\" : true"))
+		#expect(format.contains("\"changed\" : true"))
 
 		_ = try Self.lexicon("rename", source.path, "root.item", "entry", "--output", renamed.path)
 		let renamedOutput = try String(contentsOf: renamed, encoding: .utf8)
-		hope.true(renamedOutput.contains("= entry"))
-		hope.false(renamedOutput.contains("= root.entry"))
+		#expect(renamedOutput.contains("= entry"))
+		#expect(!(renamedOutput.contains("= root.entry")))
 		let diff = try Self.lexicon("diff", source.path, renamed.path).stdout
-		hope.true(diff.contains("\"id\" : \"root.entry\""))
-		hope.true(diff.contains("\"id\" : \"root.item\""))
+		#expect(diff.contains("\"id\" : \"root.entry\""))
+		#expect(diff.contains("\"id\" : \"root.item\""))
 	}
 
+	@Test
 	func test_interactive_session() throws {
 		let directory = FileManager.default.temporaryDirectory
 			.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -87,10 +92,10 @@ final class LexiconCLICommandTests: Hopes {
 			source.path,
 			stdin: "ls\ninspect root.item\nrefs root.item\nquit\n"
 		)
-		hope.true(result.stdout.contains("ready: lexicon interactive ready"))
-		hope.true(result.stdout.contains("root\n  alias\n  item\n  type"))
-		hope.true(result.stdout.contains("root.item"))
-		hope.true(result.stdout.contains("Outgoing:\n  type root.type -> root.type"))
+		#expect(result.stdout.contains("ready: lexicon interactive ready"))
+		#expect(result.stdout.contains("root\n  alias\n  item\n  type"))
+		#expect(result.stdout.contains("root.item"))
+		#expect(result.stdout.contains("Outgoing:\n  type root.type -> root.type"))
 
 		let json = try Self.lexicon(
 			"interactive",
@@ -98,11 +103,12 @@ final class LexiconCLICommandTests: Hopes {
 			"--json",
 			stdin: "search root.type item --mode token\ninspect root.item\nquit\n"
 		)
-		hope.true(json.stdout.contains("\"event\":\"ready\""))
-		hope.true(json.stdout.contains("\"query\":\"root.type item\""))
-		hope.true(json.stdout.contains("\"id\":\"root.item\""))
+		#expect(json.stdout.contains("\"event\":\"ready\""))
+		#expect(json.stdout.contains("\"query\":\"root.type item\""))
+		#expect(json.stdout.contains("\"id\":\"root.item\""))
 	}
 
+	@Test
 	func test_interactive_editing_validation_errors() throws {
 		let directory = FileManager.default.temporaryDirectory
 			.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -128,14 +134,15 @@ final class LexiconCLICommandTests: Hopes {
 
 			"""
 		)
-		hope.true(result.stdout.contains("error: Node 'root.item' does not declare type 'root.missing'."))
-		hope.true(result.stdout.contains("error: Missing required argument: protonym reference or --clear"))
-		hope.true(result.stdout.contains("error: Provide a default value or --clear."))
-		hope.true(result.stdout.contains("error: Note add requires text."))
-		hope.true(result.stdout.contains("error: Comment remove requires text."))
-		hope.true(result.stdout.contains("error: Note clear does not take text."))
+		#expect(result.stdout.contains("error: Node 'root.item' does not declare type 'root.missing'."))
+		#expect(result.stdout.contains("error: Missing required argument: protonym reference or --clear"))
+		#expect(result.stdout.contains("error: Provide a default value or --clear."))
+		#expect(result.stdout.contains("error: Note add requires text."))
+		#expect(result.stdout.contains("error: Comment remove requires text."))
+		#expect(result.stdout.contains("error: Note clear does not take text."))
 	}
 
+	@Test
 	func test_editing_commands_write_taskpaper() throws {
 		let directory = FileManager.default.temporaryDirectory
 			.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -160,15 +167,16 @@ final class LexiconCLICommandTests: Hopes {
 			added.path
 		)
 		let addOutput = try String(contentsOf: added, encoding: .utf8)
-		hope.true(addOutput.contains("child:"))
-		hope.true(addOutput.contains("+ root.type"))
+		#expect(addOutput.contains("child:"))
+		#expect(addOutput.contains("+ root.type"))
 
 		_ = try Self.lexicon("note", "add", added.path, "root.child", "agent visible", "--output", noted.path)
 		let inspect = try Self.lexicon("inspect", noted.path, "root.child").stdout
-		hope.true(inspect.contains("\"notes\" : ["))
-		hope.true(inspect.contains("agent visible"))
+		#expect(inspect.contains("\"notes\" : ["))
+		#expect(inspect.contains("agent visible"))
 	}
 
+	@Test
 	func test_validation_rejects_absolute_protonym_references() throws {
 		let directory = FileManager.default.temporaryDirectory
 			.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -186,12 +194,12 @@ final class LexiconCLICommandTests: Hopes {
 		""".utf8).write(to: source)
 
 		let output = try Self.lexicon("validate", source.path).stdout
-		hope.true(output.contains("\"valid\" : false"))
-		hope.true(output.contains("\"kind\" : \"unresolvedProtonym\""))
+		#expect(output.contains("\"valid\" : false"))
+		#expect(output.contains("\"kind\" : \"unresolvedProtonym\""))
 
 		let refs = try Self.lexicon("refs", source.path, "root.alias").stdout
-		hope.true(refs.contains("\"kind\" : \"protonym\""))
-		hope.true(refs.contains("\"exists\" : false"))
+		#expect(refs.contains("\"kind\" : \"protonym\""))
+		#expect(refs.contains("\"exists\" : false"))
 	}
 }
 

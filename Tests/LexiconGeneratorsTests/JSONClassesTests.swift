@@ -2,10 +2,14 @@
 // github.com/screensailor 2022
 //
 
+import Testing
 import Foundation
 
-class JSONClasses™: Hopes {
+@Suite
+
+struct JSONClasses™ {
 	
+	@Test
 	func test() async throws {
 		
 		var json = try await JSONClasses™.taskpaper.lexicon().json()
@@ -13,7 +17,7 @@ class JSONClasses™: Hopes {
 		
 		let data = try JSONClasses.generate(json)
 		
-		try hope(data.string()) == expected
+		#expect(try data.string() == expected)
 	}
 }
 

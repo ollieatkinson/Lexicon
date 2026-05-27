@@ -2,44 +2,50 @@
 // github.com/screensailor 2022
 //
 
-final class Lemma™: Hopes {
+import Testing
+@Suite
+struct Lemma™ {
 	
+	@Test
 	func test_Lemma_isValid_name() {
 		
-		hope.true(Lemma.isValid(name: "a"))
-		hope.true(Lemma.isValid(name: "a_"))
-		hope.true(Lemma.isValid(name: "a_t"))
-		hope.true(Lemma.isValid(name: "a_2_")) // TODO: consider disallowing this!
-		hope.true(Lemma.isValid(name: "a_2_z"))
+		#expect(Lemma.isValid(name: "a"))
+		#expect(Lemma.isValid(name: "a_"))
+		#expect(Lemma.isValid(name: "a_t"))
+		#expect(Lemma.isValid(name: "a_2_")) // TODO: consider disallowing this!
+		#expect(Lemma.isValid(name: "a_2_z"))
 
-		hope.false(Lemma.isValid(name: ""))
-		hope.false(Lemma.isValid(name: "1"))
-		hope.false(Lemma.isValid(name: "_")) // TODO: consider allowing this!
-		hope.false(Lemma.isValid(name: "a__"))
+		#expect(!(Lemma.isValid(name: "")))
+		#expect(!(Lemma.isValid(name: "1")))
+		#expect(!(Lemma.isValid(name: "_"))) // TODO: consider allowing this!
+		#expect(!(Lemma.isValid(name: "a__")))
 	}
 	
+	@Test
 	func test_Lemma_isValid_character() {
 		
-		hope.true(Lemma.isValid(character: "_", appendingTo: "yet_another"))
+		#expect(Lemma.isValid(character: "_", appendingTo: "yet_another"))
 		
-		hope.false(Lemma.isValid(character: "_", appendingTo: "not_another_"))
-		hope.false(Lemma.isValid(character: "_", appendingTo: "")) // TODO: consider allowing this!
+		#expect(!(Lemma.isValid(character: "_", appendingTo: "not_another_")))
+		#expect(!(Lemma.isValid(character: "_", appendingTo: ""))) // TODO: consider allowing this!
 	}
 
+	@Test
 	func test_inherited_node_own_type() async throws {
 
 		let root = try await Lexicon.from(
 			TaskPaper(inherited_node_own_type).decode()
 		).root
 
-		let userId = try await root["user", "id"].hopefully()
-		let collectionId = try await root["db", "collection", "id"].hopefully()
+		let userId = try #require(await root["user", "id"])
+		let collectionId = try #require(await root["db", "collection", "id"])
 
 		let isCollectionId = await userId.is(collectionId)
 
-		hope(isCollectionId) == true
+		#expect(isCollectionId == true)
 	}
 
+	@Test
 	func test_inherited_node_own_type_nested() async throws {
 
 		let root = try await Lexicon.from(
@@ -47,17 +53,17 @@ final class Lemma™: Hopes {
 		).root
 
 		do {
-			let a = try await root["user", "b", "c"].hopefully()
-			let b = try await root["a", "b", "c"].hopefully()
+			let a = try #require(await root["user", "b", "c"])
+			let b = try #require(await root["a", "b", "c"])
 			let matches = await a.is(b)
-			hope(matches) == true
+			#expect(matches == true)
 		}
 
 		do {
-			let a = try await root["a", "two", "two", "two", "three"].hopefully()
-			let b = try await root["one", "two", "three"].hopefully()
+			let a = try #require(await root["a", "two", "two", "two", "three"])
+			let b = try #require(await root["one", "two", "three"])
 			let matches = await a.is(b)
-			hope(matches) == true
+			#expect(matches == true)
 		}
 	}
 }

@@ -2,6 +2,8 @@
 // github.com/screensailor 2022
 //
 
+import Foundation
+
 extension Encodable {
     
     func json(encoder: JSONEncoder = .init(), formatting: JSONEncoder.OutputFormatting = [.prettyPrinted, .sortedKeys]) throws -> Data {

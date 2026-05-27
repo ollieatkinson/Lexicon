@@ -2,66 +2,76 @@
 // github.com/screensailor 2022
 //
 
-class Lemma_Find™: Hopes {
+import Testing
+@Suite
+struct Lemma_Find™ {
 	
 	let sentences = """
 		one two three
 		a b c d
 		"""
 	
+	@Test
 	func test_() async throws {
 		let lemma = await Lexicon.from(.from(sentences: sentences)).root
 		let o = await lemma.find("").map(\.id)
-		hope(o) == []
+		#expect(o == [])
 	}
 	
+	@Test
 	func test_c() async throws {
 		let lemma = await Lexicon.from(.from(sentences: sentences)).root
 		let o = await lemma.find("c").map(\.id)
-		hope(o) == ["a.sentence.a.b.c"]
+		#expect(o == ["a.sentence.a.b.c"])
 	}
 	
+	@Test
 	func test_C() async throws {
 		let lemma = await Lexicon.from(.from(sentences: sentences)).root
 		let o = await lemma.find("c").map(\.id)
-		hope(o) == ["a.sentence.a.b.c"]
+		#expect(o == ["a.sentence.a.b.c"])
 	}
 	
+	@Test
 	func test_n() async throws {
 		let lemma = await Lexicon.from(.from(sentences: sentences)).root
 		let o = await lemma.find("n").map(\.id).sorted()
-		hope(o) == [
+		#expect(o == [
 			"a.word.noun",
 			"a.word.number",
-		]
+		])
 	}
 	
+	@Test
 	func test_w_n() async throws {
 		let lemma = await Lexicon.from(.from(sentences: sentences)).root
 		let o = await lemma.find("w", "n").map(\.id).sorted()
-		hope(o) == [
+		#expect(o == [
 			"a.word.noun",
 			"a.word.number",
-		]
+		])
 	}
 	
+	@Test
 	func test_w__n() async throws {
 		let lemma = await Lexicon.from(.from(sentences: sentences)).root
 		let o = await lemma.find("w", "", "n").map(\.id).sorted()
-		hope(o) == [
+		#expect(o == [
 			"a.word.noun",
 			"a.word.number",
-		]
+		])
 	}
 	
+	@Test
 	func test_a_b() async throws {
 		let lemma = await Lexicon.from(.from(sentences: sentences)).root
 		let o = await lemma.find("a", "b").map(\.id)
-		hope(o) == [
+		#expect(o == [
 			"a.sentence.a.b",
-		]
+		])
 	}
 	
+	@Test
 	func test_b_d() async throws {
 		
 		let sentences = """
@@ -72,12 +82,13 @@ class Lemma_Find™: Hopes {
 		
 		let lemma = await Lexicon.from(.from(sentences: sentences)).root
 		let o = await lemma.find("b", "d").map(\.id).sorted()
-		hope(o) == [
+		#expect(o == [
 			"a.sentence.a.b.c.d",
 			"a.sentence.b.c.d",
-		]
+		])
 	}
 	
+	@Test
 	func test_a_d() async throws {
 		
 		let sentences = """
@@ -88,18 +99,18 @@ class Lemma_Find™: Hopes {
 		let lemma = await Lexicon.from(.from(sentences: sentences)).root
 		do {
 			let o = await lemma.find("a", "d").map(\.id).sorted()
-			hope(o) == [
+			#expect(o == [
 				"a.sentence.a.b.c.d",
 				"a.sentence.b.c.d.a.b.c.d",
-			]
+			])
 		}
 		do {
 			let o = await lemma.find("b", "d").map(\.id).sorted()
-			hope(o) == [
+			#expect(o == [
 				"a.sentence.a.b.c.d",
 				"a.sentence.b.c.d",
 				"a.sentence.b.c.d.a.b.c.d",
-			]
+			])
 		}
 	}
 }

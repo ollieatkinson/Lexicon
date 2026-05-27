@@ -1,21 +1,25 @@
 //
 // github.com/screensailor 2022
 //
-
-@_exported import Hope
+import Testing
+import Foundation
 @_exported import Lexicon
 @_exported import SwiftLexicon
 import AsyncAlgorithms
 
-final class SwiftLexicon™: Hopes {
+@Suite
+
+struct SwiftLexicon™ {
+	@Test
 	func test_code() throws {
 
-		hope(test.one.more.time.one.more.time(\.id)) == "test.one.more.time.one.more.time"
+		#expect(test.one.more.time.one.more.time(\.id) == "test.one.more.time.one.more.time")
 
-		hope(test.two.bad) == test.two.no.good
-		hope(test.two.bad(\.id)) == "test.two.no.good"
+		#expect(test.two.bad == test.two.no.good)
+		#expect(test.two.bad(\.id) == "test.two.no.good")
 	}
 
+	@Test
 	func test_events() async throws {
 
 		let l = test.one.more.time.one
@@ -38,17 +42,18 @@ final class SwiftLexicon™: Hopes {
 
 		let result = try await collected.value.first.try()
 
-		hope(result.l) == l
+		#expect(result.l == l)
 	}
 
+	@Test
 	func test_Event() async throws {
 
 		let k = test.one[1].more[2].time["3"].one[0]
 		let l = k.___
 
-		hope(l) == test.one.more.time.one
+		#expect(l == test.one.more.time.one)
 
-		hope(k(\.id)) == "test.one[1].more[2].time[3].one[0]"
+		#expect(k(\.id) == "test.one[1].more[2].time[3].one[0]")
 
 		let events = Events()
 		let results = AsyncChannel<Event>()
@@ -68,27 +73,29 @@ final class SwiftLexicon™: Hopes {
 
 		let x = try await collected.value.first.try()
 
-		hope(x.k(\.id)) == k(\.id)
+		#expect(x.k(\.id) == k(\.id))
 
-		try hope(x[]) == 0
-		try hope(x[test.one]) == 1
-		try hope(x[test.one.more]) == 2
-		try hope(x[test.one.more.time]) == "3"
+		#expect(try x[] == 0)
+		#expect(try x[test.one] == 1)
+		#expect(try x[test.one.more] == 2)
+		#expect(try x[test.one.more.time] == "3")
 	}
 
+	@Test
 	func test_Event_snapshot_Codable() throws {
 
 		let event = Event(test.one[1].more["two"])
 		let data = try JSONEncoder().encode(event.snapshot)
 		let snapshot = try JSONDecoder().decode(Event.Snapshot.self, from: data)
 
-		hope(snapshot.id) == event.id
-		hope(snapshot.description) == "test.one[1].more[two]"
-		hope(snapshot.lemma) == "test.one.more"
-		hope(snapshot.values["test.one"]?.int) == 1
-		hope(snapshot.values["test.one.more"]?.string) == "two"
+		#expect(snapshot.id == event.id)
+		#expect(snapshot.description == "test.one[1].more[two]")
+		#expect(snapshot.lemma == "test.one.more")
+		#expect(snapshot.values["test.one"]?.int == 1)
+		#expect(snapshot.values["test.one.more"]?.string == "two")
 	}
 
+	@Test
 	func test_Event_snapshot_encodes_Codable_payloads_as_JSON() throws {
 
 		let payload = EventPayload(name: "lexicon", count: 2)
@@ -97,12 +104,13 @@ final class SwiftLexicon™: Hopes {
 		let decoded: EventPayload = try event[test.one]
 		let decodedUsingDecoder: EventPayload = try event[test.one, as: EventPayload.self, using: JSONDecoder()]
 
-		hope(value.object?["name"]?.string) == payload.name
-		hope(value.object?["count"]?.int) == payload.count
-		hope(decoded) == payload
-		hope(decodedUsingDecoder) == payload
+		#expect(value.object?["name"]?.string == payload.name)
+		#expect(value.object?["count"]?.int == payload.count)
+		#expect(decoded == payload)
+		#expect(decodedUsingDecoder == payload)
 	}
 
+	@Test
 	func test_Event_typed_String_access_rejects_non_string_values() throws {
 
 		let event = Event(test.one[1])
@@ -114,9 +122,10 @@ final class SwiftLexicon™: Hopes {
 			didThrow = true
 		}
 
-		hope(didThrow) == true
+		#expect(didThrow == true)
 	}
 
+	@Test
 	func test_Event_granularity() async throws {
 
 		let events = Events()
@@ -156,8 +165,8 @@ final class SwiftLexicon™: Hopes {
 
 		let tickValues = await collectedTicks.value
 		let allValues = await collectedAll.value
-		hope(tickValues) == ["✅", "✅"]
-		hope(allValues) == ["✅", "❌", "✅"]
+		#expect(tickValues == ["✅", "✅"])
+		#expect(allValues == ["✅", "❌", "✅"])
 	}
 }
 
@@ -183,29 +192,33 @@ extension SwiftLexicon™ {
 
 	private var eventL: Event { Event(test.one) }
 
+	@Test
 	func test_Event_L_is_L() throws {
-		hope(that: eventL.is(test)) == false
-		hope(that: eventL.is(test.one)) == true
-		hope(that: eventL.is(test.two)) == false
-		hope(that: eventL.is(test.type.odd)) == false
+		#expect(!(eventL.is(test)))
+		#expect(eventL.is(test.one))
+		#expect(!(eventL.is(test.two)))
+		#expect(!(eventL.is(test.type.odd)))
 	}
 
+	@Test
 	func test_Event_L_is_I() throws {
-		hope(that: eventL.is(I_test_one.self)) == true
-		hope(that: eventL.l is I_test_one) == true
-		hope(that: eventL.l is I_test_two) == false
-		hope(that: eventL.l is I_test_type_odd) == true
+		#expect(eventL.is(I_test_one.self))
+		#expect(eventL.l is I_test_one)
+		#expect(!(eventL.l is I_test_two))
+		#expect(eventL.l is I_test_type_odd)
 	}
 
+	@Test
 	func test_Event_L_is_any_I() throws {
-		hope(that: eventL.is(test.one as I)) == true
-		hope(that: eventL.is(test.two as I)) == false
-		hope(that: eventL.is(test.one[4] as I)) == false
+		#expect(eventL.is(test.one as I))
+		#expect(!(eventL.is(test.two as I)))
+		#expect(!(eventL.is(test.one[4] as I)))
 	}
 
+	@Test
 	func test_Event_L_is_K() throws {
-		hope(that: eventL.is(test.one[4])) == false
-		hope(that: eventL.is(test.two[4])) == false
+		#expect(!(eventL.is(test.one[4])))
+		#expect(!(eventL.is(test.two[4])))
 	}
 }
 
@@ -213,32 +226,36 @@ extension SwiftLexicon™ {
 
 	private var eventK: Event { Event(test.one[4].good) }
 
+	@Test
 	func test_Event_K_is_L() throws {
-		hope(that: eventK.is(test)) == false
-		hope(that: eventK.is(test.one)) == false
-		hope(that: eventK.is(test.one.good)) == true
-		hope(that: eventK.is(test.type.odd.good)) == false
+		#expect(!(eventK.is(test)))
+		#expect(!(eventK.is(test.one)))
+		#expect(eventK.is(test.one.good))
+		#expect(!(eventK.is(test.type.odd.good)))
 	}
 
+	@Test
 	func test_Event_K_is_I() throws {
-		hope(that: eventK.l is I_test) == false
-		hope(that: eventK.l is I_test_one) == false
-		hope(that: eventK.l is I_test_type_odd_good) == true
+		#expect(!(eventK.l is I_test))
+		#expect(!(eventK.l is I_test_one))
+		#expect(eventK.l is I_test_type_odd_good)
 	}
 
+	@Test
 	func test_Event_K_is_any_I() throws {
-		hope(that: eventK.is(test.two.no.good as I)) == false
-		hope(that: eventK.is(test.one.good as I)) == true
-		hope(that: eventK.is(test.one[4] as I)) == false
-		hope(that: eventK.is(test.one[2].good as I)) == false
-		hope(that: eventK.is(test.one[4].good as I)) == true
-		hope(that: eventK.is(test.type.odd[4].good as I)) == false
+		#expect(!(eventK.is(test.two.no.good as I)))
+		#expect(eventK.is(test.one.good as I))
+		#expect(!(eventK.is(test.one[4] as I)))
+		#expect(!(eventK.is(test.one[2].good as I)))
+		#expect(eventK.is(test.one[4].good as I))
+		#expect(!(eventK.is(test.type.odd[4].good as I)))
 	}
 
+	@Test
 	func test_Event_K_is_K() throws {
-		hope(that: eventK.is(test.one[4])) == false
-		hope(that: eventK.is(test.one[2].good)) == false
-		hope(that: eventK.is(test.one[4].good)) == true
-		hope(that: eventK.is(test.type.odd[4].good)) == false
+		#expect(!(eventK.is(test.one[4])))
+		#expect(!(eventK.is(test.one[2].good)))
+		#expect(eventK.is(test.one[4].good))
+		#expect(!(eventK.is(test.type.odd[4].good)))
 	}
 }

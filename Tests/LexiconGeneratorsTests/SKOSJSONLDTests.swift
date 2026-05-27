@@ -2,10 +2,14 @@
 // github.com/screensailor 2026
 //
 
+import Testing
 import Foundation
 
-final class SKOSJSONLDTests: Hopes {
+@Suite
 
+struct SKOSJSONLDTests {
+
+	@Test
 	func test_skos_json_ld_export_maps_lexicon_concepts() async throws {
 
 		let lexicon = try await Lexicon.from(TaskPaper("""
@@ -24,8 +28,8 @@ final class SKOSJSONLDTests: Hopes {
 		let json = await lexicon.json()
 		let output = try SKOSJSONLD.generate(json).string()
 
-		hope(SKOSJSONLD.utType.preferredFilenameExtension) == "jsonld"
-		hope(output) == """
+		#expect(SKOSJSONLD.utType.preferredFilenameExtension == "jsonld")
+		#expect(output == """
 			{
 			  "@context" : {
 			    "lexicon" : "https:\\/\\/github.com\\/ollieatkinson\\/Lexicon#",
@@ -118,6 +122,6 @@ final class SKOSJSONLDTests: Hopes {
 			    }
 			  ]
 			}
-			"""
+			""")
 	}
 }

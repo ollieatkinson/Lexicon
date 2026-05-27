@@ -2,19 +2,24 @@
 // github.com/screensailor 2026
 //
 
+import Testing
 import Foundation
 
-final class GoGeneratorTests: Hopes {
+@Suite
 
+struct GoGeneratorTests {
+
+	@Test
 	func test_generator() async throws {
 		var json = try await "test".taskpaper().lexicon().json()
 		json.date = Date(timeIntervalSinceReferenceDate: 0)
 
 		let code = try GoStandAloneGenerator.generate(json).string()
 
-		try hope(code) == "test.go".file().string()
+		#expect(code == (try "test.go".file().string()))
 	}
 
+	@Test
 	func test_generated_identifiers_match_lexicon_case() async throws {
 		let source = """
 		caseRoot:
@@ -26,11 +31,12 @@ final class GoGeneratorTests: Hopes {
 
 		let code = try GoStandAloneGenerator.generate(json).string()
 
-		hope.true(code.contains("var caseRoot = new_L_caseRoot(\"caseRoot\")"))
-		hope.true(code.contains("camelCase L_caseRoot_camelCase"))
-		hope.true(code.contains("PascalCase L_caseRoot_camelCase_PascalCase"))
+		#expect(code.contains("var caseRoot = new_L_caseRoot(\"caseRoot\")"))
+		#expect(code.contains("camelCase L_caseRoot_camelCase"))
+		#expect(code.contains("PascalCase L_caseRoot_camelCase_PascalCase"))
 	}
 
+	@Test
 	func test_generated_code_formats_and_compiles() async throws {
 		guard Self.hasCommand("go"), Self.hasCommand("gofmt") else {
 			return
