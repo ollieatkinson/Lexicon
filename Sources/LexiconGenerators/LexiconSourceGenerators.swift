@@ -17,6 +17,8 @@ public enum LexiconSourceGenerators {
 
 		"Go Stand-Alone": .init(GoStandAloneGenerator.self),
 
+		"Rust Stand-Alone": .init(RustStandAloneGenerator.self),
+
 		"TypeScript Stand-Alone": .init(TypeScriptStandAloneGenerator.self),
 		
 		"JSON Classes & Mixins": .init(JSONClasses.self),

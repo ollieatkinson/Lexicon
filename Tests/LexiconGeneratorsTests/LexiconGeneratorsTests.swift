@@ -16,6 +16,7 @@ struct LexiconGeneratorsTests {
 		let swiftStandAlone = try generator("Swift Stand-Alone")
 		let kotlin = try generator("Kotlin Stand-Alone")
 		let go = try generator("Go Stand-Alone")
+		let rust = try generator("Rust Stand-Alone")
 		let typeScript = try generator("TypeScript Stand-Alone")
 		let json = try generator("JSON Classes & Mixins")
 		let skos = try generator("SKOS JSON-LD")
@@ -24,6 +25,7 @@ struct LexiconGeneratorsTests {
 		#expect(swiftStandAlone.command == "swift-standalone")
 		#expect(kotlin.command == "kotlin")
 		#expect(go.command == "go")
+		#expect(rust.command == "rust")
 		#expect(typeScript.command == "ts")
 		#expect(json.command == "json")
 		#expect(skos.command == "json-ld")
@@ -31,6 +33,7 @@ struct LexiconGeneratorsTests {
 		#expect(swiftStandAlone.utType.preferredFilenameExtension == "swift")
 		#expect(kotlin.utType.preferredFilenameExtension == "kt")
 		#expect(go.utType.preferredFilenameExtension == "go")
+		#expect(rust.utType.preferredFilenameExtension == "rs")
 		#expect(typeScript.utType.preferredFilenameExtension == "ts")
 		#expect(json.utType.preferredFilenameExtension == "json")
 		#expect(skos.utType.preferredFilenameExtension == "jsonld")
@@ -41,7 +44,7 @@ struct LexiconGeneratorsTests {
 		let generator = try LexiconSourceGenerators.all.find("swift-standalone").try()
 
 		#expect(generator.command == "swift-standalone")
-		#expect(LexiconSourceGenerators.all.commandHelp == "swift, swift-standalone, kotlin, go, ts, json, json-ld")
+		#expect(LexiconSourceGenerators.all.commandHelp == "swift, swift-standalone, kotlin, go, rust, ts, json, json-ld")
 	}
 
 	@Test

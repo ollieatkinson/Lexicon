@@ -14,20 +14,38 @@ public enum GoStandAloneGenerator: SourceCodeGenerator {
 	public static let command = "go"
 
 	public static func generateSource(_ json: Lexicon.Graph.JSON) throws -> String {
-		try json.go()
+		try generateSource(json, packageName: "lexicon")
+	}
+
+	public static func generateSource(_ json: Lexicon.Graph.JSON, packageName: String) throws -> String {
+		try json.go(packageName: packageName)
 	}
 }
 
 private extension Lexicon.Graph.JSON {
 
-	func go() throws -> String {
+	func go(packageName: String) throws -> String {
 		try SourceTemplate(
 			"""
-		package lexicon
+		package {{packageName}}
 
 		type I interface {
 			ID() string
 			Localized() string
+		}
+
+		type Lemma string
+
+		func l(path string) Lemma {
+			return Lemma(path)
+		}
+
+		func (l Lemma) ID() string {
+			return string(l)
+		}
+
+		func (l Lemma) Localized() string {
+			return string(l)
 		}
 
 		type L struct {
@@ -47,7 +65,8 @@ private extension Lexicon.Graph.JSON {
 		{{types}}
 		"""
 		).render([
-			"rootVariable": name.goIdentifier,
+			"packageName": try packageName.goPackageName,
+			"rootVariable": name.goSelector,
 			"rootType": name.goTypeSuffix,
 			"rootID": name,
 			"types": try classes.flatMap { try $0.go(classes: classes) }.joined(separator: "\n\n"),
@@ -74,6 +93,10 @@ private extension Lexicon.Graph.Node.Class.JSON {
 		}
 
 		let ownAccessors = standAloneAccessors()
+		let inheritedAccessors = standAloneInheritedAccessors(classes: classes)
+			.filter { inherited in !ownAccessors.contains(where: { $0.name == inherited.name }) }
+		try (ownAccessors + inheritedAccessors).validateUniqueGoSelectors(owner: id)
+
 		return [
 			try SourceTemplate(
 				"""
@@ -94,13 +117,12 @@ private extension Lexicon.Graph.Node.Class.JSON {
 				"type": type,
 				"localized": id,
 				"fields": ownAccessors
-					.map { "\n\t\($0.name.goIdentifier) L_\($0.sourceID.goTypeSuffix)" }
+					.map { "\n\t\($0.name.goSelector) L_\($0.sourceID.goTypeSuffix)" }
 					.joined(),
 				"initializers": ownAccessors
-					.map { "\n\tl.\($0.name.goIdentifier) = \($0.factory(receiver: "id"))" }
+					.map { "\n\tl.\($0.name.goSelector) = \($0.factory(receiver: "id"))" }
 					.joined(),
-				"inherited": try standAloneInheritedAccessors(classes: classes)
-					.filter { inherited in !ownAccessors.contains(where: { $0.name == inherited.name }) }
+				"inherited": try inheritedAccessors
 					.map { try $0.method(receiverType: type) }
 					.joined(),
 			])
@@ -123,10 +145,29 @@ private extension StandAloneAccessor {
 			"""
 		).render([
 			"receiverType": receiverType,
-			"name": name.goIdentifier,
+			"name": name.goSelector,
 			"sourceType": sourceID.goTypeSuffix,
 			"factory": factory(receiver: "l.id"),
 		]))
+	}
+}
+
+private extension Array where Element == StandAloneAccessor {
+
+	func validateUniqueGoSelectors(owner: String) throws {
+		var selectors: [String: String] = [:]
+		for accessor in self {
+			let selector = accessor.name.goSelector
+			if let existing = selectors[selector], existing != accessor.name {
+				throw GoGenerationError.selectorCollision(
+					owner: owner,
+					selector: selector,
+					first: existing,
+					second: accessor.name
+				)
+			}
+			selectors[selector] = accessor.name
+		}
 	}
 }
 
@@ -135,49 +176,67 @@ private extension String {
 	var goTypeSuffix: String {
 		split(separator: ".")
 			.map(String.init)
-			.map(\.goIdentifier)
+			.map(\.goTypeSegment)
 			.joined(separator: "_")
+	}
+
+	var goTypeSegment: String {
+		goIdentifier.replacingOccurrences(of: "_", with: "__")
 	}
 
 	var goIdentifier: String {
 		let sanitized = map { character -> Character in
 			character.isLetter || character.isNumber ? character : "_"
 		}
-		var identifier = String(sanitized).unlessEmpty ?? "lexicon"
+		return String(sanitized).unlessEmpty ?? "lexicon"
+	}
+
+	var goSelector: String {
+		var identifier = goIdentifier
 		if identifier.first?.isNumber == true {
 			identifier = "_\(identifier)"
 		}
-		if Self.goKeywords.contains(identifier) {
-			identifier += "_"
+		guard let first = identifier.first else {
+			return identifier
 		}
-		return identifier
+		return first.uppercased() + String(identifier.dropFirst())
 	}
 
-	static let goKeywords: Set<String> = [
-		"break",
-		"default",
-		"func",
-		"interface",
-		"select",
-		"case",
-		"defer",
-		"go",
-		"map",
-		"struct",
-		"chan",
-		"else",
-		"goto",
-		"package",
-		"switch",
-		"const",
-		"fallthrough",
-		"if",
-		"range",
-		"type",
-		"continue",
-		"for",
-		"import",
-		"return",
-		"var",
-	]
+	var goPackageName: String {
+		get throws {
+			guard self == goIdentifier, first?.isNumber != true, !isGoKeyword else {
+				throw GoGenerationError.invalidPackageName(self)
+			}
+			return self
+		}
+	}
+
+	var isGoKeyword: Bool {
+		switch self {
+		case "break", "default", "func", "interface", "select",
+			"case", "defer", "go", "map", "struct",
+			"chan", "else", "goto", "package", "switch",
+			"const", "fallthrough", "if", "range", "type",
+			"continue", "for", "import", "return", "var":
+			return true
+		default:
+			return false
+		}
+	}
+}
+
+private enum GoGenerationError: Error, CustomStringConvertible {
+	case invalidPackageName(String)
+	case selectorCollision(owner: String, selector: String, first: String, second: String)
+
+	var description: String {
+		switch self {
+		case .invalidPackageName(let packageName):
+			"'\(packageName)' is not a valid Go package name."
+		case .selectorCollision(let owner, let selector, let first, let second):
+			"""
+			Go selector collision in '\(owner)': '\(first)' and '\(second)' both generate '\(selector)'.
+			"""
+		}
+	}
 }

@@ -294,7 +294,7 @@ Branches can also be exported as self-contained lexicon fragments. External refe
 
 ```sh
 swift run lexicon-generate commerce.lexicon \
-	--type swift,swift-standalone,kotlin,go,ts,json,json-ld
+	--type swift,swift-standalone,kotlin,go,rust,ts,json,json-ld
 ```
 
 Available generator commands:
@@ -305,11 +305,37 @@ Available generator commands:
 | `swift-standalone` | Stand-alone Swift source. |
 | `kotlin` | Stand-alone Kotlin source. |
 | `go` | Stand-alone Go source. |
+| `rust` | Stand-alone Rust source. |
 | `ts` | Stand-alone TypeScript source. |
 | `json` | JSON classes and mixins snapshot. |
 | `json-ld` | SKOS JSON-LD. |
 
 The generator registry lives in `LexiconGenerators`, and SwiftPM build-tool plugins are available for generated Swift sources.
+
+Generated Go uses exported TitleCase selectors so the same generated API works inside the generated package and from importing packages:
+
+```go
+lexicon.Test.Type.Even.Bad.ID()
+```
+
+The generated values keep exact lowercase lemma identifiers, and `l("test.type.even.bad")` is available as an exact-path helper in the generated package. Use `--go-package` when the generated file should belong to an existing Go package:
+
+```sh
+swift run lexicon-generate commerce.lexicon --type go --go-package commerce
+```
+
+Generated Rust supports the normal typed API and an exact-path macro:
+
+```rust
+l().test.r#type.even.bad.id();
+l!(test.type.even.bad).id();
+```
+
+`lexicon-lsp` is a sidecar language server for editor integrations. Start it with a source lexicon to provide completions and diagnostics for exact-path references in `l("...")`, `l!(...)`, and lexicon document reference lines:
+
+```sh
+swift run lexicon-lsp --lexicon commerce.lexicon
+```
 
 ## CLI
 
@@ -388,6 +414,7 @@ Event payloads are JSON-backed and decode through `JSONDecoder`, so generated le
 | `_Collections` | Internal collection utilities, including sorted dictionary support. |
 | `lexicon` | CLI for validating, inspecting, formatting, diffing and editing lexicons. |
 | `lexicon-generate` | CLI for generating source artefacts. |
+| `lexicon-lsp` | Sidecar language server for Lexicon path completions and diagnostics. |
 | `SwiftLibraryGeneratorPlugin` | SwiftPM plugin for generated Swift that depends on `SwiftLexicon`. |
 | `SwiftStandAloneGeneratorPlugin` | SwiftPM plugin for stand-alone generated Swift. |
 
