@@ -34,16 +34,17 @@ async function main(): Promise<void> {
 async function createWorkspace(lspPath: string): Promise<string> {
 	const workspacePath = await fs.mkdtemp(path.join(os.tmpdir(), "lexicon-vscode-"));
 	await fs.mkdir(path.join(workspacePath, ".vscode"), { recursive: true });
+	await fs.mkdir(path.join(workspacePath, "app"), { recursive: true });
 	await fs.writeFile(
 		path.join(workspacePath, ".vscode", "settings.json"),
 		JSON.stringify({ "lexicon.lsp.binary.path": lspPath }, null, 2)
 	);
 	await fs.writeFile(
-		path.join(workspacePath, "lexicon-lsp.json"),
+		path.join(workspacePath, "app", ".lexicon.conf"),
 		JSON.stringify({ lexicon: "demo.lexicon" }, null, 2)
 	);
 	await fs.writeFile(
-		path.join(workspacePath, "demo.lexicon"),
+		path.join(workspacePath, "app", "demo.lexicon"),
 		[
 			"test:",
 			"\ttype:",
@@ -54,7 +55,18 @@ async function createWorkspace(lspPath: string): Promise<string> {
 		].join("\n")
 	);
 	await fs.writeFile(
-		path.join(workspacePath, "scratch.lexicon"),
+		path.join(workspacePath, "app", "replacement.lexicon"),
+		[
+			"test:",
+			"\ttype:",
+			"\t\teven:",
+			"\t\t\tgood:",
+			"\t\t\tyes:",
+			"",
+		].join("\n")
+	);
+	await fs.writeFile(
+		path.join(workspacePath, "app", "scratch.lexicon"),
 		[
 			"usage:",
 			"\titem:",
@@ -63,7 +75,7 @@ async function createWorkspace(lspPath: string): Promise<string> {
 		].join("\n")
 	);
 	await fs.writeFile(
-		path.join(workspacePath, "notes.txt"),
+		path.join(workspacePath, "app", "notes.txt"),
 		[
 			"value = l(\"test.type.even.\")",
 			"",
