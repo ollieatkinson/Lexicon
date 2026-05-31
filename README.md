@@ -2,11 +2,40 @@
 
 _Recurrent vocabularies, ontologies and naming systems for software that is meant to keep growing._
 
-Lexicon is a Swift package, document format and code-generation toolkit for turning domain language into a living semantic graph.
+Lexicon is a Swift package, document format, CLI, language server and code-generation toolkit for turning domain language into a living semantic graph.
 
 It is for teams whose shared language is scattered across API paths, UI copy, analytics events, feature flags, JSON keys, diagrams, tickets and tribal memory. A lexicon gives that language somewhere to live: somewhere it can be read, edited, versioned, composed, validated, traversed and compiled into platform code.
 
-Lexicon is intended as a foundation for ontology-led development, semantic reactive programming and [software gardening](https://github.com/thousandyears/garden). It is not one schema to rule every domain. It is an affordance for experts to express their own domains in their own terms, while still creating enough structure for those domains to communicate.
+## Documentation
+
+The README is the short overview. The detailed guides now live in the wiki:
+
+- [Quick Start](https://github.com/ollieatkinson/Lexicon/wiki/Quick-Start)
+- [Core Concepts](https://github.com/ollieatkinson/Lexicon/wiki/Core-Concepts)
+- [Gardening Philosophy](https://github.com/ollieatkinson/Lexicon/wiki/Gardening-Philosophy)
+- [Document Syntax](https://github.com/ollieatkinson/Lexicon/wiki/Document-Syntax)
+- [Composition and Imports](https://github.com/ollieatkinson/Lexicon/wiki/Composition-and-Imports)
+- [Commerce Example](https://github.com/ollieatkinson/Lexicon/wiki/Example-Commerce-Vocabulary)
+- [CLI Reference](https://github.com/ollieatkinson/Lexicon/wiki/CLI-Reference)
+- [Search](https://github.com/ollieatkinson/Lexicon/wiki/Search)
+- [Code Generation](https://github.com/ollieatkinson/Lexicon/wiki/Code-Generation)
+- [Editor Support](https://github.com/ollieatkinson/Lexicon/wiki/Editor-Support)
+
+Language-specific generation guides:
+
+- [Swift](https://github.com/ollieatkinson/Lexicon/wiki/Language-Swift)
+- [Kotlin](https://github.com/ollieatkinson/Lexicon/wiki/Language-Kotlin)
+- [Go](https://github.com/ollieatkinson/Lexicon/wiki/Language-Go)
+- [Rust](https://github.com/ollieatkinson/Lexicon/wiki/Language-Rust)
+- [TypeScript](https://github.com/ollieatkinson/Lexicon/wiki/Language-TypeScript)
+- [JSON and SKOS JSON-LD](https://github.com/ollieatkinson/Lexicon/wiki/Language-JSON-and-SKOS-JSON-LD)
+
+Editor setup guides:
+
+- [Zed](https://github.com/ollieatkinson/Lexicon/wiki/Editor-Zed)
+- [VS Code](https://github.com/ollieatkinson/Lexicon/wiki/Editor-VS-Code)
+- [GoLand and JetBrains](https://github.com/ollieatkinson/Lexicon/wiki/Editor-GoLand-and-JetBrains)
+- [Generic LSP Clients](https://github.com/ollieatkinson/Lexicon/wiki/Editor-Generic-LSP-Clients)
 
 ## Why
 
@@ -29,272 +58,52 @@ Lexicon takes the opposite position:
 - source code can be generated from living language;
 - the cost and risk of adding vocabulary should keep falling as the system grows.
 
-The gardening idea is that useful systems are not simply delivered from the top down. They are cultivated as environments with good affordances: each domain can grow independently, and each contribution can become a new surface for others to build on. Lexicon is one small piece of that: a language substrate for growing connected vocabularies without forcing every team into one monolingual taxonomy.
+Lexicon is intended as a foundation for ontology-led development, semantic reactive programming and [software gardening](https://github.com/thousandyears/garden). It is not one schema to rule every domain. It is an affordance for experts to express their own domains in their own terms, while still creating enough structure for those domains to communicate.
 
-## A Lexicon Document
+## A Small Lexicon
 
 Lexicons are written in a compact TaskPaper-like format. Indentation is significant; use tabs.
 
-This example keeps database, API, session, UI and UX terms separate, while still letting them refer to each other. It also uses document metadata, multiple roots and composition.
-
-`commerce.lexicon`
-
 ```taskpaper
-# Commerce language shared by API, UI, session and product surfaces.
-> Product teams can add local dialects without replacing the shared vocabulary.
-@ ./shared-commerce.lexicon
+# Shared commerce vocabulary.
+> API, UI, analytics and support can keep local words while sharing meaning.
 
 commerce:
-# The main application vocabulary.
-> Terms under this root are composed into generated platform code.
-	db:
-	@ ./data-types.lexicon
-	session:
-	# Runtime ownership is separate from API and UI ownership.
-		configuration:
-			value:
-		state:
-			value:
-			shared:
-				value:
-				+ commerce.session.state.value
-			stored:
-				value:
-				+ commerce.session.state.value
+	type:
+		boolean:
+		string:
 	api:
-		storefront:
-		@ ./storefront-api.lexicon
+		order:
+			submit:
+			+ commerce.type.boolean
+			? true
 	ui:
-		product:
-		@ ./product-ui.lexicon
-	ux:
-		onboarding:
-			choose:
-				product:
-				+ commerce.ux.type.story
-					confirm:
-					+ commerce.ux.type.task
-support:
-# A second root can still reference the commerce vocabulary.
-	case:
-	+ commerce.db.collection
-		status:
-		+ commerce.db.type.string
-		? "open"
-```
-
-<details>
-<summary><code>shared-commerce.lexicon</code></summary>
-
-```taskpaper
-commerce:
-	db:
-		collection:
-			id:
-			+ commerce.db.type.string
-		leaf:
-	session:
-		configuration:
-			value:
-		state:
-			value:
-			shared:
-				value:
-				+ commerce.session.state.value
-			stored:
-				value:
-				+ commerce.session.state.value
-	ui:
-		type:
-		> Reusable controls are deliberately small; product screens compose them.
-			control:
-			label:
-			card:
-			+ commerce.ui.type.control
+		checkout:
 			button:
 				primary:
-				+ commerce.ui.type.control
-				secondary:
-				+ commerce.ui.type.control
-	ux:
-		type:
-			action:
-			story:
-			task:
+				+ commerce.api.order.submit
+	analytics:
+		event:
+			checkout_started:
+			+ commerce.ui.checkout.button.primary
+	support:
+		ticket:
+			status:
+			+ commerce.type.string
+			? "open"
 ```
 
-</details>
+This defines stable paths such as `commerce.api.order.submit`, connects UI and analytics terms to the API concept, and gives `commerce.support.ticket.status` a default value.
 
-<details>
-<summary><code>data-types.lexicon</code></summary>
-
-```taskpaper
-db:
-	type:
-		any:
-		+ commerce.db.leaf
-		boolean:
-		+ commerce.db.leaf
-		string:
-		+ commerce.db.leaf
-		tag:
-		+ commerce.db.leaf
-```
-
-</details>
-
-<details>
-<summary><code>storefront-api.lexicon</code></summary>
-
-```taskpaper
-storefront:
-	products:
-	+ commerce.db.collection
-		product:
-		+ commerce.db.collection
-			id:
-			+ commerce.db.type.string
-			title:
-			+ commerce.db.type.string
-			is:
-				eligible:
-				+ commerce.db.type.boolean
-				+ commerce.session.state.value
-			ineligible:
-				reason:
-				+ commerce.db.type.string
-	order:
-		create:
-		+ commerce.ux.type.task
-			can:
-				submit:
-				+ commerce.db.type.boolean
-				+ commerce.session.configuration.value
-			primary:
-				action:
-				+ commerce.ui.type.button.primary
-				+ commerce.ux.type.action
-```
-
-</details>
-
-<details>
-<summary><code>product-ui.lexicon</code></summary>
-
-```taskpaper
-product:
-	card:
-	+ commerce.ui.type.card
-		title:
-		+ commerce.ui.type.label
-		buy:
-		+ commerce.ui.type.button.primary
-		+ commerce.ux.type.action
-		# UI says enabled; analytics may say active.
-			enabled:
-			+ commerce.api.storefront.order.create.can.submit
-			? true
-			active:
-			= enabled
-```
-
-</details>
-
-This is not just an outline. It says:
-
-- `commerce.api.storefront.products.product` is a collection-backed API concept.
-- `commerce.api.storefront.products.product.is.eligible` is both a boolean and a session value.
-- `commerce.api.storefront.order.create.primary.action` is both a UI primary button and a UX action.
-- `commerce.ui.product.card.buy.enabled` is typed by the API/session submit capability.
-- `commerce.ui.product.card.buy.active` is a synonym for `enabled`, preserving a local UI dialect.
-- `support.case.status` is a second root that still references the commerce vocabulary.
-- `@ ./shared-commerce.lexicon`, `@ ./data-types.lexicon`, `@ ./storefront-api.lexicon` and `@ ./product-ui.lexicon` compose external vocabulary at different points in the document.
-- `? true` and `? "open"` provide literal JSON defaults.
-- `>` lines carry notes that can be surfaced as documentation metadata.
-- `#` lines carry authoring comments that stay with the document for maintainers and tools.
-
-The point is not that UI, API and session state should collapse into one model. The point is that they can stay separate and still share meaning.
-
-## Syntax
-
-| Syntax | Meaning |
-| --- | --- |
-| `name:` | Defines a lemma. Its full ID is its dot path, such as `commerce.ui.product.card`. |
-| `+ commerce.db.type.string` | Adds a type reference. Types provide inherited children and default fallbacks. |
-| `= enabled` | Makes a lemma a synonym of another lemma, resolved relative to the parent when possible. |
-| `? true` | Sets a literal JSON default. Strings, numbers, booleans, arrays, objects and `null` are supported. |
-| `? @ commerce.some.default` | Sets a default by reference. |
-| `@ ./shared.lexicon` | Imports another lexicon. At document level it composes with the root; inside a node it grafts there. |
-| `> note` | Adds a note to the current document or node. Notes are domain-facing prose and are included in generated JSON class metadata. |
-| `# comment` | Adds a comment to the current document or node. Comments are authoring/tooling annotations and are preserved by the document, CLI and CRDT layers. |
-
-Names must start with a letter and may contain letters, digits and underscores.
-
-Notes and comments are separate because they usually have different audiences. A note explains the term to readers of the vocabulary. A comment explains the source document to maintainers, generators or editor tooling. Lexicon preserves both, but generators can choose which metadata is appropriate for their target.
-
-## Mental Model
-
-Lexicon has four core layers.
-
-`Document` is parsed source. It can contain multiple roots, imports, notes, comments, nodes, type references, synonyms and defaults.
-
-`Graph` is a selected root tree from a document. Documents may contain many roots; a graph has one root.
-
-`Lexicon` is the resolved, actor-isolated object graph. It indexes lemmas by stable dot-path IDs and resolves inheritance, synonyms and defaults.
-
-`Lemma` is a semantic node. A lemma knows its ID, parent, own children, inherited children, types, synonyms, default value and whether it comes from concrete source or inheritance.
-
-Most application code should read through generated lexicons rather than stringly typed lookups. After generating Swift, the dot path becomes ordinary source:
-
-```swift
-import SwiftLexicon
-
-let submit = commerce.api.storefront.order.create.can.submit
-let enabled = commerce.ui.product.card.buy.enabled
-let active = commerce.ui.product.card.buy.active
-
-print(submit.__)
-print(enabled == active)
-```
-
-## Composition
-
-Lexicons can import other lexicons at document level or at a node.
-
-```taskpaper
-@ ./shared.lexicon
-
-commerce:
-	api:
-		storefront:
-		@ ./storefront.lexicon
-	ui:
-		product:
-		@ ./product-ui.lexicon
-```
-
-Composition rebases imported roots and rewrites internal references so the imported branch keeps its meaning at the graft point.
-
-```swift
-let resolver = FileLexiconImportResolver(baseURL: source.deletingLastPathComponent())
-let plan = try document.composed(resolving: resolver)
-
-guard plan.conflicts.isEmpty else {
-	throw ValidationError(plan.conflicts.map(\.description).joined(separator: "\n"))
-}
-
-let composed = plan.document
-```
-
-Branches can also be exported as self-contained lexicon fragments. External references are reported as diagnostics and imports are added where Lexicon can infer them.
+See the [Commerce Example](https://github.com/ollieatkinson/Lexicon/wiki/Example-Commerce-Vocabulary) for a multi-file API, UI, session, UX and support vocabulary with imports, synonyms and generation examples.
 
 ## Code Generation
 
-`lexicon-generate` turns a lexicon into source artefacts.
+`lexicon-generate` turns a lexicon into source artefacts:
 
 ```sh
 swift run lexicon-generate commerce.lexicon \
-	--type swift,swift-standalone,kotlin,go,rust,ts,json,json-ld
+	--type swift,kotlin,go,rust,ts,json,json-ld
 ```
 
 Available generator commands:
@@ -310,40 +119,29 @@ Available generator commands:
 | `json` | JSON classes and mixins snapshot. |
 | `json-ld` | SKOS JSON-LD. |
 
-The generator registry lives in `LexiconGenerators`, and SwiftPM build-tool plugins are available for generated Swift sources.
+Generated Swift turns dot paths into ordinary source:
 
-Generated Go uses exported TitleCase selectors so the same generated API works inside the generated package and from importing packages:
+```swift
+import SwiftLexicon
 
-```go
-lexicon.Test.Type.Even.Bad.ID()
+let submit = commerce.api.order.submit
+let button = commerce.ui.checkout.button.primary
+
+print(submit.__)
+print(button.__)
 ```
 
-The generated values keep exact lowercase lemma identifiers, and `l("test.type.even.bad")` is available as an exact-path helper in the generated package. Use `--go-package` when the generated file should belong to an existing Go package:
-
-```sh
-swift run lexicon-generate commerce.lexicon --type go --go-package commerce
-```
-
-Generated Rust supports the normal typed API and an exact-path macro:
-
-```rust
-l().test.r#type.even.bad.id();
-l!(test.type.even.bad).id();
-```
-
-The macro walks the generated typed API instead of generating one macro arm per lemma, so large lexicons do not turn into large Rust macro tables. Invalid macro paths fail through normal Rust type checking.
+See [Code Generation](https://github.com/ollieatkinson/Lexicon/wiki/Code-Generation) and the language guides for target-specific setup.
 
 ## Editor Support
 
-`lexicon-lsp` is a sidecar language server for editor integrations. It provides completions and diagnostics for exact-path references in `l("...")`, `l!(...)`, and lexicon document reference lines. The index is built from the composed live graph, so imported and connected lexicons are included, as are inherited and synonym paths.
-
-This is useful for languages that cannot natively express every Lexicon path spelling. For example, Rust can compile `l!(test.type.even.bad)` through a macro and Go can use `l("test.type.even.bad")`; the sidecar LSP gives those spellings path completion and unknown-path diagnostics in the editor.
+`lexicon-lsp` provides completions and diagnostics for Lexicon document references, Go exact-path calls and Rust exact-path macros.
 
 ```sh
-swift run lexicon-lsp --lexicon commerce.lexicon
+swift build -c release --product lexicon-lsp
 ```
 
-For most repositories, put one config file at the workspace root and point it at the root lexicon. The root lexicon can import and connect the rest of the project vocabulary, so the LSP sees the same composed graph as generation:
+For most repositories, put one config file at the workspace root:
 
 ```json
 {
@@ -351,50 +149,9 @@ For most repositories, put one config file at the workspace root and point it at
 }
 ```
 
-`lexicon-lsp.json`, `.lexicon-lsp.json`, `lexicon.conf`, and `.lexicon.conf` are accepted. If a workspace really has multiple independent root lexicons, map source subtrees explicitly:
+Accepted config filenames are `lexicon-lsp.json`, `.lexicon-lsp.json`, `lexicon.conf` and `.lexicon.conf`.
 
-```json
-{
-  "lexicons": [
-    { "scope": "apps/storefront", "lexicon": "lexicons/storefront.lexicon" },
-    { "scope": "packages/payments", "lexicon": "packages/payments/payments.lexicon" }
-  ]
-}
-```
-
-The longest matching `scope` wins for each opened file.
-
-### Zed
-
-Build the language server and make it available to Zed:
-
-```sh
-swift build -c release --product lexicon-lsp
-```
-
-Either put `.build/release/lexicon-lsp` on `PATH`, or configure the binary path in Zed settings:
-
-```json
-{
-  "lsp": {
-    "lexicon-lsp": {
-      "binary": {
-        "path": "/absolute/path/to/Lexicon/.build/release/lexicon-lsp"
-      }
-    }
-  }
-}
-```
-
-Then install the dev extension from `Editors/Zed/lexicon` using Zed's `Extensions: Install Dev Extension` command. The extension attaches `lexicon-lsp` to Lexicon, Rust, and Go buffers.
-
-To try it locally:
-
-```sh
-zed Examples/Zed
-```
-
-Open `demo.rs` or `demo.go` and request completion after `test.type.even.`. The LSP should offer `bad` and `no`; the `bed` examples should be diagnosed as unknown Lexicon paths.
+See [Editor Support](https://github.com/ollieatkinson/Lexicon/wiki/Editor-Support), [Zed](https://github.com/ollieatkinson/Lexicon/wiki/Editor-Zed), [VS Code](https://github.com/ollieatkinson/Lexicon/wiki/Editor-VS-Code) and [GoLand and JetBrains](https://github.com/ollieatkinson/Lexicon/wiki/Editor-GoLand-and-JetBrains).
 
 ## CLI
 
@@ -403,64 +160,16 @@ The `lexicon` executable is designed for scripts, editors and automation.
 ```sh
 swift run lexicon validate commerce.lexicon
 swift run lexicon lint commerce.lexicon
-swift run lexicon inspect commerce.lexicon commerce.ui.product.card
+swift run lexicon inspect commerce.lexicon commerce.ui.checkout.button.primary
 swift run lexicon tree commerce.lexicon commerce --depth 4 --inherited --metadata
 swift run lexicon search commerce.lexicon order submit --mode hybrid --limit 10
-swift run lexicon refs commerce.lexicon commerce.ui.product.card.buy.enabled
-swift run lexicon excerpt commerce.lexicon commerce.ui.product.card
+swift run lexicon refs commerce.lexicon commerce.ui.checkout.button.primary
 swift run lexicon format commerce.lexicon --write
-swift run lexicon diff before.lexicon after.lexicon
 ```
 
-Search supports lexical phrase matching, token matching over IDs and metadata, and semantic ranking. The default `hybrid` mode is the normal entry point; use `--mode token`, `--mode lexical` or `--mode semantic` when you need a narrower lens. `--scope own` searches the declared graph, `--scope live` expands likely hits through resolved lemma context, and `--scope full` materializes the resolved search space with recursion detection. Use `--depth`, `--candidates`, and `--budget` to bound live and full traversal. On Apple platforms the base build can use NaturalLanguage sentence embeddings. To enable the MLX embedder backend, build the CLI with the `MLXSearch` package trait:
+Search supports hybrid, semantic, token and lexical modes. The default `hybrid` mode is the normal entry point; use narrower modes when you need deterministic ID matching or semantic ranking.
 
-```sh
-swift run --traits MLXSearch lexicon search commerce.lexicon "order submit" \
-	--embedding-provider mlx \
-	--embedding-model TaylorAI/bge-micro-v2
-```
-
-MLX document embeddings are cached under the user cache directory by default. The first semantic search builds the cache and logs indexing progress to stderr; pass `--embedding-cache` or `--rebuild-embeddings` to control that cache.
-
-See [`docs/search.md`](docs/search.md) for the search mode guide and demo lexicon examples.
-
-Editing commands print the updated document to stdout by default. Pass `-o` or `--output` to write another file.
-
-```sh
-swift run lexicon add commerce.lexicon commerce.ui.product.card badge \
-	--type commerce.ui.type.label \
-	--default '"New"' \
-	-o commerce.next.lexicon
-
-swift run lexicon rename commerce.lexicon commerce.ui.product.card.buy purchase \
-	-o commerce.next.lexicon
-```
-
-Validation and inspection commands emit structured JSON so other tools can consume them.
-
-## Runtime Events
-
-`SwiftLexicon` is a small runtime for generated Swift lexicons and async event streams.
-
-Generated Swift lexicons expose typed values for the graph. Events can be sent and matched by generated lemma, generated type or keyed value.
-
-```swift
-import SwiftLexicon
-
-let events = Events()
-
-let subscription = commerce.ux.type.action >> events.then { event in
-	let value: String = try event[type: String.self]
-	print(value)
-}
-
-commerce.ui.product.card.buy["birthday_001"] >> events
-
-subscription.cancel()
-events.finish()
-```
-
-Event payloads are JSON-backed and decode through `JSONDecoder`, so generated lexicons can carry structured values without hard-coded casts.
+See [CLI Reference](https://github.com/ollieatkinson/Lexicon/wiki/CLI-Reference) and [Search](https://github.com/ollieatkinson/Lexicon/wiki/Search).
 
 ## Package Products
 
@@ -500,9 +209,9 @@ The package currently declares Swift 6.3, Swift language mode 6, macOS 15 and iO
 
 CI runs SwiftPM tests on macOS and Linux. It also runs tests on an Android emulator and cross-builds Android ARM64.
 
-On Apple platforms, sentence graph generation uses NaturalLanguage. On Linux and Android, Lexicon uses a deterministic fallback so the API remains available.
+On Apple platforms, sentence graph generation can use NaturalLanguage. On Linux and Android, Lexicon uses a deterministic fallback so the API remains available.
 
-See [`docs/platforms.md`](docs/platforms.md) for details.
+See [Platform Support](https://github.com/ollieatkinson/Lexicon/wiki/Platform-Support).
 
 ## Development
 
