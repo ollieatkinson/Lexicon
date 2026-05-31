@@ -12,6 +12,7 @@ The README is the short overview. The detailed guides now live in the wiki:
 
 - [Quick Start](https://github.com/ollieatkinson/Lexicon/wiki/Quick-Start)
 - [Core Concepts](https://github.com/ollieatkinson/Lexicon/wiki/Core-Concepts)
+- [Gardening Philosophy](https://github.com/ollieatkinson/Lexicon/wiki/Gardening-Philosophy)
 - [Document Syntax](https://github.com/ollieatkinson/Lexicon/wiki/Document-Syntax)
 - [Composition and Imports](https://github.com/ollieatkinson/Lexicon/wiki/Composition-and-Imports)
 - [Commerce Example](https://github.com/ollieatkinson/Lexicon/wiki/Example-Commerce-Vocabulary)

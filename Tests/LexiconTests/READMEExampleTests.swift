@@ -106,6 +106,7 @@ struct READMEExampleTests {
 		#expect(readme.contains("commerce.api.order.submit"))
 		#expect(readme.contains("commerce.ui.checkout.button.primary"))
 		#expect(readme.contains("https://github.com/ollieatkinson/Lexicon/wiki/Quick-Start"))
+		#expect(readme.contains("https://github.com/ollieatkinson/Lexicon/wiki/Gardening-Philosophy"))
 		#expect(readme.contains("https://github.com/ollieatkinson/Lexicon/wiki/Example-Commerce-Vocabulary"))
 		#expect(readme.contains("https://github.com/ollieatkinson/Lexicon/wiki/Editor-Support"))
 	}
