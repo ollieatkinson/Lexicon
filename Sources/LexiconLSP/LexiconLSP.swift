@@ -256,9 +256,8 @@ public struct LexiconLSPService: Sendable {
 
 	public func diagnostics(in text: String, lexiconDocument: Bool = false) -> [LexiconDiagnostic] {
 		let pathDiagnostics = (
-			Self.matches(in: text, pattern: #"\bl\("([^"\\]*(?:\\.[^"\\]*)*)"\)"#)
-				+ Self.matches(in: text, pattern: #"\bl!\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)"#)
-				+ Self.lexiconDocumentReferences(in: text, index: index)
+			CodeReferenceSyntax.all.flatMap { $0.references(in: text) }
+				+ (lexiconDocument ? LexiconDocumentSyntax.references(in: text, index: index) : [])
 		)
 			.filter { !$0.path.hasSuffix(".") }
 			.filter { !index.contains($0.path) }
@@ -268,173 +267,11 @@ public struct LexiconLSPService: Sendable {
 					message: "Unknown Lexicon path '\($0.path)'."
 				)
 			}
-		return lexiconDocument ? Self.lexiconIndentationDiagnostics(in: text) + pathDiagnostics : pathDiagnostics
-	}
-
-	private static func lexiconIndentationDiagnostics(in text: String) -> [LexiconDiagnostic] {
-		var diagnostics: [LexiconDiagnostic] = []
-		var utf16Offset = 0
-		for lineText in text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
-			defer { utf16Offset += lineText.utf16.count + 1 }
-			let leadingWhitespace = lineText.prefix { $0 == "\t" || $0 == " " }
-			let leadingTabs = leadingWhitespace.prefix { $0 == "\t" }
-			guard leadingTabs.count < leadingWhitespace.count else {
-				continue
-			}
-			let startOffset = utf16Offset + leadingTabs.utf16.count
-			let endOffset = utf16Offset + leadingWhitespace.utf16.count
-			diagnostics.append(LexiconDiagnostic(
-				range: LexiconTextRange(
-					start: text.position(forUTF16Offset: startOffset),
-					end: text.position(forUTF16Offset: endOffset)
-				),
-				message: "Lexicon indentation uses tabs; spaces are ignored for hierarchy."
-			))
-		}
-		return diagnostics
-	}
-
-	private static func matches(in text: String, pattern: String) -> [(path: String, range: LexiconTextRange)] {
-		let regex = try! NSRegularExpression(pattern: pattern)
-		let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
-		return regex.matches(in: text, range: nsRange).compactMap { match in
-			guard
-				let pathRange = Range(match.range(at: 1), in: text)
-			else {
-				return nil
-			}
-			return (
-				path: String(text[pathRange]),
-				range: LexiconTextRange(
-					start: text.position(forUTF16Offset: match.range(at: 1).location),
-					end: text.position(forUTF16Offset: match.range(at: 1).location + match.range(at: 1).length)
-				)
-			)
-		}
-	}
-
-	private static func lexiconDocumentReferences(in text: String, index: LexiconPathIndex) -> [(path: String, range: LexiconTextRange)] {
-		var references: [(path: String, range: LexiconTextRange)] = []
-		var path: [String] = []
-		var utf16Offset = 0
-		for lineText in text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
-			defer { utf16Offset += lineText.utf16.count + 1 }
-			let depth = lineText.prefix { $0 == "\t" }.count
-			let trimmed = lineText.trimmingCharacters(in: .whitespaces)
-			if let name = Self.lemmaName(in: trimmed) {
-				if depth < path.count {
-					path.removeLast(path.count - depth)
-				}
-				path.append(name)
-				continue
-			}
-			let marker: String
-			guard trimmed.hasPrefix("+ ") || trimmed.hasPrefix("= ") else {
-				continue
-			}
-			marker = String(trimmed.prefix(2))
-			let rawReference = String(trimmed.dropFirst(2)).trimmingCharacters(in: .whitespaces)
-			guard rawReference.isEmpty == false else {
-				continue
-			}
-			let resolved = marker == "= "
-				? Self.resolvedProtonym(rawReference, from: path, index: index)
-				: rawReference
-			let leadingWhitespace = lineText.prefix { $0 == "\t" || $0 == " " }.utf16.count
-			let startOffset = utf16Offset + leadingWhitespace + marker.utf16.count
-			references.append((
-				path: resolved,
-				range: LexiconTextRange(
-					start: text.position(forUTF16Offset: startOffset),
-					end: text.position(forUTF16Offset: startOffset + rawReference.utf16.count)
-				)
-			))
-		}
-		return references
-	}
-
-	fileprivate static func lemmaName(in trimmedLine: String) -> String? {
-		let name = trimmedLine.hasSuffix(":") ? String(trimmedLine.dropLast()) : trimmedLine
-		return Lemma.isValid(name: name) ? name : nil
-	}
-
-	private static func resolvedProtonym(_ reference: String, from path: [String], index: LexiconPathIndex) -> String {
-		if index.contains(reference) {
-			return reference
-		}
-		let parent = path.dropLast().joined(separator: ".")
-		return parent.isEmpty ? reference : "\(parent).\(reference)"
+		return lexiconDocument ? LexiconDocumentSyntax.indentationDiagnostics(in: text) + pathDiagnostics : pathDiagnostics
 	}
 }
 
-private struct CompletionContext {
-	var prefixes: [String]
-	var replacementRange: LexiconTextRange
-
-	init?(text: String, line: Int, character: Int) {
-		guard let cursor = text.index(line: line, utf16Character: character) else {
-			return nil
-		}
-		let beforeCursor = String(text[..<cursor])
-		let context: (rawPrefix: String, prefixes: [String])?
-		if let range = beforeCursor.range(of: #"l(""#, options: .backwards) {
-			let value = String(beforeCursor[range.upperBound...])
-			context = value.contains("\n") || value.contains("\"") ? nil : (value, [value])
-		} else if let range = beforeCursor.range(of: "l!(", options: .backwards) {
-			let value = String(beforeCursor[range.upperBound...])
-			context = value.contains("\n") || value.contains(")") ? nil : (value, [value])
-		} else {
-			context = Self.lexiconReferenceContext(beforeCursor)
-		}
-		guard let context else {
-			return nil
-		}
-		self.prefixes = context.prefixes
-		let partial = LexiconPathIndex.split(context.rawPrefix).partial
-		let start = text.index(cursor, offsetByUTF16: -partial.utf16.count) ?? cursor
-		self.replacementRange = LexiconTextRange(
-			start: text.position(for: start),
-			end: text.position(for: cursor)
-		)
-	}
-
-	static func lexiconReferenceContext(_ beforeCursor: String) -> (rawPrefix: String, prefixes: [String])? {
-		let lines = beforeCursor.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-		let line = lines.last ?? ""
-		let trimmed = line.trimmingCharacters(in: .whitespaces)
-		if trimmed.hasPrefix("+ ") {
-			let rawPrefix = String(trimmed.dropFirst(2))
-			return (rawPrefix, [rawPrefix])
-		}
-		guard trimmed.hasPrefix("= ") else {
-			return nil
-		}
-		let rawPrefix = String(trimmed.dropFirst(2))
-		let parent = parentLexiconPath(lines: lines.dropLast())
-		guard parent.isEmpty == false else {
-			return (rawPrefix, [rawPrefix])
-		}
-		return (rawPrefix, [rawPrefix, "\(parent).\(rawPrefix)"])
-	}
-
-	static func parentLexiconPath<S: Sequence>(lines: S) -> String where S.Element == String {
-		var path: [String] = []
-		for lineText in lines {
-			let depth = lineText.prefix { $0 == "\t" }.count
-			let trimmed = lineText.trimmingCharacters(in: .whitespaces)
-			guard let name = LexiconLSPService.lemmaName(in: trimmed) else {
-				continue
-			}
-			if depth < path.count {
-				path.removeLast(path.count - depth)
-			}
-			path.append(name)
-		}
-		return path.dropLast().joined(separator: ".")
-	}
-}
-
-private extension String {
+extension String {
 	func index(line targetLine: Int, utf16Character targetCharacter: Int) -> Index? {
 		var line = 0
 		var character = 0

@@ -80,10 +80,46 @@ struct LexiconLSPTests {
 	}
 
 	@Test
+	func test_completes_relative_lexicon_default_references() throws {
+		let text = """
+		test:
+			type:
+				even:
+					bad:
+						? @ no.
+					no:
+						good:
+		"""
+		let service = try LexiconLSPService(index: LexiconPathIndex(lexiconText: text))
+
+		let result = try #require(service.completion(in: text, line: 4, character: "\t\t\t\t? @ no.".utf16.count))
+
+		#expect(result.items.map(\.label) == ["good"])
+	}
+
+	@Test
 	func test_diagnoses_unknown_code_paths() throws {
 		let service = try Self.service()
 		let text = #"""
 		let go = l("test.type.even.bed")
+		let rust = l!(test.type.even.bed)
+		"""#
+
+		let diagnostics = service.diagnostics(in: text)
+
+		#expect(diagnostics.map(\.message) == [
+			"Unknown Lexicon path 'test.type.even.bed'.",
+			"Unknown Lexicon path 'test.type.even.bed'.",
+		])
+	}
+
+	@Test
+	func test_code_reference_regexes_use_identifier_boundaries_and_macro_syntax() throws {
+		let service = try Self.service()
+		let text = #"""
+		let helper = call_l("test.type.even.bed")
+		let invalidMacro = l!(test.type.even-bed)
+		let go = object.l("test.type.even.bed")
 		let rust = l!(test.type.even.bed)
 		"""#
 
@@ -123,7 +159,7 @@ struct LexiconLSPTests {
 			+ test.type.
 		"""#
 
-		let diagnostics = service.diagnostics(in: text)
+		let diagnostics = service.diagnostics(in: text, lexiconDocument: true)
 
 		#expect(diagnostics.isEmpty)
 	}
@@ -149,17 +185,20 @@ struct LexiconLSPTests {
 				even:
 					bad:
 						= no.good
+						? @ no.good
 					wrong:
 						= missing
+						? @ missing
 					no:
 						good:
 		"""
 		let service = try LexiconLSPService(index: LexiconPathIndex(lexiconText: text))
 
-		let diagnostics = service.diagnostics(in: text)
+		let diagnostics = service.diagnostics(in: text, lexiconDocument: true)
 
 		#expect(diagnostics.map(\.message) == [
-			"Unknown Lexicon path 'test.type.even.missing'."
+			"Unknown Lexicon path 'test.type.even.missing'.",
+			"Unknown Lexicon path 'missing'."
 		])
 	}
 
