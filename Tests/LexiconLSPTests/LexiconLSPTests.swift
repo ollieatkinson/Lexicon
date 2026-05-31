@@ -10,7 +10,7 @@ import LexiconLSP
 struct LexiconLSPTests {
 
 	@Test
-	func test_completes_go_string_lexicon_paths() throws {
+	func test_completes_quoted_call_lexicon_paths() throws {
 		let service = try Self.service()
 		let text = #"let value = l("test.type.even.")"#
 
@@ -20,7 +20,7 @@ struct LexiconLSPTests {
 	}
 
 	@Test
-	func test_completes_partial_go_string_lexicon_paths() throws {
+	func test_completes_partial_quoted_call_lexicon_paths() throws {
 		let service = try Self.service()
 		let text = #"let value = l("test.type.even.b")"#
 

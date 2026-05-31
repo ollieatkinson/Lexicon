@@ -28,6 +28,20 @@ struct LexiconLSPCommandTests {
 	}
 
 	@Test
+	func test_process_accepts_stdio_argument() throws {
+		let directory = try TemporaryDirectory()
+		try directory.write("lexicon-lsp.json", #"{"lexicon":"demo.lexicon"}"#)
+		try directory.write("demo.lexicon", Self.lexicon)
+
+		var server = try LSPProcess(arguments: ["--stdio"])
+		defer { server.stop() }
+		try server.initialize(root: directory.url)
+		let response = try server.response(id: 1)
+
+		#expect(response["result"] != nil)
+	}
+
+	@Test
 	func test_process_completes_paths_from_workspace_configuration() throws {
 		let directory = try TemporaryDirectory()
 		try directory.write("lexicon-lsp.json", #"{"lexicon":"demo.lexicon"}"#)
@@ -198,7 +212,7 @@ private struct LSPProcess {
 	private var outputBuffer = Data()
 	private var finished = false
 
-	init() throws {
+	init(arguments: [String] = []) throws {
 		process = Process()
 		input = Pipe()
 		output = Pipe()
@@ -208,6 +222,7 @@ private struct LSPProcess {
 		}
 		self.outputFileDescriptorFlags = outputFileDescriptorFlags
 		process.executableURL = Self.packageRoot().appendingPathComponent(".build/debug/lexicon-lsp")
+		process.arguments = arguments
 		process.standardInput = input
 		process.standardOutput = output
 		process.standardError = error

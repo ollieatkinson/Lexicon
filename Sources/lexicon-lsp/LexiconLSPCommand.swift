@@ -17,6 +17,9 @@ struct LexiconLSPCommand: ParsableCommand {
 	@Option(help: "Root lexicon path. Workspace config is used when omitted.")
 	var lexicon: URL?
 
+	@Flag(help: "Use stdio transport. This is the default and is accepted for editor client compatibility.")
+	var stdio = false
+
 	func run() throws {
 		LexiconLanguageServer(
 			workspace: LexiconWorkspace(explicitLexiconURL: lexicon?.standardizedFileURL)
