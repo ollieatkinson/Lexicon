@@ -337,7 +337,15 @@ l!(test.type.even.bad).id();
 swift run lexicon-lsp --lexicon commerce.lexicon
 ```
 
-For multi-module repositories, put `lexicon-lsp.json` at the workspace root and map source subtrees to lexicons. `lexicon.conf` and `.lexicon-lsp.json` are accepted with the same JSON shape:
+For most repositories, put one config file at the workspace root and point it at the root lexicon. The root lexicon can import and connect the rest of the project vocabulary, so the LSP sees the same composed graph as generation:
+
+```json
+{
+  "lexicon": "commerce.lexicon"
+}
+```
+
+`lexicon-lsp.json`, `.lexicon-lsp.json`, `lexicon.conf`, and `.lexicon.conf` are accepted. If a workspace really has multiple independent root lexicons, map source subtrees explicitly:
 
 ```json
 {

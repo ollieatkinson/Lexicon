@@ -283,6 +283,7 @@ struct LexiconLanguageServerConfiguration {
 		"lexicon-lsp.json",
 		".lexicon-lsp.json",
 		"lexicon.conf",
+		".lexicon.conf",
 	]
 
 	private var explicitLexiconURL: URL?
