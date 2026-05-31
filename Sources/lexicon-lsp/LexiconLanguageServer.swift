@@ -136,7 +136,7 @@ final class LexiconLanguageServer {
 
 	private func publishDiagnostics(uri: String, text: String) {
 		let diagnostics = LexiconLSPService(index: workspace.index(for: uri))
-			.diagnostics(in: text)
+			.diagnostics(in: text, lexiconDocument: isLexiconDocument(uri: uri))
 			.map(Diagnostic.init)
 		transport.notify(
 			method: LSPMethod.publishDiagnostics,

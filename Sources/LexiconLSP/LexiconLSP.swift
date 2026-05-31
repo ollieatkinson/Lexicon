@@ -254,8 +254,8 @@ public struct LexiconLSPService: Sendable {
 		return LexiconCompletionResult(range: context.replacementRange, items: items)
 	}
 
-	public func diagnostics(in text: String) -> [LexiconDiagnostic] {
-		(
+	public func diagnostics(in text: String, lexiconDocument: Bool = false) -> [LexiconDiagnostic] {
+		let pathDiagnostics = (
 			Self.matches(in: text, pattern: #"\bl\("([^"\\]*(?:\\.[^"\\]*)*)"\)"#)
 				+ Self.matches(in: text, pattern: #"\bl!\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)"#)
 				+ Self.lexiconDocumentReferences(in: text, index: index)
@@ -268,6 +268,30 @@ public struct LexiconLSPService: Sendable {
 					message: "Unknown Lexicon path '\($0.path)'."
 				)
 			}
+		return lexiconDocument ? Self.lexiconIndentationDiagnostics(in: text) + pathDiagnostics : pathDiagnostics
+	}
+
+	private static func lexiconIndentationDiagnostics(in text: String) -> [LexiconDiagnostic] {
+		var diagnostics: [LexiconDiagnostic] = []
+		var utf16Offset = 0
+		for lineText in text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
+			defer { utf16Offset += lineText.utf16.count + 1 }
+			let leadingWhitespace = lineText.prefix { $0 == "\t" || $0 == " " }
+			let leadingTabs = leadingWhitespace.prefix { $0 == "\t" }
+			guard leadingTabs.count < leadingWhitespace.count else {
+				continue
+			}
+			let startOffset = utf16Offset + leadingTabs.utf16.count
+			let endOffset = utf16Offset + leadingWhitespace.utf16.count
+			diagnostics.append(LexiconDiagnostic(
+				range: LexiconTextRange(
+					start: text.position(forUTF16Offset: startOffset),
+					end: text.position(forUTF16Offset: endOffset)
+				),
+				message: "Lexicon indentation uses tabs; spaces are ignored for hierarchy."
+			))
+		}
+		return diagnostics
 	}
 
 	private static func matches(in text: String, pattern: String) -> [(path: String, range: LexiconTextRange)] {

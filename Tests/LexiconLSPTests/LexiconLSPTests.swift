@@ -129,6 +129,19 @@ struct LexiconLSPTests {
 	}
 
 	@Test
+	func test_diagnoses_space_indentation_in_lexicon_documents() throws {
+		let service = try LexiconLSPService(index: LexiconPathIndex(lexiconText: "test:\n\ttype:"))
+		let text = "test:\n\t    type:"
+
+		let diagnostics = service.diagnostics(in: text, lexiconDocument: true)
+
+		#expect(diagnostics.map(\.message) == [
+			"Lexicon indentation uses tabs; spaces are ignored for hierarchy."
+		])
+		#expect(service.diagnostics(in: text).isEmpty)
+	}
+
+	@Test
 	func test_diagnoses_lexicon_document_references_and_resolves_relative_synonyms() throws {
 		let text = """
 		test:
