@@ -24,9 +24,13 @@
   "activationEvents": [
     "onLanguage:lexicon",
     "workspaceContains:lexicon-lsp.json",
+    "workspaceContains:**/lexicon-lsp.json",
     "workspaceContains:.lexicon-lsp.json",
+    "workspaceContains:**/.lexicon-lsp.json",
     "workspaceContains:lexicon.conf",
+    "workspaceContains:**/lexicon.conf",
     "workspaceContains:.lexicon.conf",
+    "workspaceContains:**/.lexicon.conf",
     "onCommand:lexicon.restartLanguageServer",
     "onCommand:lexicon.showOutput"
   ],
@@ -34,7 +38,7 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test:unit": "npm run compile && node --test out/test/server.test.js",
+    "test:unit": "npm run compile && node --test out/test/*.test.js",
     "test:extension": "npm run compile && swift build --package-path ../../.. --product lexicon-lsp && node ./out/test/runTest.js",
     "test": "npm run test:unit && npm run test:extension",
     "package": "npm run compile && vsce package --out lexicon.vsix"

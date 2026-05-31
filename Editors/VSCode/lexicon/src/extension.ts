@@ -12,6 +12,8 @@ import {
 
 let client: LanguageClient | undefined;
 let outputChannel: vscode.OutputChannel | undefined;
+let configurationWatcher: vscode.FileSystemWatcher | undefined;
+let restartTimer: NodeJS.Timeout | undefined;
 
 const configurationFileNames = [
 	"lexicon-lsp.json",
@@ -25,6 +27,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	context.subscriptions.push(outputChannel);
 	context.subscriptions.push(vscode.commands.registerCommand("lexicon.restartLanguageServer", restartLanguageServer));
 	context.subscriptions.push(vscode.commands.registerCommand("lexicon.showOutput", () => outputChannel?.show()));
+	configurationWatcher = vscode.workspace.createFileSystemWatcher(configurationGlob());
+	configurationWatcher.onDidCreate(scheduleLanguageServerRestart, undefined, context.subscriptions);
+	configurationWatcher.onDidChange(scheduleLanguageServerRestart, undefined, context.subscriptions);
+	configurationWatcher.onDidDelete(scheduleLanguageServerRestart, undefined, context.subscriptions);
+	context.subscriptions.push(configurationWatcher);
 	context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((event) => {
 		if (event.affectsConfiguration("lexicon.lsp.binary")) {
 			void restartLanguageServer();
@@ -34,7 +41,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 }
 
 export async function deactivate(): Promise<void> {
+	if (restartTimer !== undefined) {
+		clearTimeout(restartTimer);
+		restartTimer = undefined;
+	}
 	await stopLanguageServer();
+}
+
+function scheduleLanguageServerRestart(): void {
+	if (restartTimer !== undefined) {
+		clearTimeout(restartTimer);
+	}
+	restartTimer = setTimeout(() => {
+		restartTimer = undefined;
+		void restartLanguageServer();
+	}, 250);
 }
 
 async function restartLanguageServer(): Promise<void> {
@@ -52,7 +73,6 @@ async function startLanguageServer(): Promise<void> {
 		return;
 	}
 
-	const watcher = vscode.workspace.createFileSystemWatcher(`**/{${configurationFileNames.join(",")}}`);
 	const serverOptions: ServerOptions = {
 		command,
 		args: binary.arguments,
@@ -69,9 +89,6 @@ async function startLanguageServer(): Promise<void> {
 		documentSelector: [
 			{ scheme: "file" },
 		],
-		synchronize: {
-			fileEvents: watcher,
-		},
 		outputChannel,
 	};
 
@@ -100,4 +117,8 @@ function binaryConfiguration(): ServerBinaryConfiguration {
 		arguments: configuration.get("arguments", []),
 		env: configuration.get("env", {}),
 	};
+}
+
+function configurationGlob(): string {
+	return `**/{${configurationFileNames.join(",")}}`;
 }
