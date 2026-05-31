@@ -120,7 +120,8 @@ let package = Package(
 		.executableTarget(
 			name: "lexicon-lsp",
 			dependencies: [
-				"LexiconLSP"
+				"LexiconLSP",
+				.product(name: "ArgumentParser", package: "swift-argument-parser")
 			]
 		),
 		.executableTarget(
