@@ -48,54 +48,28 @@ struct CodeReferenceSyntax: Sendable {
 	static let go = CodeReferenceSyntax(
 		name: "Go",
 		opening: #"l(""#,
-		openingPattern: #"l\(""#,
 		path: .quotedString,
-		closingPattern: #""\)"#,
+		references: {
+			$0.locatedLexiconPaths(matching: #/(?:^|[^A-Za-z0-9_])l\("(?<path>[^"\\]*(?:\\.[^"\\]*)*)"\)/#)
+		},
 		completionTerminators: ["\n", "\""]
 	)
 
 	static let rust = CodeReferenceSyntax(
 		name: "Rust",
 		opening: "l!(",
-		openingPattern: #"l!\("#,
 		path: .dottedIdentifier,
-		closingPattern: #"\)"#,
+		references: {
+			$0.locatedLexiconPaths(matching: #/(?:^|[^A-Za-z0-9_])l!\((?<path>[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/#)
+		},
 		completionTerminators: ["\n", ")"]
 	)
 
 	var name: String
 	var opening: String
-	var openingPattern: String
 	var path: CodeReferencePathSyntax
-	var closingPattern: String
+	var references: @Sendable (String) -> [LocatedLexiconPath]
 	var completionTerminators: Set<Character>
-
-	var referencePattern: String {
-		"(?:^|[^A-Za-z0-9_])\(openingPattern)(?<path>\(path.pattern))\(closingPattern)"
-	}
-
-	var referenceRegex: Regex<AnyRegexOutput> {
-		try! Regex(referencePattern)
-	}
-
-	func references(in text: String) -> [LocatedLexiconPath] {
-		text.matches(of: referenceRegex).compactMap { match in
-			guard
-				let capture = match.output["path"],
-				let substring = capture.substring,
-				let range = capture.range
-			else {
-				return nil
-			}
-			return LocatedLexiconPath(
-				path: String(substring),
-				range: LexiconTextRange(
-					start: text.position(for: range.lowerBound),
-					end: text.position(for: range.upperBound)
-				)
-			)
-		}
-	}
 
 	func prefixContext(beforeCursor text: Substring) -> LexiconPrefixContext? {
 		var searchEnd = text.endIndex
@@ -126,18 +100,15 @@ struct CodeReferenceSyntax: Sendable {
 }
 
 struct CodeReferencePathSyntax: Sendable {
-	var pattern: String
 	var acceptsCompletionPrefix: @Sendable (Substring) -> Bool
 }
 
 extension CodeReferencePathSyntax {
 	static let quotedString = Self(
-		pattern: #"[^"\\]*(?:\\.[^"\\]*)*"#,
 		acceptsCompletionPrefix: { _ in true }
 	)
 
 	static let dottedIdentifier = Self(
-		pattern: #"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*"#,
 		acceptsCompletionPrefix: { prefix in
 			var expectsSegmentStart = true
 			for character in prefix {
@@ -384,6 +355,23 @@ extension Character {
 			return false
 		}
 		return isASCIIIdentifierStart || (48...57).contains(value)
+	}
+}
+
+extension String {
+	func locatedLexiconPaths(
+		matching regex: Regex<(Substring, path: Substring)>
+	) -> [LocatedLexiconPath] {
+		matches(of: regex).map { match in
+			let substring = match.output.path
+			return LocatedLexiconPath(
+				path: String(substring),
+				range: LexiconTextRange(
+					start: position(for: substring.startIndex),
+					end: position(for: substring.endIndex)
+				)
+			)
+		}
 	}
 }
 

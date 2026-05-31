@@ -265,7 +265,7 @@ public struct LexiconLSPService: Sendable {
 
 	public func diagnostics(in text: String, lexiconDocument: Bool = false) -> [LexiconDiagnostic] {
 		let pathDiagnostics = (
-			CodeReferenceSyntax.all.flatMap { $0.references(in: text) }
+			CodeReferenceSyntax.all.flatMap { $0.references(text) }
 				+ (lexiconDocument ? LexiconDocumentSyntax.references(in: text, index: index) : [])
 		)
 			.filter { !$0.path.hasSuffix(".") }
