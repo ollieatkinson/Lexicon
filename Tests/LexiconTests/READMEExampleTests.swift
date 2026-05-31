@@ -96,32 +96,18 @@ struct READMEExampleTests {
 	}
 
 	@Test
-	func test_readme_swift_examples_use_generated_member_access() throws {
+	func test_readme_links_to_wiki_and_keeps_generated_member_access_example() throws {
 
 		guard let readme = try Self.readmeIfAvailable() else {
 			return
 		}
 
 		#expect(!(readme.contains("lexicon[\"")))
-		#expect(readme.contains("commerce.api.storefront.order.create.can.submit"))
-		#expect(readme.contains("commerce.ui.product.card.buy.enabled"))
-
-		for filename in Self.connectedExampleFilenames {
-			#expect(readme.contains("<summary><code>\(filename)</code></summary>"))
-		}
-	}
-
-	@Test
-	func test_readme_taskpaper_examples_match_test_resources_when_available() throws {
-
-		guard let readme = try Self.readmeIfAvailable() else {
-			return
-		}
-
-		for (filename, resource) in try Self.resourceExamples() {
-			let example = try Self.taskpaperExample(named: filename, in: readme)
-			#expect(example == resource)
-		}
+		#expect(readme.contains("commerce.api.order.submit"))
+		#expect(readme.contains("commerce.ui.checkout.button.primary"))
+		#expect(readme.contains("https://github.com/ollieatkinson/Lexicon/wiki/Quick-Start"))
+		#expect(readme.contains("https://github.com/ollieatkinson/Lexicon/wiki/Example-Commerce-Vocabulary"))
+		#expect(readme.contains("https://github.com/ollieatkinson/Lexicon/wiki/Editor-Support"))
 	}
 }
 
@@ -150,27 +136,6 @@ private extension READMEExampleTests {
 			throw "README example resource not found: \(filename)"
 		}
 		return try String(contentsOf: url, encoding: .utf8).droppingTrailingNewline()
-	}
-
-	static func taskpaperExample(named filename: String, in readme: String) throws -> String {
-		let marker = filename == mainExampleFilename
-			? "`\(filename)`"
-			: "<summary><code>\(filename)</code></summary>"
-		guard let markerRange = readme.range(of: marker) else {
-			throw "README example marker not found: \(filename)"
-		}
-
-		let tail = readme[markerRange.upperBound...]
-		guard let fenceStart = tail.range(of: "```taskpaper\n") else {
-			throw "README TaskPaper fence not found: \(filename)"
-		}
-
-		let content = tail[fenceStart.upperBound...]
-		guard let fenceEnd = content.range(of: "\n```") else {
-			throw "README TaskPaper fence end not found: \(filename)"
-		}
-
-		return String(content[..<fenceEnd.lowerBound])
 	}
 
 	static func readmeIfAvailable() throws -> String? {
