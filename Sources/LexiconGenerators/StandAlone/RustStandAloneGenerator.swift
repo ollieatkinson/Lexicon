@@ -102,10 +102,8 @@ private extension Lexicon.Graph.JSON {
 	}
 
 	func rustMacroArms() throws -> String {
-		try classes
-			.filter { $0.mixin == nil }
-			.flatMap(\.rustMacroPaths)
-			.uniqueSorted()
+		try RustMacroPathBuilder(rootID: name, classes: classes)
+			.paths()
 			.map { path in
 				try SourceTemplate(
 					"""
@@ -114,23 +112,86 @@ private extension Lexicon.Graph.JSON {
 						};
 					"""
 				).render([
-					"macroPath": path,
-					"expression": try path.rustRootExpression,
+					"macroPath": path.path,
+					"expression": path.expression,
 				])
 			}
 			.joined(separator: "\n")
 	}
 }
 
-private extension Lexicon.Graph.Node.Class.JSON {
+private struct RustMacroPath {
+	var path: String
+	var expression: String
+}
 
-	var rustMacroPaths: [String] {
-		var paths = [id]
-		for synonym in synonyms?.keys.sorted() ?? [] {
-			paths.append("\(id).\(synonym)")
-		}
-		return paths
+private struct RustMacroPathBuilder {
+	var rootID: String
+	var classes: [Lexicon.Graph.Node.Class.JSON]
+
+	private var classesByID: [String: Lexicon.Graph.Node.Class.JSON] {
+		Dictionary(uniqueKeysWithValues: classes.map { ($0.id, $0) })
 	}
+
+	func paths() throws -> [RustMacroPath] {
+		var output: [String: String] = [:]
+		try emit(
+			path: rootID,
+			sourceID: rootID,
+			expression: "l().\(rootID.rustSelector())",
+			active: [],
+			into: &output
+		)
+		return output
+			.map { RustMacroPath(path: $0.key, expression: $0.value) }
+			.sorted { $0.path < $1.path }
+	}
+
+	private func emit(
+		path: String,
+		sourceID: String,
+		expression: String,
+		active: Set<String>,
+		into output: inout [String: String]
+	) throws {
+		output[path] = expression
+		guard active.contains(sourceID) == false, let klass = classesByID[sourceID] else {
+			return
+		}
+		let active = active.union([sourceID])
+		let ownAccessors = klass.standAloneAccessors()
+		let ownNames = Set(ownAccessors.map(\.name))
+		for accessor in ownAccessors.sorted(by: { $0.name < $1.name }) {
+			try emit(accessor, from: path, expression: expression, isMethod: false, active: active, into: &output)
+		}
+		for accessor in klass.standAloneInheritedAccessors(classes: classes)
+			.filter({ ownNames.contains($0.name) == false })
+			.sorted(by: { $0.name < $1.name })
+		{
+			try emit(accessor, from: path, expression: expression, isMethod: true, active: active, into: &output)
+		}
+	}
+
+	private func emit(
+		_ accessor: StandAloneAccessor,
+		from path: String,
+		expression: String,
+		isMethod: Bool,
+		active: Set<String>,
+		into output: inout [String: String]
+	) throws {
+		let selector = try accessor.name.rustSelector()
+		try emit(
+			path: "\(path).\(accessor.name)",
+			sourceID: accessor.isSynonym ? accessor.targetID : accessor.sourceID,
+			expression: isMethod ? "\(expression).\(selector)()" : "\(expression).\(selector)",
+			active: active,
+			into: &output
+		)
+	}
+}
+
+private extension Lexicon.Graph.Node.Class.JSON {
 
 	func rust(classes: [Lexicon.Graph.Node.Class.JSON]) throws -> [String] {
 		guard mixin == nil else {
@@ -297,22 +358,6 @@ private extension String {
 		default:
 			return false
 		}
-	}
-
-	var rustRootExpression: String {
-		get throws {
-			try "l()." + split(separator: ".")
-				.map(String.init)
-				.map { try $0.rustSelector() }
-				.joined(separator: ".")
-		}
-	}
-}
-
-private extension Sequence where Element == String {
-
-	func uniqueSorted() -> [String] {
-		Array(Set(self)).sorted()
 	}
 }
 

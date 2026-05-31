@@ -331,11 +331,24 @@ l().test.r#type.even.bad.id();
 l!(test.type.even.bad).id();
 ```
 
-`lexicon-lsp` is a sidecar language server for editor integrations. Start it with a source lexicon to provide completions and diagnostics for exact-path references in `l("...")`, `l!(...)`, and lexicon document reference lines:
+`lexicon-lsp` is a sidecar language server for editor integrations. It provides completions and diagnostics for exact-path references in `l("...")`, `l!(...)`, and lexicon document reference lines. The index is built from the composed live graph, so imported and connected lexicons are included, as are inherited and synonym paths.
 
 ```sh
 swift run lexicon-lsp --lexicon commerce.lexicon
 ```
+
+For multi-module repositories, put `lexicon-lsp.json` at the workspace root and map source subtrees to lexicons. `lexicon.conf` and `.lexicon-lsp.json` are accepted with the same JSON shape:
+
+```json
+{
+  "lexicons": [
+    { "scope": "apps/storefront", "lexicon": "lexicons/storefront.lexicon" },
+    { "scope": "packages/payments", "lexicon": "packages/payments/payments.lexicon" }
+  ]
+}
+```
+
+The longest matching `scope` wins for each opened file.
 
 ## CLI
 

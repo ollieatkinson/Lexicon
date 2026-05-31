@@ -3,6 +3,7 @@
 //
 
 import Testing
+import Foundation
 import LexiconLSP
 
 @Suite
@@ -36,6 +37,16 @@ struct LexiconLSPTests {
 		let text = "let value = l!(test.type.even.)"
 
 		let result = try #require(service.completion(in: text, line: 0, character: "let value = l!(test.type.even.".utf16.count))
+
+		#expect(result.items.map(\.label) == ["bad", "no"])
+	}
+
+	@Test
+	func test_completes_inherited_rust_macro_paths() throws {
+		let service = try Self.service()
+		let text = "let value = l!(test.one.more.time.type.even.)"
+
+		let result = try #require(service.completion(in: text, line: 0, character: "let value = l!(test.one.more.time.type.even.".utf16.count))
 
 		#expect(result.items.map(\.label) == ["bad", "no"])
 	}
@@ -85,6 +96,24 @@ struct LexiconLSPTests {
 	}
 
 	@Test
+	func test_validates_go_strings_and_rust_macros_against_live_paths() throws {
+		let service = try Self.service()
+		let text = #"""
+		let validGo = l("test.two.bad")
+		let invalidGo = l("test.two.bed")
+		let validRust = l!(test.one.more.time.type.even.bad)
+		let invalidRust = l!(test.one.more.time.type.even.bed)
+		"""#
+
+		let diagnostics = service.diagnostics(in: text)
+
+		#expect(diagnostics.map(\.message) == [
+			"Unknown Lexicon path 'test.two.bed'.",
+			"Unknown Lexicon path 'test.one.more.time.type.even.bed'.",
+		])
+	}
+
+	@Test
 	func test_does_not_diagnose_incomplete_prefixes() throws {
 		let service = try Self.service()
 		let text = #"""
@@ -121,9 +150,52 @@ struct LexiconLSPTests {
 		])
 	}
 
+	@Test
+	func test_indexes_composed_imports_and_connections() throws {
+		let directory = FileManager.default.temporaryDirectory
+			.appendingPathComponent("LexiconLSPTests-\(UUID().uuidString)", isDirectory: true)
+		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+		defer { try? FileManager.default.removeItem(at: directory) }
+
+		let imported = directory.appendingPathComponent("imported.lexicon")
+		let local = directory.appendingPathComponent("local.lexicon")
+		try Data(
+			"""
+			external:
+				imported:
+				type:
+				reference:
+				+ external.type
+			""".utf8
+		).write(to: imported)
+		try Data(
+			"""
+			shared:
+				connected:
+				@ imported.lexicon
+					local:
+			""".utf8
+		).write(to: local)
+
+		let index = try LexiconPathIndex(lexiconURL: local)
+
+		#expect(index.contains("shared.connected.imported"))
+		#expect(index.contains("shared.connected.reference"))
+		#expect(index.contains("shared.connected.type"))
+		#expect(LexiconLSPService(index: index).diagnostics(in: #"let value = l("shared.connected.reference")"#).isEmpty)
+	}
+
 	private static func service() throws -> LexiconLSPService {
 		try LexiconLSPService(index: LexiconPathIndex(lexiconText: """
 		test:
+			one:
+			+ test.type.odd
+				more:
+					time:
+					+ test
+			two:
+			+ test.type.even
+				timing:
 			type:
 				even:
 					bad:

@@ -62,18 +62,24 @@ public struct LexiconPathIndex: Sendable {
 		self.paths = paths
 	}
 
-	public init(lexiconText: String) throws {
-		try self.init(document: TaskPaper(lexiconText).decodeDocument())
+	public init(lexiconText: String, baseURL: URL? = nil) throws {
+		var document = try TaskPaper(lexiconText).decodeDocument()
+		if let baseURL {
+			document = try Self.composed(document, baseURL: baseURL)
+		}
+		self.init(document: document)
+	}
+
+	public init(lexiconURL: URL) throws {
+		let document = try TaskPaper(Data(contentsOf: lexiconURL)).decodeDocument()
+		self.init(document: try Self.composed(
+			document,
+			baseURL: lexiconURL.deletingLastPathComponent()
+		))
 	}
 
 	public init(document: Lexicon.Document) {
-		var paths: Set<String> = []
-		for (name, root) in document.roots {
-			root.traverse(name: name) { entry in
-				paths.insert(entry.id)
-			}
-		}
-		self.paths = paths
+		self.paths = LexiconPathGraph(document: document).paths()
 	}
 
 	public func contains(_ path: String) -> Bool {
@@ -106,6 +112,125 @@ public struct LexiconPathIndex: Sendable {
 		let base = String(prefix[...dot])
 		let partial = String(prefix[prefix.index(after: dot)...])
 		return (base, partial)
+	}
+
+	private static func composed(_ document: Lexicon.Document, baseURL: URL) throws -> Lexicon.Document {
+		let plan = try document.composed(resolving: FileLexiconImportResolver(baseURL: baseURL))
+		guard plan.conflicts.isEmpty else {
+			throw LexiconPathIndexError.compositionConflicts(plan.conflicts.map(\.description))
+		}
+		return plan.document
+	}
+}
+
+public enum LexiconPathIndexError: Error, CustomStringConvertible, Sendable {
+	case compositionConflicts([String])
+
+	public var description: String {
+		switch self {
+		case .compositionConflicts(let conflicts):
+			conflicts.joined(separator: "\n")
+		}
+	}
+}
+
+private struct LexiconPathGraph {
+	private struct Entry {
+		var id: String
+		var parentID: String?
+		var node: Lexicon.Graph.Node
+	}
+
+	private var entries: [String: Entry] = [:]
+	private var roots: [String] = []
+
+	init(document: Lexicon.Document) {
+		for (name, root) in document.roots {
+			root.traverse(name: name) { item in
+				let parentComponents = item.id.split(separator: ".").dropLast()
+				let parentID = parentComponents.isEmpty ? nil : parentComponents.joined(separator: ".")
+				entries[item.id] = Entry(id: item.id, parentID: parentID, node: item.node)
+			}
+			roots.append(name)
+		}
+	}
+
+	func paths() -> Set<String> {
+		var paths: Set<String> = []
+		for root in roots.sorted() {
+			emit(path: root, sourceID: root, active: [], into: &paths)
+		}
+		return paths
+	}
+
+	private func emit(path: String, sourceID: String, active: Set<String>, into paths: inout Set<String>) {
+		paths.insert(path)
+		guard active.contains(sourceID) == false else {
+			return
+		}
+		let active = active.union([sourceID])
+		for (name, childSourceID) in childSources(for: sourceID, active: [sourceID]).sorted(by: { $0.key < $1.key }) {
+			emit(path: "\(path).\(name)", sourceID: childSourceID, active: active, into: &paths)
+		}
+	}
+
+	private func childSources(for sourceID: String, active: Set<String>) -> [String: String] {
+		guard let entry = entries[sourceID] else {
+			return [:]
+		}
+		if let protonym = entry.node.protonym {
+			guard let protonymSourceID = resolvedSourceID(protonym, fromParentOf: sourceID) else {
+				return [:]
+			}
+			guard active.contains(protonymSourceID) == false else {
+				return [:]
+			}
+			return childSources(for: protonymSourceID, active: active.union([protonymSourceID]))
+		}
+
+		var children = Dictionary(
+			uniqueKeysWithValues: entry.node.children.keys.map { name in
+				(name, "\(sourceID).\(name)")
+			}
+		)
+		for typeID in entry.node.type.sorted() where active.contains(typeID) == false {
+			for (name, childSourceID) in childSources(for: typeID, active: active.union([typeID]))
+				where children[name] == nil
+			{
+				children[name] = childSourceID
+			}
+		}
+		return children
+	}
+
+	private func resolvedSourceID(_ reference: String, fromParentOf sourceID: String) -> String? {
+		if let sourceID = self.sourceID(forPath: reference) {
+			return sourceID
+		}
+		guard let parentID = entries[sourceID]?.parentID else {
+			return self.sourceID(forPath: reference)
+		}
+		return self.sourceID(forPath: "\(parentID).\(reference)")
+	}
+
+	private func sourceID(forPath path: String) -> String? {
+		let components = path.split(separator: ".").map(String.init)
+		guard let root = components.first, entries[root] != nil else {
+			return nil
+		}
+		var sourceID = root
+		var active: Set<String> = []
+		for name in components.dropFirst() {
+			guard active.contains(sourceID) == false else {
+				return nil
+			}
+			active.insert(sourceID)
+			guard let next = childSources(for: sourceID, active: [sourceID])[name] else {
+				return nil
+			}
+			sourceID = next
+		}
+		return sourceID
 	}
 }
 

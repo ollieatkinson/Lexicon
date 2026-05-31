@@ -140,6 +140,11 @@ private extension RustGeneratorTests {
 		assert_eq!(root.test.two.bad().id(), "test.two.no.good");
 		assert_eq!(l!(test).id(), "test");
 		assert_eq!(l!(test.type.even.bad).id(), "test.type.even.no.good");
+		assert_eq!(l!(test.two.bad).id(), "test.two.no.good");
+		assert_eq!(
+			l!(test.one.more.time.type.even.bad).id(),
+			"test.one.more.time.type.even.no.good"
+		);
 		assert_eq!(lexicon::test().r#type.even.bad.id(), "test.type.even.no.good");
 	}
 	"""

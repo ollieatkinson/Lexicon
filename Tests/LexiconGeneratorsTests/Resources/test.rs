@@ -61,14 +61,65 @@ macro_rules! __lexicon_l {
 	(test.one) => {
 		l().test.one
 	};
+	(test.one.good) => {
+		l().test.one.good()
+	};
 	(test.one.more) => {
 		l().test.one.more
 	};
 	(test.one.more.time) => {
 		l().test.one.more.time
 	};
+	(test.one.more.time.one) => {
+		l().test.one.more.time.one()
+	};
+	(test.one.more.time.two) => {
+		l().test.one.more.time.two()
+	};
+	(test.one.more.time.two.bad) => {
+		l().test.one.more.time.two().bad()
+	};
+	(test.one.more.time.two.no) => {
+		l().test.one.more.time.two().no()
+	};
+	(test.one.more.time.two.no.good) => {
+		l().test.one.more.time.two().no().good
+	};
+	(test.one.more.time.two.timing) => {
+		l().test.one.more.time.two().timing
+	};
+	(test.one.more.time.type) => {
+		l().test.one.more.time.r#type()
+	};
+	(test.one.more.time.type.even) => {
+		l().test.one.more.time.r#type().even
+	};
+	(test.one.more.time.type.even.bad) => {
+		l().test.one.more.time.r#type().even.bad
+	};
+	(test.one.more.time.type.even.no) => {
+		l().test.one.more.time.r#type().even.no
+	};
+	(test.one.more.time.type.even.no.good) => {
+		l().test.one.more.time.r#type().even.no.good
+	};
+	(test.one.more.time.type.odd) => {
+		l().test.one.more.time.r#type().odd
+	};
+	(test.one.more.time.type.odd.good) => {
+		l().test.one.more.time.r#type().odd.good
+	};
 	(test.two) => {
 		l().test.two
+	};
+	(test.two.bad) => {
+		l().test.two.bad()
+	};
+	(test.two.no) => {
+		l().test.two.no()
+	};
+	(test.two.no.good) => {
+		l().test.two.no().good
 	};
 	(test.two.timing) => {
 		l().test.two.timing

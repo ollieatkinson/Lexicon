@@ -49,9 +49,13 @@ struct CodeGeneratorCommand: AsyncParsableCommand {
 		if isLogging {
 			print("\(name) lexicon")
 		}
-		let lexicon = try await Lexicon.from(
-			TaskPaper(Data(contentsOf: input)).decode()
-		)
+		let plan = try TaskPaper(Data(contentsOf: input))
+			.decodeDocument()
+			.composed(resolving: FileLexiconImportResolver(baseURL: input.deletingLastPathComponent()))
+		guard plan.conflicts.isEmpty else {
+			throw plan.conflicts.map(\.description).joined(separator: "\n")
+		}
+		let lexicon = try await Lexicon.from(plan.document)
 		let json = await lexicon.json()
 		let code = try type.map { command -> (URL, Data) in
 			guard let generator = LexiconSourceGenerators.all.find(command) else {
