@@ -42,11 +42,11 @@ struct CompletionContext {
 
 struct CodeReferenceSyntax: Sendable {
 	static var all: [Self] {
-		[go, rust]
+		[quotedCall, rust]
 	}
 
-	static let go = CodeReferenceSyntax(
-		name: "Go",
+	static let quotedCall = CodeReferenceSyntax(
+		name: "Quoted l call",
 		opening: #"l(""#,
 		path: .quotedString,
 		references: { text in

@@ -1,0 +1,68 @@
+{
+  "scopeName": "source.lexicon",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#prose" },
+    { "include": "#strings" },
+    { "include": "#references" },
+    { "include": "#attributes" },
+    { "include": "#lemmas" }
+  ],
+  "repository": {
+    "attributes": {
+      "patterns": [
+        {
+          "name": "keyword.operator.lexicon",
+          "match": "^\\s*[+?=]\\s"
+        }
+      ]
+    },
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.lexicon",
+          "match": "#.*$"
+        }
+      ]
+    },
+    "lemmas": {
+      "patterns": [
+        {
+          "name": "entity.name.type.lexicon",
+          "match": "^\\t*([A-Za-z_][A-Za-z0-9_-]*)(?=:\\s*$)"
+        }
+      ]
+    },
+    "prose": {
+      "patterns": [
+        {
+          "name": "string.unquoted.prose.lexicon",
+          "match": "^\\s*>.*$"
+        }
+      ]
+    },
+    "references": {
+      "patterns": [
+        {
+          "name": "variable.other.lexicon-path.lexicon",
+          "match": "\\b[A-Za-z_][A-Za-z0-9_-]*(?:\\.[A-Za-z_][A-Za-z0-9_-]*)+\\b"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.lexicon",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.lexicon",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

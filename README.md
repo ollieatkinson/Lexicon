@@ -135,11 +135,13 @@ See [Code Generation](https://github.com/ollieatkinson/Lexicon/wiki/Code-Generat
 
 ## Editor Support
 
-`lexicon-lsp` provides completions and diagnostics for Lexicon document references, Go exact-path calls and Rust exact-path macros.
+`lexicon-lsp` provides completions and diagnostics for Lexicon document references, quoted `l("...")` calls in any file-backed language and Rust exact-path macros.
 
 ```sh
 swift build -c release --product lexicon-lsp
 ```
+
+The VS Code extension lives in `Editors/VSCode/lexicon`. Once a workspace has Lexicon LSP configuration, it attaches the language server to file-backed documents so quoted `l("...")` completions can work outside a single language.
 
 For most repositories, put one config file at the workspace root:
 
