@@ -4,9 +4,28 @@
 
 import Foundation
 import Testing
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 @Suite
 struct LexiconLSPCommandTests {
+
+	@Test
+	func test_process_answers_initialize_before_stdin_closes() throws {
+		let directory = try TemporaryDirectory()
+		try directory.write("lexicon-lsp.json", #"{"lexicon":"demo.lexicon"}"#)
+		try directory.write("demo.lexicon", Self.lexicon)
+
+		var server = try LSPProcess()
+		defer { server.stop() }
+		try server.initialize(root: directory.url)
+		let response = try server.response(id: 1)
+
+		#expect(response["result"] != nil)
+	}
 
 	@Test
 	func test_process_completes_paths_from_workspace_configuration() throws {
@@ -127,6 +146,8 @@ private struct LSPProcess {
 	private let input: Pipe
 	private let output: Pipe
 	private let error: Pipe
+	private let outputFileDescriptorFlags: Int32
+	private var outputBuffer = Data()
 	private var finished = false
 
 	init() throws {
@@ -134,6 +155,10 @@ private struct LSPProcess {
 		input = Pipe()
 		output = Pipe()
 		error = Pipe()
+		guard let outputFileDescriptorFlags = Self.enableNonblockingReads(for: output.fileHandleForReading) else {
+			throw "Could not enable nonblocking reads for lexicon-lsp stdout"
+		}
+		self.outputFileDescriptorFlags = outputFileDescriptorFlags
 		process.executableURL = Self.packageRoot().appendingPathComponent(".build/debug/lexicon-lsp")
 		process.standardInput = input
 		process.standardOutput = output
@@ -159,7 +184,9 @@ private struct LSPProcess {
 		try input.fileHandleForWriting.close()
 		process.waitUntilExit()
 		finished = true
-		let data = output.fileHandleForReading.readDataToEndOfFile()
+		restoreBlockingReads()
+		readAvailableOutput()
+		let data = outputBuffer
 		let stderr = String(data: error.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
 		guard process.terminationStatus == 0 else {
 			throw "lexicon-lsp exited with \(process.terminationStatus).\n\(stderr)"
@@ -182,6 +209,18 @@ private struct LSPProcess {
 				],
 			],
 		])
+	}
+
+	mutating func response(id: Int, timeout: TimeInterval = 5) throws -> [String: Any] {
+		let deadline = Date().addingTimeInterval(timeout)
+		while Date() < deadline {
+			readAvailableOutput()
+			if let response = try Self.messages(in: outputBuffer).response(id: id) {
+				return response
+			}
+			Thread.sleep(forTimeInterval: 0.01)
+		}
+		throw "Timed out waiting for lexicon-lsp response \(id)"
 	}
 
 	func didOpen(uri: URL, languageID: String, text: String) throws {
@@ -219,6 +258,37 @@ private struct LSPProcess {
 	func sendBody(_ body: Data) throws {
 		let header = Data("Content-Length: \(body.count)\r\n\r\n".utf8)
 		input.fileHandleForWriting.write(header + body)
+	}
+
+	private mutating func readAvailableOutput() {
+		let fileDescriptor = output.fileHandleForReading.fileDescriptor
+		var bytes = [UInt8](repeating: 0, count: 4096)
+		while true {
+			let byteCount = bytes.withUnsafeMutableBytes { buffer in
+				#if canImport(Darwin)
+				Darwin.read(fileDescriptor, buffer.baseAddress, buffer.count)
+				#elseif canImport(Glibc)
+				Glibc.read(fileDescriptor, buffer.baseAddress, buffer.count)
+				#endif
+			}
+			guard byteCount > 0 else {
+				return
+			}
+			outputBuffer.append(contentsOf: bytes.prefix(Int(byteCount)))
+		}
+	}
+
+	private func restoreBlockingReads() {
+		_ = fcntl(output.fileHandleForReading.fileDescriptor, F_SETFL, outputFileDescriptorFlags)
+	}
+
+	private static func enableNonblockingReads(for fileHandle: FileHandle) -> Int32? {
+		let flags = fcntl(fileHandle.fileDescriptor, F_GETFL)
+		guard flags >= 0 else {
+			return nil
+		}
+		_ = fcntl(fileHandle.fileDescriptor, F_SETFL, flags | O_NONBLOCK)
+		return flags
 	}
 
 	private static func messages(in data: Data) throws -> [[String: Any]] {

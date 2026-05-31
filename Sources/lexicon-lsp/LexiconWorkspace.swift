@@ -161,6 +161,7 @@ struct LexiconWorkspace {
 		".swiftpm",
 		"DerivedData",
 		"node_modules",
+		"target",
 	]
 
 	private static func isConfigurationURL(_ url: URL) -> Bool {

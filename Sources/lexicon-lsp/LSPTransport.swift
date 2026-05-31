@@ -31,7 +31,7 @@ final class LSPTransport {
 					return Data(body)
 				}
 			}
-			guard let chunk = try? input.read(upToCount: 4096), chunk.isEmpty == false else {
+			guard let chunk = try? input.read(upToCount: 1), chunk.isEmpty == false else {
 				return nil
 			}
 			buffer.append(chunk)
