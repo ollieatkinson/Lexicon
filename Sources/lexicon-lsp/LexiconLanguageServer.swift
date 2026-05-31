@@ -23,6 +23,7 @@ final class LexiconLanguageServer {
 	func run() {
 		while let body = transport.readMessage() {
 			guard let request = try? decoder.decode(LSPRequest.self, from: body) else {
+				transport.respond(error: .invalidRequest("Invalid JSON-RPC request."))
 				continue
 			}
 			switch request.method {
@@ -39,13 +40,25 @@ final class LexiconLanguageServer {
 			case LSPMethod.completion:
 				complete(body, id: request.id)
 			default:
-				respond(request.id, result: LSPNull())
+				if let id = request.id {
+					transport.respond(
+						id: id,
+						error: .methodNotFound("Unsupported LSP method '\(request.method.rawValue)'.")
+					)
+				}
 			}
 		}
 	}
 
 	private func initialize(_ body: Data, id: LSPRequestID?) {
-		let params = decodeParams(InitializeParams.self, from: body) ?? InitializeParams()
+		let params: InitializeParams
+		switch decodeParams(InitializeParams.self, from: body) {
+		case .success(let value):
+			params = value ?? InitializeParams()
+		case .failure(let error):
+			respond(id, error: error)
+			return
+		}
 		configureWorkspace(params)
 		respond(id, result: InitializeResult())
 	}
@@ -60,61 +73,57 @@ final class LexiconLanguageServer {
 	}
 
 	private func didOpen(_ body: Data) {
-		guard let params = decodeParams(DidOpenTextDocumentParams.self, from: body) else {
+		guard case .success(let params?) = decodeParams(DidOpenTextDocumentParams.self, from: body) else {
 			return
 		}
 		let uri = params.textDocument.uri
 		let text = params.textDocument.text
 		documents[uri] = text
-		refreshIndexIfNeeded(uri: uri, text: text)
-		publishDiagnostics(uri: uri, text: text)
+		publishDiagnostics(
+			for: uri,
+			text: text,
+			workspaceChanged: workspace.updateDocument(uri: uri, text: text, workspaceRoots: workspaceRoots)
+		)
 	}
 
 	private func didChange(_ body: Data) {
 		guard
-			let params = decodeParams(DidChangeTextDocumentParams.self, from: body),
+			case .success(let params?) = decodeParams(DidChangeTextDocumentParams.self, from: body),
 			let text = params.contentChanges.first?.text
 		else {
 			return
 		}
 		let uri = params.textDocument.uri
 		documents[uri] = text
-		refreshIndexIfNeeded(uri: uri, text: text)
-		publishDiagnostics(uri: uri, text: text)
-	}
-
-	private func refreshIndexIfNeeded(uri: String, text: String) {
-		if isConfigurationDocument(uri: uri) {
-			workspace.reloadConfiguration(workspaceRoots: workspaceRoots)
-			return
-		}
-		guard isLexiconDocument(uri: uri) else {
-			return
-		}
-		workspace.refreshLexicon(uri: uri, text: text)
+		publishDiagnostics(
+			for: uri,
+			text: text,
+			workspaceChanged: workspace.updateDocument(uri: uri, text: text, workspaceRoots: workspaceRoots)
+		)
 	}
 
 	private func isLexiconDocument(uri: String) -> Bool {
 		workspace.isLexiconDocument(uri: uri) || uri.fileURL?.pathExtension == "lexicon"
 	}
 
-	private func isConfigurationDocument(uri: String) -> Bool {
-		guard let url = uri.fileURL else {
-			return false
-		}
-		return LexiconWorkspace.configurationFileNames.contains(url.lastPathComponent)
-	}
-
 	private func complete(_ body: Data, id: LSPRequestID?) {
-		guard
-			let params = decodeParams(CompletionParams.self, from: body),
-			let text = documents[params.textDocument.uri] ?? fileText(uri: params.textDocument.uri)
-		else {
+		let params: CompletionParams
+		switch decodeParams(CompletionParams.self, from: body) {
+		case .success(let value?):
+			params = value
+		case .success(nil):
+			respond(id, result: CompletionList.empty)
+			return
+		case .failure(let error):
+			respond(id, error: error)
+			return
+		}
+		guard let text = documents[params.textDocument.uri] ?? fileText(uri: params.textDocument.uri) else {
 			respond(id, result: CompletionList.empty)
 			return
 		}
 		let uri = params.textDocument.uri
-		refreshIndexIfNeeded(uri: uri, text: text)
+		_ = workspace.updateDocument(uri: uri, text: text, workspaceRoots: workspaceRoots)
 		let service = LexiconLSPService(index: workspace.index(for: uri))
 		guard let result = service.completion(
 			in: text,
@@ -135,13 +144,30 @@ final class LexiconLanguageServer {
 	}
 
 	private func publishDiagnostics(uri: String, text: String) {
-		let diagnostics = LexiconLSPService(index: workspace.index(for: uri))
-			.diagnostics(in: text, lexiconDocument: isLexiconDocument(uri: uri))
+		let diagnostics = (
+			workspace.diagnostics(for: uri)
+				+ LexiconLSPService(index: workspace.index(for: uri))
+				.diagnostics(in: text, lexiconDocument: isLexiconDocument(uri: uri))
+		)
 			.map(Diagnostic.init)
 		transport.notify(
 			method: LSPMethod.publishDiagnostics,
 			params: PublishDiagnosticsParams(uri: uri, diagnostics: diagnostics)
 		)
+	}
+
+	private func publishDiagnostics(for uri: String, text: String, workspaceChanged: Bool) {
+		if workspaceChanged {
+			publishDiagnosticsForOpenDocuments()
+		} else {
+			publishDiagnostics(uri: uri, text: text)
+		}
+	}
+
+	private func publishDiagnosticsForOpenDocuments() {
+		for (uri, text) in documents {
+			publishDiagnostics(uri: uri, text: text)
+		}
 	}
 
 	private func respond<Result: Encodable>(_ id: LSPRequestID?, result: Result) {
@@ -151,7 +177,18 @@ final class LexiconLanguageServer {
 		transport.respond(id: id, result: result)
 	}
 
-	private func decodeParams<Params: Decodable>(_ type: Params.Type, from body: Data) -> Params? {
-		try? decoder.decode(LSPMessage<Params>.self, from: body).params
+	private func respond(_ id: LSPRequestID?, error: LSPResponseError) {
+		transport.respond(id: id, error: error)
+	}
+
+	private func decodeParams<Params: Decodable>(
+		_ type: Params.Type,
+		from body: Data
+	) -> Result<Params?, LSPResponseError> {
+		do {
+			return .success(try decoder.decode(LSPMessage<Params>.self, from: body).params)
+		} catch {
+			return .failure(.invalidParams("Invalid \(Params.self) parameters: \(error)"))
+		}
 	}
 }

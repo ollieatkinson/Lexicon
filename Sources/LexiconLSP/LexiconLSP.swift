@@ -62,19 +62,25 @@ public struct LexiconPathIndex: Sendable {
 		self.paths = paths
 	}
 
-	public init(lexiconText: String, baseURL: URL? = nil) throws {
+	public init(
+		lexiconText: String,
+		baseURL: URL? = nil,
+		resolver: (any LexiconImportResolving)? = nil
+	) throws {
 		var document = try TaskPaper(lexiconText).decodeDocument()
-		if let baseURL {
-			document = try Self.composed(document, baseURL: baseURL)
+		if let resolver {
+			document = try Self.composed(document, resolving: resolver)
+		} else if let baseURL {
+			document = try Self.composed(document, resolving: FileLexiconImportResolver(baseURL: baseURL))
 		}
 		self.init(document: document)
 	}
 
-	public init(lexiconURL: URL) throws {
+	public init(lexiconURL: URL, resolver: (any LexiconImportResolving)? = nil) throws {
 		let document = try TaskPaper(Data(contentsOf: lexiconURL)).decodeDocument()
 		self.init(document: try Self.composed(
 			document,
-			baseURL: lexiconURL.deletingLastPathComponent()
+			resolving: resolver ?? FileLexiconImportResolver(baseURL: lexiconURL.deletingLastPathComponent())
 		))
 	}
 
@@ -114,8 +120,11 @@ public struct LexiconPathIndex: Sendable {
 		return (base, partial)
 	}
 
-	private static func composed(_ document: Lexicon.Document, baseURL: URL) throws -> Lexicon.Document {
-		let plan = try document.composed(resolving: FileLexiconImportResolver(baseURL: baseURL))
+	private static func composed(
+		_ document: Lexicon.Document,
+		resolving resolver: any LexiconImportResolving
+	) throws -> Lexicon.Document {
+		let plan = try document.composed(resolving: resolver)
 		guard plan.conflicts.isEmpty else {
 			throw LexiconPathIndexError.compositionConflicts(plan.conflicts.map(\.description))
 		}

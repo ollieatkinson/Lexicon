@@ -79,6 +79,46 @@ struct LSPResponse<Result: Encodable>: Encodable {
 	var result: Result
 }
 
+struct LSPErrorResponse: Encodable {
+	var jsonrpc = "2.0"
+	var id: LSPRequestID?
+	var error: LSPResponseError
+
+	private enum CodingKeys: String, CodingKey {
+		case jsonrpc
+		case id
+		case error
+	}
+
+	func encode(to encoder: Encoder) throws {
+		var container = encoder.container(keyedBy: CodingKeys.self)
+		try container.encode(jsonrpc, forKey: .jsonrpc)
+		if let id {
+			try container.encode(id, forKey: .id)
+		} else {
+			try container.encodeNil(forKey: .id)
+		}
+		try container.encode(error, forKey: .error)
+	}
+}
+
+struct LSPResponseError: Error, Encodable {
+	var code: Int
+	var message: String
+
+	static func invalidRequest(_ message: String) -> Self {
+		Self(code: -32600, message: message)
+	}
+
+	static func methodNotFound(_ message: String) -> Self {
+		Self(code: -32601, message: message)
+	}
+
+	static func invalidParams(_ message: String) -> Self {
+		Self(code: -32602, message: message)
+	}
+}
+
 struct LSPNotification<Params: Encodable>: Encodable {
 	var jsonrpc = "2.0"
 	var method: LSPMethod

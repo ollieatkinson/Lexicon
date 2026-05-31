@@ -31,7 +31,7 @@ final class LSPTransport {
 					return Data(body)
 				}
 			}
-			guard let chunk = try? input.read(upToCount: 1), chunk.isEmpty == false else {
+			guard let chunk = try? input.read(upToCount: 4096), chunk.isEmpty == false else {
 				return nil
 			}
 			buffer.append(chunk)
@@ -40,6 +40,10 @@ final class LSPTransport {
 
 	func respond<Result: Encodable>(id: LSPRequestID, result: Result) {
 		write(LSPResponse(id: id, result: result))
+	}
+
+	func respond(id: LSPRequestID? = nil, error: LSPResponseError) {
+		write(LSPErrorResponse(id: id, error: error))
 	}
 
 	func notify<Params: Encodable>(method: LSPMethod, params: Params) {
