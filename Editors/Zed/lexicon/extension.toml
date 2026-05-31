@@ -1,0 +1,26 @@
+id = "lexicon"
+name = "Lexicon"
+version = "0.0.1"
+schema_version = 1
+description = "Lexicon language support."
+repository = "https://github.com/ollieatkinson/Lexicon"
+authors = ["Oliver Atkinson"]
+themes = []
+icon_themes = []
+languages = ["languages/lexicon"]
+capabilities = []
+
+[lib]
+kind = "Rust"
+version = "0.7.0"
+
+[grammars]
+
+[language_servers.lexicon-lsp]
+name = "Lexicon LSP"
+languages = ["Lexicon", "Rust", "Go"]
+
+[language_servers.lexicon-lsp.language_ids]
+Lexicon = "lexicon"
+Rust = "rust"
+Go = "go"

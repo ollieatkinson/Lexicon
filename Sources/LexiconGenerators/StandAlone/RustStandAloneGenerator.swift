@@ -63,6 +63,10 @@ private extension Lexicon.Graph.JSON {
 						{{rootField}}: {{rootType}}::new("{{rootID}}"),
 					}
 				}
+
+				pub fn {{rootFunction}}(&self) -> {{rootType}} {
+					self.{{rootField}}.clone()
+				}
 			}
 
 			impl Default for Lexicon {
@@ -80,9 +84,22 @@ private extension Lexicon.Graph.JSON {
 			}
 
 			macro_rules! __lexicon_l {
-			{{macroArms}}
+				(@path [$($lexicon_path:tt)*]) => {
+					$($lexicon_path)*
+				};
+			{{macroTailKeywordArms}}
+				(@path [$($lexicon_path:tt)*] . $segment:ident $(.$tail:tt)*) => {
+					l!(@path [$($lexicon_path)*.$segment()] $(.$tail)*)
+				};
+				(@path [$($lexicon_path:tt)*] $($path:tt)+) => {
+					compile_error!(concat!("invalid Lexicon path syntax: ", stringify!($($path)+)))
+				};
+			{{macroRootKeywordArms}}
+				($root:ident $(.$tail:tt)*) => {
+					l!(@path [l().$root()] $(.$tail)*)
+				};
 				($($path:tt)*) => {
-					compile_error!(concat!("unknown Lexicon path: ", stringify!($($path)*)))
+					compile_error!(concat!("invalid Lexicon path syntax: ", stringify!($($path)*)))
 				};
 			}
 
@@ -96,98 +113,49 @@ private extension Lexicon.Graph.JSON {
 			"rootFunction": try name.rustSelector(),
 			"rootType": name.rustTypeName,
 			"rootID": name.rustStringLiteralContent,
-			"macroArms": try rustMacroArms(),
+			"macroRootKeywordArms": rustMacroRootKeywordArms(),
+			"macroTailKeywordArms": rustMacroTailKeywordArms(),
 			"types": try classes.flatMap { try $0.rust(classes: classes) }.joined(separator: "\n\n"),
 		])
 	}
 
-	func rustMacroArms() throws -> String {
-		try RustMacroPathBuilder(rootID: name, classes: classes)
-			.paths()
-			.map { path in
-				try SourceTemplate(
-					"""
-						({{macroPath}}) => {
-							{{expression}}
-						};
-					"""
-				).render([
-					"macroPath": path.path,
-					"expression": path.expression,
-				])
+	func rustMacroRootKeywordArms() -> String {
+		rustMacroRootKeywords
+			.map { keyword in
+				"""
+					(\(keyword) $(.$tail:tt)*) => {
+						l!(@path [l().r#\(keyword)()] $(.$tail)*)
+					};
+				"""
 			}
 			.joined(separator: "\n")
 	}
-}
 
-private struct RustMacroPath {
-	var path: String
-	var expression: String
-}
-
-private struct RustMacroPathBuilder {
-	var rootID: String
-	var classes: [Lexicon.Graph.Node.Class.JSON]
-
-	private var classesByID: [String: Lexicon.Graph.Node.Class.JSON] {
-		Dictionary(uniqueKeysWithValues: classes.map { ($0.id, $0) })
+	func rustMacroTailKeywordArms() -> String {
+		rustMacroTailKeywords
+			.map { keyword in
+				"""
+					(@path [$($lexicon_path:tt)*] . \(keyword) $(.$tail:tt)*) => {
+						l!(@path [$($lexicon_path)*.r#\(keyword)()] $(.$tail)*)
+					};
+				"""
+			}
+			.joined(separator: "\n")
 	}
 
-	func paths() throws -> [RustMacroPath] {
-		var output: [String: String] = [:]
-		try emit(
-			path: rootID,
-			sourceID: rootID,
-			expression: "l().\(rootID.rustSelector())",
-			active: [],
-			into: &output
-		)
-		return output
-			.map { RustMacroPath(path: $0.key, expression: $0.value) }
-			.sorted { $0.path < $1.path }
+	var rustMacroRootKeywords: [String] {
+		[name.rustIdentifier]
+			.filter(\.isRustRawIdentifierKeyword)
 	}
 
-	private func emit(
-		path: String,
-		sourceID: String,
-		expression: String,
-		active: Set<String>,
-		into output: inout [String: String]
-	) throws {
-		output[path] = expression
-		guard active.contains(sourceID) == false, let klass = classesByID[sourceID] else {
-			return
-		}
-		let active = active.union([sourceID])
-		let ownAccessors = klass.standAloneAccessors()
-		let ownNames = Set(ownAccessors.map(\.name))
-		for accessor in ownAccessors.sorted(by: { $0.name < $1.name }) {
-			try emit(accessor, from: path, expression: expression, isMethod: false, active: active, into: &output)
-		}
-		for accessor in klass.standAloneInheritedAccessors(classes: classes)
-			.filter({ ownNames.contains($0.name) == false })
-			.sorted(by: { $0.name < $1.name })
-		{
-			try emit(accessor, from: path, expression: expression, isMethod: true, active: active, into: &output)
-		}
-	}
-
-	private func emit(
-		_ accessor: StandAloneAccessor,
-		from path: String,
-		expression: String,
-		isMethod: Bool,
-		active: Set<String>,
-		into output: inout [String: String]
-	) throws {
-		let selector = try accessor.name.rustSelector()
-		try emit(
-			path: "\(path).\(accessor.name)",
-			sourceID: accessor.isSynonym ? accessor.targetID : accessor.sourceID,
-			expression: isMethod ? "\(expression).\(selector)()" : "\(expression).\(selector)",
-			active: active,
-			into: &output
-		)
+	var rustMacroTailKeywords: [String] {
+		Array(Set(
+			classes
+				.flatMap { $0.standAloneAllAccessors(classes: classes) }
+				.map(\.name.rustIdentifier)
+				.filter(\.isRustRawIdentifierKeyword)
+		))
+		.sorted()
 	}
 }
 
@@ -250,7 +218,9 @@ private extension Lexicon.Graph.Node.Class.JSON {
 						"\n\t\t\t\(try accessor.name.rustSelector()): \(accessor.factory(receiver: "id")),"
 					}
 					.joined(),
-				"inherited": try standAloneInheritedAccessors(classes: classes)
+				"inherited": try ownAccessors
+					.map { try $0.ownMethod() }
+					.joined() + standAloneInheritedAccessors(classes: classes)
 					.filter { inherited in !ownAccessors.contains(where: { $0.name == inherited.name }) }
 					.map { try $0.method(receiverType: type) }
 					.joined(),
@@ -263,6 +233,19 @@ private extension StandAloneAccessor {
 
 	func factory(receiver: String) -> String {
 		"\(targetID.rustTypeName)::new(format!(\"{}.\(pathSuffix.rustStringLiteralContent)\", \(receiver)))"
+	}
+
+	func ownMethod() throws -> String {
+		try "\n\n" + SourceTemplate(
+			"""
+			\tpub fn {{name}}(&self) -> {{sourceType}} {
+			\t\tself.{{name}}.clone()
+			\t}
+			"""
+		).render([
+			"name": name.rustSelector(),
+			"sourceType": sourceID.rustTypeName,
+		])
 	}
 
 	func method(receiverType: String) throws -> String {
@@ -345,20 +328,68 @@ private extension String {
 	}
 
 	var isRustKeyword: Bool {
-		switch self {
-		case "as", "break", "const", "continue", "crate", "else", "enum",
-			"extern", "false", "fn", "for", "if", "impl", "in", "let",
-			"loop", "match", "mod", "move", "mut", "pub", "ref", "return",
-			"self", "Self", "static", "struct", "super", "trait", "true",
-			"type", "unsafe", "use", "where", "while", "async", "await",
-			"dyn", "abstract", "become", "box", "do", "final", "macro",
-			"override", "priv", "typeof", "unsized", "virtual", "yield",
-			"try", "union", "gen":
-			return true
-		default:
-			return false
-		}
+		Self.rustKeywords.contains(self)
 	}
+
+	var isRustRawIdentifierKeyword: Bool {
+		isRustKeyword && !isRustPathKeyword
+	}
+
+	static let rustKeywords = [
+		"abstract",
+		"as",
+		"async",
+		"await",
+		"become",
+		"box",
+		"break",
+		"const",
+		"continue",
+		"crate",
+		"do",
+		"dyn",
+		"else",
+		"enum",
+		"extern",
+		"false",
+		"final",
+		"fn",
+		"for",
+		"gen",
+		"if",
+		"impl",
+		"in",
+		"let",
+		"loop",
+		"macro",
+		"match",
+		"mod",
+		"move",
+		"mut",
+		"override",
+		"priv",
+		"pub",
+		"ref",
+		"return",
+		"self",
+		"Self",
+		"static",
+		"struct",
+		"super",
+		"trait",
+		"true",
+		"try",
+		"type",
+		"typeof",
+		"union",
+		"unsafe",
+		"unsized",
+		"use",
+		"virtual",
+		"where",
+		"while",
+		"yield",
+	]
 }
 
 private enum RustGenerationError: Error, CustomStringConvertible {

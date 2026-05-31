@@ -38,6 +38,10 @@ impl Lexicon {
 			test: L_test::new("test"),
 		}
 	}
+
+	pub fn test(&self) -> L_test {
+		self.test.clone()
+	}
 }
 
 impl Default for Lexicon {
@@ -55,98 +59,24 @@ pub fn test() -> L_test {
 }
 
 macro_rules! __lexicon_l {
-	(test) => {
-		l().test
+	(@path [$($lexicon_path:tt)*]) => {
+		$($lexicon_path)*
 	};
-	(test.one) => {
-		l().test.one
+	(@path [$($lexicon_path:tt)*] . type $(.$tail:tt)*) => {
+		l!(@path [$($lexicon_path)*.r#type()] $(.$tail)*)
 	};
-	(test.one.good) => {
-		l().test.one.good()
+	(@path [$($lexicon_path:tt)*] . $segment:ident $(.$tail:tt)*) => {
+		l!(@path [$($lexicon_path)*.$segment()] $(.$tail)*)
 	};
-	(test.one.more) => {
-		l().test.one.more
+	(@path [$($lexicon_path:tt)*] $($path:tt)+) => {
+		compile_error!(concat!("invalid Lexicon path syntax: ", stringify!($($path)+)))
 	};
-	(test.one.more.time) => {
-		l().test.one.more.time
-	};
-	(test.one.more.time.one) => {
-		l().test.one.more.time.one()
-	};
-	(test.one.more.time.two) => {
-		l().test.one.more.time.two()
-	};
-	(test.one.more.time.two.bad) => {
-		l().test.one.more.time.two().bad()
-	};
-	(test.one.more.time.two.no) => {
-		l().test.one.more.time.two().no()
-	};
-	(test.one.more.time.two.no.good) => {
-		l().test.one.more.time.two().no().good
-	};
-	(test.one.more.time.two.timing) => {
-		l().test.one.more.time.two().timing
-	};
-	(test.one.more.time.type) => {
-		l().test.one.more.time.r#type()
-	};
-	(test.one.more.time.type.even) => {
-		l().test.one.more.time.r#type().even
-	};
-	(test.one.more.time.type.even.bad) => {
-		l().test.one.more.time.r#type().even.bad
-	};
-	(test.one.more.time.type.even.no) => {
-		l().test.one.more.time.r#type().even.no
-	};
-	(test.one.more.time.type.even.no.good) => {
-		l().test.one.more.time.r#type().even.no.good
-	};
-	(test.one.more.time.type.odd) => {
-		l().test.one.more.time.r#type().odd
-	};
-	(test.one.more.time.type.odd.good) => {
-		l().test.one.more.time.r#type().odd.good
-	};
-	(test.two) => {
-		l().test.two
-	};
-	(test.two.bad) => {
-		l().test.two.bad()
-	};
-	(test.two.no) => {
-		l().test.two.no()
-	};
-	(test.two.no.good) => {
-		l().test.two.no().good
-	};
-	(test.two.timing) => {
-		l().test.two.timing
-	};
-	(test.type) => {
-		l().test.r#type
-	};
-	(test.type.even) => {
-		l().test.r#type.even
-	};
-	(test.type.even.bad) => {
-		l().test.r#type.even.bad
-	};
-	(test.type.even.no) => {
-		l().test.r#type.even.no
-	};
-	(test.type.even.no.good) => {
-		l().test.r#type.even.no.good
-	};
-	(test.type.odd) => {
-		l().test.r#type.odd
-	};
-	(test.type.odd.good) => {
-		l().test.r#type.odd.good
+
+	($root:ident $(.$tail:tt)*) => {
+		l!(@path [l().$root()] $(.$tail)*)
 	};
 	($($path:tt)*) => {
-		compile_error!(concat!("unknown Lexicon path: ", stringify!($($path)*)))
+		compile_error!(concat!("invalid Lexicon path syntax: ", stringify!($($path)*)))
 	};
 }
 
@@ -169,6 +99,18 @@ impl L_test {
 			two: L_test_two::new(format!("{}.two", id)),
 			r#type: L_test_type::new(format!("{}.type", id)),
 		}
+	}
+
+	pub fn one(&self) -> L_test_one {
+		self.one.clone()
+	}
+
+	pub fn two(&self) -> L_test_two {
+		self.two.clone()
+	}
+
+	pub fn r#type(&self) -> L_test_type {
+		self.r#type.clone()
 	}
 }
 
@@ -195,6 +137,10 @@ impl L_test_one {
 			l: L::new(id.clone()),
 			more: L_test_one_more::new(format!("{}.more", id)),
 		}
+	}
+
+	pub fn more(&self) -> L_test_one_more {
+		self.more.clone()
 	}
 
 	pub fn good(&self) -> L_test_type_odd_good {
@@ -225,6 +171,10 @@ impl L_test_one_more {
 			l: L::new(id.clone()),
 			time: L_test_one_more_time::new(format!("{}.time", id)),
 		}
+	}
+
+	pub fn time(&self) -> L_test_one_more_time {
+		self.time.clone()
 	}
 }
 
@@ -289,6 +239,10 @@ impl L_test_two {
 		}
 	}
 
+	pub fn timing(&self) -> L_test_two_timing {
+		self.timing.clone()
+	}
+
 	pub fn bad(&self) -> L_test_type_even_bad {
 		L_test_type_even_no_good::new(format!("{}.no.good", I::id(self)))
 	}
@@ -348,6 +302,14 @@ impl L_test_type {
 			odd: L_test_type_odd::new(format!("{}.odd", id)),
 		}
 	}
+
+	pub fn even(&self) -> L_test_type_even {
+		self.even.clone()
+	}
+
+	pub fn odd(&self) -> L_test_type_odd {
+		self.odd.clone()
+	}
 }
 
 impl I for L_test_type {
@@ -376,6 +338,14 @@ impl L_test_type_even {
 			bad: L_test_type_even_no_good::new(format!("{}.no.good", id)),
 		}
 	}
+
+	pub fn no(&self) -> L_test_type_even_no {
+		self.no.clone()
+	}
+
+	pub fn bad(&self) -> L_test_type_even_bad {
+		self.bad.clone()
+	}
 }
 
 impl I for L_test_type_even {
@@ -403,6 +373,10 @@ impl L_test_type_even_no {
 			l: L::new(id.clone()),
 			good: L_test_type_even_no_good::new(format!("{}.good", id)),
 		}
+	}
+
+	pub fn good(&self) -> L_test_type_even_no_good {
+		self.good.clone()
 	}
 }
 
@@ -453,6 +427,10 @@ impl L_test_type_odd {
 			l: L::new(id.clone()),
 			good: L_test_type_odd_good::new(format!("{}.good", id)),
 		}
+	}
+
+	pub fn good(&self) -> L_test_type_odd_good {
+		self.good.clone()
 	}
 }
 

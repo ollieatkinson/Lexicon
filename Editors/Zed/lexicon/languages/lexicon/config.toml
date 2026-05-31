@@ -1,0 +1,9 @@
+name = "Lexicon"
+grammar = "gitignore"
+path_suffixes = ["lexicon"]
+line_comments = ["# "]
+tab_size = 4
+hard_tabs = true
+brackets = [
+	{ start = "\"", end = "\"", close = true, newline = false },
+]

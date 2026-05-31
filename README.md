@@ -331,7 +331,13 @@ l().test.r#type.even.bad.id();
 l!(test.type.even.bad).id();
 ```
 
+The macro walks the generated typed API instead of generating one macro arm per lemma, so large lexicons do not turn into large Rust macro tables. Invalid macro paths fail through normal Rust type checking.
+
+## Editor Support
+
 `lexicon-lsp` is a sidecar language server for editor integrations. It provides completions and diagnostics for exact-path references in `l("...")`, `l!(...)`, and lexicon document reference lines. The index is built from the composed live graph, so imported and connected lexicons are included, as are inherited and synonym paths.
+
+This is useful for languages that cannot natively express every Lexicon path spelling. For example, Rust can compile `l!(test.type.even.bad)` through a macro and Go can use `l("test.type.even.bad")`; the sidecar LSP gives those spellings path completion and unknown-path diagnostics in the editor.
 
 ```sh
 swift run lexicon-lsp --lexicon commerce.lexicon
@@ -357,6 +363,38 @@ For most repositories, put one config file at the workspace root and point it at
 ```
 
 The longest matching `scope` wins for each opened file.
+
+### Zed
+
+Build the language server and make it available to Zed:
+
+```sh
+swift build -c release --product lexicon-lsp
+```
+
+Either put `.build/release/lexicon-lsp` on `PATH`, or configure the binary path in Zed settings:
+
+```json
+{
+  "lsp": {
+    "lexicon-lsp": {
+      "binary": {
+        "path": "/absolute/path/to/Lexicon/.build/release/lexicon-lsp"
+      }
+    }
+  }
+}
+```
+
+Then install the dev extension from `Editors/Zed/lexicon` using Zed's `Extensions: Install Dev Extension` command. The extension attaches `lexicon-lsp` to Lexicon, Rust, and Go buffers.
+
+To try it locally:
+
+```sh
+zed Examples/Zed
+```
+
+Open `demo.rs` or `demo.go` and request completion after `test.type.even.`. The LSP should offer `bad` and `no`; the `bed` examples should be diagnosed as unknown Lexicon paths.
 
 ## CLI
 

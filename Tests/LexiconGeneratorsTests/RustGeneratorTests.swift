@@ -40,9 +40,12 @@ struct RustGeneratorTests {
 		#expect(code.contains("pub PascalCase: L_type_camelCase_PascalCase,"))
 		#expect(code.contains("pub r#fn: L_type_fn,"))
 		#expect(code.contains("pub r#struct: L_type_struct,"))
-		#expect(code.contains("(type.fn) => {"))
-		#expect(code.contains("l().r#type.r#fn"))
+		#expect(code.contains("pub fn r#fn(&self) -> L_type_fn"))
+		#expect(code.contains("(@path [$($lexicon_path:tt)*] . fn $(.$tail:tt)*) => {"))
+		#expect(code.contains("l!(@path [$($lexicon_path)*.r#fn()] $(.$tail)*)"))
+		#expect(code.contains("l!(@path [l().r#type()] $(.$tail)*)"))
 		#expect(code.contains("pub(crate) use __lexicon_l as l;"))
+		#expect(!code.contains("(type.fn) => {"))
 		#expect(!code.contains("pub type_:"))
 		#expect(!code.contains("pub fn type_()"))
 		#expect(!code.contains("self_"))
@@ -112,7 +115,7 @@ struct RustGeneratorTests {
 			try Self.run("rustc --edition=2021 bad.rs", in: directory)
 			Issue.record("Expected invalid l! path to fail at compile time.")
 		} catch {
-			#expect(String(describing: error).contains("unknown Lexicon path: test.type.even.bed"))
+			#expect(String(describing: error).contains("no method named `bed`"))
 		}
 	}
 }

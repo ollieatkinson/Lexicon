@@ -1,0 +1,8 @@
+test:
+	type:
+		even:
+			bad:
+			no:
+				good:
+		odd:
+			good:
