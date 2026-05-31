@@ -43,7 +43,7 @@ public class TaskPaper {
 		if let result = result {
 			return try result.get()
 		}
-		
+
 		do {
 			let graph = try decodeDocument().graph()
 			result = .success(graph)
@@ -94,7 +94,35 @@ public class TaskPaper {
 		documentResult = .success(document)
 		return document
 	}
-	
+
+	public func sourceMap() throws -> SourceMap {
+		var path: [Node] = []
+		var document = Lexicon.Document()
+		var lines: [SourceMap.Line] = []
+		var utf16Offset = 0
+		var lineNumber = 0
+
+		for lineText in string.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
+			defer {
+				utf16Offset += lineText.utf16.count + 1
+				lineNumber += 1
+			}
+			guard let sourceLine = ParsedSourceLine(
+				text: lineText,
+				line: lineNumber,
+				utf16Offset: utf16Offset
+			) else {
+				continue
+			}
+			try decode(line: sourceLine.content, depth: sourceLine.depth, path: &path, document: &document)
+			if let line = SourceMap.Line(sourceLine, path: path) {
+				lines.append(line)
+			}
+		}
+
+		return SourceMap(lines: lines)
+	}
+
 	func reduce(_ path: inout [Node]) {
 		let child = path.removeLast()
 		path[path.endIndex - 1].children[child.name] = child
@@ -218,7 +246,57 @@ public class TaskPaper {
 }
 
 public extension TaskPaper {
-	
+
+	struct SourceMap: Sendable {
+		public var lines: [Line]
+
+		public init(lines: [Line]) {
+			self.lines = lines
+		}
+
+		public var references: [Line] {
+			lines.filter { $0.reference != nil }
+		}
+
+		public struct Line: Sendable, Hashable {
+			public enum Content: Sendable, Hashable {
+				case lemma(name: String)
+				case type(reference: String)
+				case protonym(reference: String)
+				case defaultReference(reference: String)
+			}
+
+			public var line: Int
+			public var depth: Int
+			public var nodePath: String?
+			public var content: Content
+			public var referenceRange: Range<Int>?
+
+			public var reference: String? {
+				switch content {
+				case .lemma:
+					nil
+				case .type(let reference), .protonym(let reference), .defaultReference(let reference):
+					reference
+				}
+			}
+
+			public init(
+				line: Int,
+				depth: Int,
+				nodePath: String?,
+				content: Content,
+				referenceRange: Range<Int>? = nil
+			) {
+				self.line = line
+				self.depth = depth
+				self.nodePath = nodePath
+				self.content = content
+				self.referenceRange = referenceRange
+			}
+		}
+	}
+
 	static func encode(_ node: Lexicon.Graph.Node, date: Date = .init()) -> String {
 		encode(Lexicon.Graph(root: node, date: date))
 	}
@@ -269,6 +347,126 @@ public extension TaskPaper {
 		}
 		
 		return lines.joined(separator: "\n")
+	}
+}
+
+private extension TaskPaper {
+
+	struct ParsedSourceLine {
+		var text: String
+		var line: Int
+		var utf16Offset: Int
+		var depth: Int
+		var content: String
+		var contentUTF16Range: Range<Int>
+
+		init?(text: String, line: Int, utf16Offset: Int) {
+			guard let match = TaskPaper.pattern.line.firstMatch(in: text, options: [], range: text.nsRange) else {
+				return nil
+			}
+			let contentRange = match.range(withName: "content")
+			self.text = text
+			self.line = line
+			self.utf16Offset = utf16Offset
+			self.depth = match.range(withName: "tabs").length
+			self.content = text.substring(with: contentRange)
+			self.contentUTF16Range = contentRange.location ..< contentRange.location + contentRange.length
+		}
+	}
+
+	static func nodePath(_ path: [Node]) -> String? {
+		let path = path.map(\.name).joined(separator: ".")
+		return path.isEmpty ? nil : path
+	}
+
+	static func referenceContent(in line: ParsedSourceLine) -> (symbol: String, reference: String, range: Range<Int>)? {
+		guard
+			let match = TaskPaper.pattern.operator.firstMatch(in: line.content, options: [], range: line.content.nsRange),
+			let symbolRange = Range(match.range(withName: "operator"), in: line.content)
+		else {
+			return nil
+		}
+		let contentRange = match.range(withName: "content")
+		guard contentRange.location != NSNotFound, contentRange.length > 0 else {
+			return nil
+		}
+		let symbol = String(line.content[symbolRange])
+		switch symbol {
+		case "+", "=":
+			let start = line.utf16Offset + line.contentUTF16Range.lowerBound + contentRange.location
+			return (symbol, line.content.substring(with: contentRange), start ..< start + contentRange.length)
+		case "?":
+			guard let reference = defaultReference(in: line.content.substring(with: contentRange)) else {
+				return nil
+			}
+			let start = line.utf16Offset + line.contentUTF16Range.lowerBound + contentRange.location + reference.range.lowerBound
+			return (symbol, reference.value, start ..< start + reference.range.count)
+		default:
+			return nil
+		}
+	}
+
+	static func defaultReference(in content: String) -> (value: String, range: Range<Int>)? {
+		var at = content.startIndex
+		while at < content.endIndex, content[at].isWhitespace {
+			at = content.index(after: at)
+		}
+		guard at < content.endIndex, content[at] == "@" else {
+			return nil
+		}
+		var start = content.index(after: at)
+		while start < content.endIndex, content[start].isWhitespace {
+			start = content.index(after: start)
+		}
+		var end = content.endIndex
+		while start < end, content[content.index(before: end)].isWhitespace {
+			end = content.index(before: end)
+		}
+		guard start < end else {
+			return nil
+		}
+		let lower = content.utf16.distance(from: content.utf16.startIndex, to: start.samePosition(in: content.utf16)!)
+		let upper = content.utf16.distance(from: content.utf16.startIndex, to: end.samePosition(in: content.utf16)!)
+		return (String(content[start..<end]), lower ..< upper)
+	}
+}
+
+private extension TaskPaper.SourceMap.Line {
+
+	init?(_ sourceLine: TaskPaper.ParsedSourceLine, path: [TaskPaper.Node]) {
+		let nodePath = TaskPaper.nodePath(path)
+		if let name = TaskPaper.pattern.lemma.first(in: sourceLine.content)?["lemma"] {
+			self.init(
+				line: sourceLine.line,
+				depth: sourceLine.depth,
+				nodePath: nodePath,
+				content: .lemma(name: name)
+			)
+			return
+		}
+
+		guard let reference = TaskPaper.referenceContent(in: sourceLine) else {
+			return nil
+		}
+
+		let content: Content
+		switch reference.symbol {
+		case "+":
+			content = .type(reference: reference.reference)
+		case "=":
+			content = .protonym(reference: reference.reference)
+		case "?":
+			content = .defaultReference(reference: reference.reference)
+		default:
+			return nil
+		}
+		self.init(
+			line: sourceLine.line,
+			depth: sourceLine.depth,
+			nodePath: nodePath,
+			content: content,
+			referenceRange: reference.range
+		)
 	}
 }
 

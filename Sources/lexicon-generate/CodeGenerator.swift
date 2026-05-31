@@ -39,6 +39,9 @@ struct CodeGeneratorCommand: AsyncParsableCommand {
 	@Flag(name: .shortAndLong)
 	var quiet: Bool = false
 
+	@Option(help: "Package name to use for generated Go source.")
+	var goPackage: String = "lexicon"
+
 	private var isLogging: Bool { !quiet }
 
 	mutating func run() async throws {
@@ -46,9 +49,13 @@ struct CodeGeneratorCommand: AsyncParsableCommand {
 		if isLogging {
 			print("\(name) lexicon")
 		}
-		let lexicon = try await Lexicon.from(
-			TaskPaper(Data(contentsOf: input)).decode()
-		)
+		let plan = try TaskPaper(Data(contentsOf: input))
+			.decodeDocument()
+			.composed(resolving: FileLexiconImportResolver(baseURL: input.deletingLastPathComponent()))
+		guard plan.conflicts.isEmpty else {
+			throw plan.conflicts.map(\.description).joined(separator: "\n")
+		}
+		let lexicon = try await Lexicon.from(plan.document)
 		let json = await lexicon.json()
 		let code = try type.map { command -> (URL, Data) in
 			guard let generator = LexiconSourceGenerators.all.find(command) else {
@@ -57,12 +64,15 @@ struct CodeGeneratorCommand: AsyncParsableCommand {
 			guard let `extension` = generator.utType.preferredFilenameExtension else {
 				fatalError("\(command) does not have a valid uniform type identifier: \(generator.utType)")
 			}
+			let data = command == GoStandAloneGenerator.command
+				? Data(try GoStandAloneGenerator.generateSource(json, packageName: goPackage).utf8)
+				: try generator.generate(json)
 			return (
 				file: output?.appendingPathExtension(`extension`)
 					?? input.deletingLastPathComponent()
 						.appendingPathComponent(name)
 						.appendingPathExtension(`extension`),
-				data: try generator.generate(json)
+				data: data
 			)
 		}
 		for (file, data) in code {

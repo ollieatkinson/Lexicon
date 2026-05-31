@@ -294,7 +294,7 @@ Branches can also be exported as self-contained lexicon fragments. External refe
 
 ```sh
 swift run lexicon-generate commerce.lexicon \
-	--type swift,swift-standalone,kotlin,go,ts,json,json-ld
+	--type swift,swift-standalone,kotlin,go,rust,ts,json,json-ld
 ```
 
 Available generator commands:
@@ -305,11 +305,96 @@ Available generator commands:
 | `swift-standalone` | Stand-alone Swift source. |
 | `kotlin` | Stand-alone Kotlin source. |
 | `go` | Stand-alone Go source. |
+| `rust` | Stand-alone Rust source. |
 | `ts` | Stand-alone TypeScript source. |
 | `json` | JSON classes and mixins snapshot. |
 | `json-ld` | SKOS JSON-LD. |
 
 The generator registry lives in `LexiconGenerators`, and SwiftPM build-tool plugins are available for generated Swift sources.
+
+Generated Go uses exported TitleCase selectors so the same generated API works inside the generated package and from importing packages:
+
+```go
+lexicon.Test.Type.Even.Bad.ID()
+```
+
+The generated values keep exact lowercase lemma identifiers, and `l("test.type.even.bad")` is available as an exact-path helper in the generated package. Use `--go-package` when the generated file should belong to an existing Go package:
+
+```sh
+swift run lexicon-generate commerce.lexicon --type go --go-package commerce
+```
+
+Generated Rust supports the normal typed API and an exact-path macro:
+
+```rust
+l().test.r#type.even.bad.id();
+l!(test.type.even.bad).id();
+```
+
+The macro walks the generated typed API instead of generating one macro arm per lemma, so large lexicons do not turn into large Rust macro tables. Invalid macro paths fail through normal Rust type checking.
+
+## Editor Support
+
+`lexicon-lsp` is a sidecar language server for editor integrations. It provides completions and diagnostics for exact-path references in `l("...")`, `l!(...)`, and lexicon document reference lines. The index is built from the composed live graph, so imported and connected lexicons are included, as are inherited and synonym paths.
+
+This is useful for languages that cannot natively express every Lexicon path spelling. For example, Rust can compile `l!(test.type.even.bad)` through a macro and Go can use `l("test.type.even.bad")`; the sidecar LSP gives those spellings path completion and unknown-path diagnostics in the editor.
+
+```sh
+swift run lexicon-lsp --lexicon commerce.lexicon
+```
+
+For most repositories, put one config file at the workspace root and point it at the root lexicon. The root lexicon can import and connect the rest of the project vocabulary, so the LSP sees the same composed graph as generation:
+
+```json
+{
+  "lexicon": "commerce.lexicon"
+}
+```
+
+`lexicon-lsp.json`, `.lexicon-lsp.json`, `lexicon.conf`, and `.lexicon.conf` are accepted. If a workspace really has multiple independent root lexicons, map source subtrees explicitly:
+
+```json
+{
+  "lexicons": [
+    { "scope": "apps/storefront", "lexicon": "lexicons/storefront.lexicon" },
+    { "scope": "packages/payments", "lexicon": "packages/payments/payments.lexicon" }
+  ]
+}
+```
+
+The longest matching `scope` wins for each opened file.
+
+### Zed
+
+Build the language server and make it available to Zed:
+
+```sh
+swift build -c release --product lexicon-lsp
+```
+
+Either put `.build/release/lexicon-lsp` on `PATH`, or configure the binary path in Zed settings:
+
+```json
+{
+  "lsp": {
+    "lexicon-lsp": {
+      "binary": {
+        "path": "/absolute/path/to/Lexicon/.build/release/lexicon-lsp"
+      }
+    }
+  }
+}
+```
+
+Then install the dev extension from `Editors/Zed/lexicon` using Zed's `Extensions: Install Dev Extension` command. The extension attaches `lexicon-lsp` to Lexicon, Rust, and Go buffers.
+
+To try it locally:
+
+```sh
+zed Examples/Zed
+```
+
+Open `demo.rs` or `demo.go` and request completion after `test.type.even.`. The LSP should offer `bad` and `no`; the `bed` examples should be diagnosed as unknown Lexicon paths.
 
 ## CLI
 
@@ -388,6 +473,7 @@ Event payloads are JSON-backed and decode through `JSONDecoder`, so generated le
 | `_Collections` | Internal collection utilities, including sorted dictionary support. |
 | `lexicon` | CLI for validating, inspecting, formatting, diffing and editing lexicons. |
 | `lexicon-generate` | CLI for generating source artefacts. |
+| `lexicon-lsp` | Sidecar language server for Lexicon path completions and diagnostics. |
 | `SwiftLibraryGeneratorPlugin` | SwiftPM plugin for generated Swift that depends on `SwiftLexicon`. |
 | `SwiftStandAloneGeneratorPlugin` | SwiftPM plugin for stand-alone generated Swift. |
 

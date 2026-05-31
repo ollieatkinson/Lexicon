@@ -16,6 +16,7 @@ let package = Package(
 		.library(name: "SwiftLexicon", targets: ["SwiftLexicon"]),
 		.library(name: "LexiconGenerators", targets: ["LexiconGenerators"]),
 		.executable(name: "lexicon-generate", targets: ["lexicon-generate"]),
+		.executable(name: "lexicon-lsp", targets: ["lexicon-lsp"]),
 		.executable(name: "lexicon", targets: ["lexicon-cli"]),
 		.plugin(name: "SwiftStandAloneGeneratorPlugin", targets: ["SwiftStandAloneGeneratorPlugin"]),
 		.plugin(name: "SwiftLibraryGeneratorPlugin", targets: ["SwiftLibraryGeneratorPlugin"]),
@@ -73,6 +74,18 @@ let package = Package(
 				"Lexicon"
 			]
 		),
+		.target(
+			name: "LexiconLSP",
+			dependencies: [
+				"Lexicon"
+			]
+		),
+		.testTarget(
+			name: "LexiconLSPTests",
+			dependencies: [
+				"LexiconLSP"
+			]
+		),
 		.testTarget(
 			name: "LexiconGeneratorsTests",
 			dependencies: [
@@ -102,6 +115,13 @@ let package = Package(
 				.target(name: "LexiconGenerators"),
 				.product(name: "ArgumentParser", package: "swift-argument-parser"),
 				.product(name: "Collections", package: "swift-collections")
+			]
+		),
+		.executableTarget(
+			name: "lexicon-lsp",
+			dependencies: [
+				"LexiconLSP",
+				.product(name: "ArgumentParser", package: "swift-argument-parser")
 			]
 		),
 		.executableTarget(
