@@ -42,7 +42,7 @@ final class LSPTransport {
 		write(LSPResponse(id: id, result: result))
 	}
 
-	func notify<Params: Encodable>(method: String, params: Params) {
+	func notify<Params: Encodable>(method: LSPMethod, params: Params) {
 		write(LSPNotification(method: method, params: params))
 	}
 

@@ -5,14 +5,34 @@
 import Foundation
 import LexiconLSP
 
-enum LSPMethod {
-	static let initialize = "initialize"
-	static let shutdown = "shutdown"
-	static let exit = "exit"
-	static let didOpen = "textDocument/didOpen"
-	static let didChange = "textDocument/didChange"
-	static let completion = "textDocument/completion"
-	static let publishDiagnostics = "textDocument/publishDiagnostics"
+struct LSPMethod: Codable, ExpressibleByStringLiteral, Hashable, RawRepresentable {
+	var rawValue: String
+
+	init(rawValue: String) {
+		self.rawValue = rawValue
+	}
+
+	init(stringLiteral value: String) {
+		rawValue = value
+	}
+
+	init(from decoder: Decoder) throws {
+		let container = try decoder.singleValueContainer()
+		rawValue = try container.decode(String.self)
+	}
+
+	func encode(to encoder: Encoder) throws {
+		var container = encoder.singleValueContainer()
+		try container.encode(rawValue)
+	}
+
+	static let initialize: Self = "initialize"
+	static let shutdown: Self = "shutdown"
+	static let exit: Self = "exit"
+	static let didOpen: Self = "textDocument/didOpen"
+	static let didChange: Self = "textDocument/didChange"
+	static let completion: Self = "textDocument/completion"
+	static let publishDiagnostics: Self = "textDocument/publishDiagnostics"
 }
 
 enum LSPRequestID: Codable, Hashable {
@@ -46,7 +66,7 @@ enum LSPRequestID: Codable, Hashable {
 
 struct LSPRequest: Decodable {
 	var id: LSPRequestID?
-	var method: String
+	var method: LSPMethod
 }
 
 struct LSPMessage<Params: Decodable>: Decodable {
@@ -61,7 +81,7 @@ struct LSPResponse<Result: Encodable>: Encodable {
 
 struct LSPNotification<Params: Encodable>: Encodable {
 	var jsonrpc = "2.0"
-	var method: String
+	var method: LSPMethod
 	var params: Params
 }
 
