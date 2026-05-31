@@ -49,8 +49,8 @@ struct CodeReferenceSyntax: Sendable {
 		name: "Go",
 		opening: #"l(""#,
 		path: .quotedString,
-		references: {
-			$0.locatedLexiconPaths(matching: #/(?:^|[^A-Za-z0-9_])l\("(?<path>[^"\\]*(?:\\.[^"\\]*)*)"\)/#)
+		references: { text in
+			text.locatedLexiconPaths(matching: #/(?:^|[^A-Za-z0-9_])l\("(?<path>[^"\\]*(?:\\.[^"\\]*)*)"\)/#)
 		},
 		completionTerminators: ["\n", "\""]
 	)
@@ -59,8 +59,8 @@ struct CodeReferenceSyntax: Sendable {
 		name: "Rust",
 		opening: "l!(",
 		path: .dottedIdentifier,
-		references: {
-			$0.locatedLexiconPaths(matching: #/(?:^|[^A-Za-z0-9_])l!\((?<path>[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/#)
+		references: { text in
+			text.locatedLexiconPaths(matching: #/(?:^|[^A-Za-z0-9_])l!\((?<path>[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/#)
 		},
 		completionTerminators: ["\n", ")"]
 	)
