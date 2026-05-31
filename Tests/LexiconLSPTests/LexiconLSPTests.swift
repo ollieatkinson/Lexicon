@@ -62,6 +62,40 @@ struct LexiconLSPTests {
 	}
 
 	@Test
+	func test_completes_inherited_lexicon_document_reference_paths() throws {
+		let text = """
+		test:
+			type:
+				good:
+					nice:
+				even:
+					bad:
+					no:
+					+ test.type.good
+				odd:
+				+ test.type.even
+		consumer:
+			+ test.type.odd.
+			+ test.type.odd.no.
+		"""
+		let service = try LexiconLSPService(index: LexiconPathIndex(lexiconText: text))
+
+		let inherited = try #require(service.completion(
+			in: text,
+			line: 11,
+			character: "\t+ test.type.odd.".utf16.count
+		))
+		let nestedInherited = try #require(service.completion(
+			in: text,
+			line: 12,
+			character: "\t+ test.type.odd.no.".utf16.count
+		))
+
+		#expect(inherited.items.map(\.label) == ["bad", "no"])
+		#expect(nestedInherited.items.map(\.label) == ["nice"])
+	}
+
+	@Test
 	func test_completes_relative_lexicon_synonym_references() throws {
 		let text = """
 		test:
@@ -235,6 +269,45 @@ struct LexiconLSPTests {
 		#expect(index.contains("shared.connected.reference"))
 		#expect(index.contains("shared.connected.type"))
 		#expect(LexiconLSPService(index: index).diagnostics(in: #"let value = l("shared.connected.reference")"#).isEmpty)
+	}
+
+	@Test
+	func test_completes_composed_connection_paths() throws {
+		let directory = FileManager.default.temporaryDirectory
+			.appendingPathComponent("LexiconLSPTests-\(UUID().uuidString)", isDirectory: true)
+		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+		defer { try? FileManager.default.removeItem(at: directory) }
+
+		let imported = directory.appendingPathComponent("imported.lexicon")
+		let local = directory.appendingPathComponent("local.lexicon")
+		try Data(
+			"""
+			external:
+				imported:
+				type:
+				reference:
+				+ external.type
+			""".utf8
+		).write(to: imported)
+		try Data(
+			"""
+			shared:
+				connected:
+				@ imported.lexicon
+					local:
+			""".utf8
+		).write(to: local)
+
+		let service = try LexiconLSPService(index: LexiconPathIndex(lexiconURL: local))
+		let text = "let value = l!(shared.connected.)"
+
+		let result = try #require(service.completion(
+			in: text,
+			line: 0,
+			character: "let value = l!(shared.connected.".utf16.count
+		))
+
+		#expect(result.items.map(\.label) == ["imported", "local", "reference", "type"])
 	}
 
 	private static func service() throws -> LexiconLSPService {

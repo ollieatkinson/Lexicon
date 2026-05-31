@@ -132,6 +132,54 @@ struct LexiconLSPCommandTests {
 		#expect(response.completionLabels == ["bad", "no"])
 	}
 
+	@Test
+	func test_process_completes_inherited_and_connected_paths() throws {
+		let directory = try TemporaryDirectory()
+		try directory.write("lexicon-lsp.json", #"{"lexicon":"root.lexicon"}"#)
+		try directory.write("root.lexicon", """
+		test:
+			type:
+				good:
+					nice:
+				even:
+					bad:
+					no:
+					+ test.type.good
+				odd:
+				+ test.type.even
+			connected:
+			@ shared.lexicon
+		""")
+		try directory.write("shared.lexicon", """
+		shared:
+			external:
+			type:
+			reference:
+			+ shared.type
+		""")
+		let sourceURL = directory.url.appendingPathComponent("demo.lexicon")
+		let source = """
+		consumer:
+			+ test.type.odd.
+			+ test.type.odd.no.
+			+ test.connected.
+		"""
+
+		var server = try LSPProcess()
+		defer { server.stop() }
+		try server.initialize(root: directory.url)
+		try server.didOpen(uri: sourceURL, languageID: "lexicon", text: source)
+		try server.completion(id: 2, uri: sourceURL, in: source, after: "\t+ test.type.odd.")
+		try server.completion(id: 3, uri: sourceURL, in: source, after: "\t+ test.type.odd.no.")
+		try server.completion(id: 4, uri: sourceURL, in: source, after: "\t+ test.connected.")
+
+		let messages = try server.finish()
+
+		#expect(try #require(messages.response(id: 2)).completionLabels == ["bad", "no"])
+		#expect(try #require(messages.response(id: 3)).completionLabels == ["nice"])
+		#expect(try #require(messages.response(id: 4)).completionLabels == ["external", "reference", "type"])
+	}
+
 	private static let lexicon = """
 	test:
 		type:
@@ -409,7 +457,20 @@ private extension Array where Element == [String: Any] {
 
 private extension String {
 	func position(after prefix: String) -> [String: Int] {
-		let character = hasPrefix(prefix) ? prefix.utf16.count : utf16.count
-		return ["line": 0, "character": character]
+		let index = range(of: prefix).map(\.upperBound) ?? endIndex
+		var line = 0
+		var character = 0
+		var cursor = startIndex
+		while cursor < index {
+			let next = self.index(after: cursor)
+			if self[cursor] == "\n" {
+				line += 1
+				character = 0
+			} else {
+				character += self[cursor..<next].utf16.count
+			}
+			cursor = next
+		}
+		return ["line": line, "character": character]
 	}
 }

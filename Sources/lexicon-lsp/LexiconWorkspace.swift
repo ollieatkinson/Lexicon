@@ -308,15 +308,16 @@ private struct LexiconIndexMapping {
 private struct OpenDocumentLexiconImportResolver: LexiconImportResolving {
 	var baseURL: URL
 	var openDocuments: [URL: String]
+	var allowRemote = true
 
 	func resolve(_ import: Lexicon.Import) throws -> Lexicon.Document? {
-		guard `import`.location == .local, let url = localURL(for: `import`.reference) else {
-			return nil
-		}
-		if let text = openDocuments[url.lspCanonicalFileURL] {
+		if `import`.location == .local, let url = localURL(for: `import`.reference), let text = openDocuments[url.lspCanonicalFileURL] {
 			return try TaskPaper(text).decodeDocument()
 		}
-		return try TaskPaper(Data(contentsOf: url)).decodeDocument()
+		return try FileLexiconImportResolver(
+			baseURL: baseURL,
+			allowRemote: allowRemote
+		).resolve(`import`)
 	}
 
 	private func localURL(for reference: String) -> URL? {
