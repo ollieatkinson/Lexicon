@@ -9,11 +9,13 @@ import {
 	ServerBinaryConfiguration,
 	resolveServerCommand,
 } from "./server";
+import { AsyncSerialQueue } from "./restartQueue";
 
 let client: LanguageClient | undefined;
 let outputChannel: vscode.OutputChannel | undefined;
 let configurationWatcher: vscode.FileSystemWatcher | undefined;
 let restartTimer: NodeJS.Timeout | undefined;
+const serverLifecycle = new AsyncSerialQueue();
 
 const configurationFileNames = [
 	"lexicon-lsp.json",
@@ -37,7 +39,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			void restartLanguageServer();
 		}
 	}));
-	await startLanguageServer();
+	await serverLifecycle.enqueue(startLanguageServer);
 }
 
 export async function deactivate(): Promise<void> {
@@ -45,7 +47,7 @@ export async function deactivate(): Promise<void> {
 		clearTimeout(restartTimer);
 		restartTimer = undefined;
 	}
-	await stopLanguageServer();
+	await serverLifecycle.enqueue(stopLanguageServer);
 }
 
 function scheduleLanguageServerRestart(): void {
@@ -59,8 +61,10 @@ function scheduleLanguageServerRestart(): void {
 }
 
 async function restartLanguageServer(): Promise<void> {
-	await stopLanguageServer();
-	await startLanguageServer();
+	await serverLifecycle.enqueue(async () => {
+		await stopLanguageServer();
+		await startLanguageServer();
+	});
 }
 
 async function startLanguageServer(): Promise<void> {
