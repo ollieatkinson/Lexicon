@@ -9,21 +9,24 @@ import UniformTypeIdentifiers
 #endif
 
 public enum KotlinStandAloneGenerator: SourceCodeGenerator {
-	
-	// TODO: prefixes?
-	
+
 	public static let utType = UTType(filenameExtension: "kt", conformingTo: .sourceCode)!
 	public static let command = "kotlin"
-	
+
 	public static func generateSource(_ json: Lexicon.Graph.JSON) throws -> String {
-		try json.kotlin()
+		try generateSource(json, prefixes: .default)
+	}
+
+	public static func generateSource(_ json: Lexicon.Graph.JSON, prefixes: StandAloneTypePrefixes) throws -> String {
+		try json.kotlin(prefixes: prefixes)
 	}
 }
 
 private extension Lexicon.Graph.JSON {
-	
-	func kotlin() throws -> String {
-		try SourceTemplate(
+
+	func kotlin(prefixes: StandAloneTypePrefixes) throws -> String {
+		let names = StandAloneTypeNames(id: name, prefixes: prefixes)
+		return try SourceTemplate(
 			"""
 			interface I: TypeLocalized, SourceCodeIdentifiable
 
@@ -41,27 +44,28 @@ private extension Lexicon.Graph.JSON {
 
 			// MARK: generated types
 
-			val {{root}} = L_{{root}}("{{root}}")
+			val {{root}} = {{rootClassName}}("{{root}}")
 
 			{{types}}
 
 			"""
 		).render([
 			"root": name,
-			"types": try classes.flatMap { try $0.kotlin(prefix: ("L", "I")) }.joined(separator: "\n"),
+			"rootClassName": names.className,
+			"types": try classes.flatMap { try $0.kotlin(prefixes: prefixes) }.joined(separator: "\n"),
 		])
 	}
 }
 
 private extension Lexicon.Graph.Node.Class.JSON {
-	
-	func kotlin(prefix: (class: String, protocol: String)) throws -> [String] {
-		
+
+	func kotlin(prefixes: StandAloneTypePrefixes) throws -> [String] {
+
 		guard mixin == nil else {
 			return []
 		}
-		
-		let names = StandAloneTypeNames(id: id, prefix: prefix)
+
+		let names = StandAloneTypeNames(id: id, prefixes: prefixes)
 		
 		if let protonym = protonym {
 			return [
@@ -80,7 +84,7 @@ private extension Lexicon.Graph.Node.Class.JSON {
 				"""
 			).render([
 				"className": names.className,
-				"baseClass": names.classPrefix,
+				"baseClass": names.baseClassName,
 				"protocolName": names.protocolName,
 				"protocolBase": names.protocolBase(supertype: supertype),
 			])

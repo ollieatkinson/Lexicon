@@ -6,8 +6,8 @@ import Lexicon
 
 extension Lexicon.Graph.Node.Class.JSON {
 
-	func swiftProperties(prefix: (class: String, protocol: String)) throws -> [String] {
-		let names = StandAloneTypeNames(id: id, prefix: prefix)
+	func swiftProperties(prefixes: StandAloneTypePrefixes) throws -> [String] {
+		let names = StandAloneTypeNames(id: id, prefixes: prefixes)
 		var properties: [String] = []
 
 		for accessor in standAloneAccessors() {

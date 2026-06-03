@@ -19,17 +19,42 @@ extension String {
 	}
 }
 
-struct StandAloneTypeNames: Sendable {
-	var id: String
-	var classPrefix: String
-	var protocolPrefix: String
+public struct StandAloneTypePrefixes: Sendable, Equatable {
+	public var classPrefix: String
+	public var protocolPrefix: String
 
-	init(id: String, prefix: (class: String, protocol: String)) {
-		self.id = id
-		self.classPrefix = prefix.class
-		self.protocolPrefix = prefix.protocol
+	public init(class classPrefix: String = "L", protocol protocolPrefix: String = "I") {
+		self.classPrefix = classPrefix
+		self.protocolPrefix = protocolPrefix
 	}
 
+	public static let `default` = StandAloneTypePrefixes()
+}
+
+struct StandAloneTypeNames: Sendable {
+	var id: String
+	var prefixes: StandAloneTypePrefixes
+	var baseClassName: String
+	var baseProtocolName: String
+
+	init(id: String, prefix: (class: String, protocol: String)) {
+		self.init(id: id, prefixes: .init(class: prefix.class, protocol: prefix.protocol))
+	}
+
+	init(
+		id: String,
+		prefixes: StandAloneTypePrefixes,
+		baseClassName: String = "L",
+		baseProtocolName: String = "I"
+	) {
+		self.id = id
+		self.prefixes = prefixes
+		self.baseClassName = baseClassName
+		self.baseProtocolName = baseProtocolName
+	}
+
+	var classPrefix: String { prefixes.classPrefix }
+	var protocolPrefix: String { prefixes.protocolPrefix }
 	var className: String { className(for: id) }
 	var protocolName: String { protocolName(for: id) }
 
@@ -42,7 +67,9 @@ struct StandAloneTypeNames: Sendable {
 	}
 
 	func protocolBase(supertype: String?) -> String {
-		"\(protocolPrefix)\(supertype.map { "_\($0.standAloneProtocolInheritanceSuffix(protocolPrefix: protocolPrefix))" } ?? "")"
+		supertype.map {
+			"\(protocolPrefix)_\($0.standAloneProtocolInheritanceSuffix(protocolPrefix: protocolPrefix))"
+		} ?? baseProtocolName
 	}
 }
 
