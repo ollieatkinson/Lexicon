@@ -53,7 +53,7 @@ struct CodeGeneratorCommand: AsyncParsableCommand {
 			.decodeDocument()
 			.composed(resolving: FileLexiconImportResolver(baseURL: input.deletingLastPathComponent()))
 		guard plan.conflicts.isEmpty else {
-			throw plan.conflicts.map(\.description).joined(separator: "\n")
+			throw LexiconError(plan.conflicts.map(\.description).joined(separator: "\n"))
 		}
 		let lexicon = try await Lexicon.from(plan.document)
 		let json = await lexicon.json()

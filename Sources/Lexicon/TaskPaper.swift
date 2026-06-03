@@ -13,33 +13,48 @@ public extension UTType {
 }
 
 public class TaskPaper {
-	
+
 	public typealias Node = Lexicon.Graph.Node
-	
+
+	public struct Options: Sendable, Hashable {
+		public var allowsPlainTextOutlines: Bool
+
+		public init(allowsPlainTextOutlines: Bool = false) {
+			self.allowsPlainTextOutlines = allowsPlainTextOutlines
+		}
+
+		public static let lexicon = Self()
+		public static let plainTextOutline = Self(allowsPlainTextOutlines: true)
+	}
+
 	public static let pattern = try! (
 		line: NSRegularExpression(pattern: "^(?<tabs>\\t*)(?<content>.+)"),
-		lemma: NSRegularExpression(pattern: "^(?<lemma>[\\w]+):?\\s*$"), // TODO: Optional colon `:?` allows plain text (tabbed) outlines, but this should be opted into
+		lemma: NSRegularExpression(pattern: "^(?<lemma>[\\w]+):\\s*$"),
+		plainTextLemma: NSRegularExpression(pattern: "^(?<lemma>[\\w]+):?\\s*$"),
 		operator: NSRegularExpression(pattern: "^(?<operator>[+=?])\\s*(?<content>.*\\S)?\\s*$")
 	)
-	
+
 	public let string: String
-	
+	public let options: Options
+
 	private var result: Result<Lexicon.Graph, Error>?
 	private var documentResult: Result<Lexicon.Document, Error>?
-	
-	public init(_ string: String) {
+
+	public init(_ string: String, options: Options = .lexicon) {
 		self.string = string
+		self.options = options
 	}
-	
-	public init(_ UTF8: Data) throws {
+
+	public init(_ UTF8: Data, options: Options = .lexicon) throws {
 		guard let string = String(data: UTF8, encoding: .utf8) else {
-			throw "Data is not UTF-8"
+			throw LexiconError("Data is not UTF-8")
 		}
 		self.string = string
+		self.options = options
 	}
-	
+
 	public func decode() throws -> Lexicon.Graph {
-		
+
 		if let result = result {
 			return try result.get()
 		}
@@ -63,7 +78,7 @@ public class TaskPaper {
 		var path: [Node] = []
 		var document = Lexicon.Document()
 		var error: Error?
-		
+
 		string.enumerateLines{ line, stop in
 			do {
 				guard let match = TaskPaper.pattern.line.firstMatch(in: line, options: [], range: line.nsRange) else {
@@ -78,7 +93,7 @@ public class TaskPaper {
 				error = o
 			}
 		}
-		
+
 		while path.count > 1 {
 			reduce(&path)
 		}
@@ -90,7 +105,7 @@ public class TaskPaper {
 			documentResult = .failure(error)
 			throw error
 		}
-		
+
 		documentResult = .success(document)
 		return document
 	}
@@ -115,7 +130,7 @@ public class TaskPaper {
 				continue
 			}
 			try decode(line: sourceLine.content, depth: sourceLine.depth, path: &path, document: &document)
-			if let line = SourceMap.Line(sourceLine, path: path) {
+			if let line = SourceMap.Line(sourceLine, path: path, taskPaper: self) {
 				lines.append(line)
 			}
 		}
@@ -127,7 +142,7 @@ public class TaskPaper {
 		let child = path.removeLast()
 		path[path.endIndex - 1].children[child.name] = child
 	}
-	
+
 	func decode(line: String, depth: Int, path: inout [Node], document: inout Lexicon.Document) throws {
 
 		if line.hasPrefix("@ ") {
@@ -162,9 +177,9 @@ public class TaskPaper {
 			}
 			return
 		}
-		
-		let name = TaskPaper.pattern.lemma.first(in: line)?["lemma"]
-		
+
+		let name = lemmaName(in: line)
+
 		guard path.isNotEmpty else {
 			guard let name = name, depth == 0 else {
 				return // ignore everything before the first root node
@@ -172,7 +187,7 @@ public class TaskPaper {
 			path = [Node(name: name)]
 			return
 		}
-		
+
 		if let name = name {
 
 			if depth == 0 {
@@ -180,11 +195,11 @@ public class TaskPaper {
 				path = [Node(name: name)]
 				return
 			}
-			
+
 			let indent = depth - (path.count - 1)
-			
+
 			switch indent {
-					
+
 				case 1: // child
 					break
 
@@ -193,19 +208,19 @@ public class TaskPaper {
 
 				case ..<0: // ancestor
 					guard path.count + indent > 0 else {
-						throw "Line with wrong indent (\(indent)): '\(line)'"
+						throw LexiconError("Line with wrong indent (\(indent)): '\(line)'")
 					}
 					for _ in 0...abs(indent) {
 						reduce(&path)
 					}
-					
+
 				default:
-					throw "Line with wrong indent (\(indent)): '\(line)'"
+					throw LexiconError("Line with wrong indent (\(indent)): '\(line)'")
 			}
-			
+
 			path.append(Node(name: name))
 		}
-		
+
 		else if
 			let match = TaskPaper.pattern.operator.first(in: line),
 			let symbol = match["operator"],
@@ -242,6 +257,11 @@ public class TaskPaper {
 		while path.count > depth + 1 {
 			reduce(&path)
 		}
+	}
+
+	func lemmaName(in line: String) -> String? {
+		let pattern = options.allowsPlainTextOutlines ? Self.pattern.plainTextLemma : Self.pattern.lemma
+		return pattern.first(in: line)?["lemma"]
 	}
 }
 
@@ -300,15 +320,15 @@ public extension TaskPaper {
 	static func encode(_ node: Lexicon.Graph.Node, date: Date = .init()) -> String {
 		encode(Lexicon.Graph(root: node, date: date))
 	}
-	
+
 	static func encode(_ graph: Lexicon.Graph) -> String {
 		encode(Lexicon.Document(graph))
 	}
 
 	static func encode(_ document: Lexicon.Document) -> String {
-		
+
 		var lines: [String] = []
-		
+
 		for comment in document.comments {
 			lines.append("# \(comment)")
 		}
@@ -339,13 +359,13 @@ public extension TaskPaper {
 				if let protonym = node.protonym {
 					lines.append("\(tabs)= \(protonym)")
 				} else {
-					for type in node.type.sorted(by: <) { // TODO: consider whether to sort it lexicographically
+					for type in node.type.sorted(by: <) {
 						lines.append("\(tabs)+ \(type)")
 					}
 				}
 			}
 		}
-		
+
 		return lines.joined(separator: "\n")
 	}
 }
@@ -433,9 +453,9 @@ private extension TaskPaper {
 
 private extension TaskPaper.SourceMap.Line {
 
-	init?(_ sourceLine: TaskPaper.ParsedSourceLine, path: [TaskPaper.Node]) {
+	init?(_ sourceLine: TaskPaper.ParsedSourceLine, path: [TaskPaper.Node], taskPaper: TaskPaper) {
 		let nodePath = TaskPaper.nodePath(path)
-		if let name = TaskPaper.pattern.lemma.first(in: sourceLine.content)?["lemma"] {
+		if let name = taskPaper.lemmaName(in: sourceLine.content) {
 			self.init(
 				line: sourceLine.line,
 				depth: sourceLine.depth,

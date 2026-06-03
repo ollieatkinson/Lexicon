@@ -5,6 +5,7 @@
 import Testing
 #if !os(Android)
 import Foundation
+import Lexicon
 
 @Suite
 
@@ -243,7 +244,7 @@ private extension LexiconCLICommandTests {
 		let output = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
 		let error = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
 		guard process.terminationStatus == 0 else {
-			throw "lexicon \(arguments.joined(separator: " ")) failed: \(error)\n\(output)"
+			throw LexiconError("lexicon \(arguments.joined(separator: " ")) failed: \(error)\n\(output)")
 		}
 		return (output, error)
 	}

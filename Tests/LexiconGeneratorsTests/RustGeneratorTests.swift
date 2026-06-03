@@ -180,13 +180,13 @@ private extension RustGeneratorTests {
 		let output = String(data: standardOutput.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
 		let error = String(data: standardError.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
 		if process.terminationStatus != 0 {
-			throw """
+			throw LexiconError("""
 			Command failed (\(process.terminationStatus)): \(command)
 			stdout:
 			\(output)
 			stderr:
 			\(error)
-			"""
+			""")
 		}
 	}
 }

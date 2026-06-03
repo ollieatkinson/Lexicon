@@ -17,12 +17,15 @@ public extension CLI {
 			self.events = []
 		}
 		
-		// TODO: revisit with composable lexicons
 		public func event(cli: CLI, event: CustomDebugStringConvertible) async -> Event {
+			await self.event(cli: cli, description: event.debugDescription)
+		}
+
+		public func event(cli: CLI, description: String) async -> Event {
 			Event(
 				time: Date.timeIntervalSinceReferenceDate - startTime,
 				record: await cli.record(),
-				description: event.debugDescription
+				description: description
 			)
 		}
 	}

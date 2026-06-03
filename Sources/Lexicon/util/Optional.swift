@@ -88,7 +88,7 @@ public extension Optional {
 		_ file: String = #file,
 		_ line: Int = #line
 	) throws -> Wrapped {
-		try or(throw: "⚠️ \(function):\(file):\(line)")
+		try or(throw: LexiconError("Missing value in \(function):\(file):\(line)"))
 	}
 	
 	@inlinable func or(throw error: @autoclosure () -> Error) throws -> Wrapped {

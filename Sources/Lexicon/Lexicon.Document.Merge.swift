@@ -245,7 +245,7 @@ private extension Lexicon.Document {
 		}
 		let components = anchorID.components(separatedBy: ".").filter { !$0.isEmpty }
 		guard components.first == rootName, let anchorName = components.last else {
-			throw "Cannot graft imported lexicon at '\(anchorID)' inside root '\(rootName)'"
+			throw LexiconError("Cannot graft imported lexicon at '\(anchorID)' inside root '\(rootName)'")
 		}
 		let parentPath = components.dropLast().unlessEmpty?.joined(separator: ".")
 		let leaf = sourceRoot.rebased(
@@ -314,7 +314,7 @@ private extension Lexicon.Graph.Node {
 			return
 		}
 		guard var child = children[name] else {
-			throw "Could not find lemma path component: \(name)"
+			throw LexiconError("Could not find lemma path component: \(name)")
 		}
 		try child.mutate(path: path.dropFirst(), body: body)
 		children[name] = child
@@ -325,7 +325,7 @@ private extension SortedDictionary where Key == String, Value == Lexicon.Graph.N
 
 	mutating func mutate(_ key: Key, body: (inout Value) throws -> Void) throws {
 		guard var value = self[key] else {
-			throw "Could not find lemma: \(key)"
+			throw LexiconError("Could not find lemma: \(key)")
 		}
 		try body(&value)
 		self[key] = value

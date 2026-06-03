@@ -134,7 +134,7 @@ private extension READMEExampleTests {
 			forResource: "Resources/READMEExamples/\(filename)",
 			withExtension: nil
 		) else {
-			throw "README example resource not found: \(filename)"
+			throw LexiconError("README example resource not found: \(filename)")
 		}
 		return try String(contentsOf: url, encoding: .utf8).droppingTrailingNewline()
 	}
