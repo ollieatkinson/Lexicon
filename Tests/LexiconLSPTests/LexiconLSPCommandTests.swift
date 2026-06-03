@@ -3,6 +3,7 @@
 //
 
 import Foundation
+import Lexicon
 import Testing
 #if canImport(Darwin)
 import Darwin
@@ -218,7 +219,7 @@ private struct LSPProcess {
 		output = Pipe()
 		error = Pipe()
 		guard let outputFileDescriptorFlags = Self.enableNonblockingReads(for: output.fileHandleForReading) else {
-			throw "Could not enable nonblocking reads for lexicon-lsp stdout"
+			throw LexiconError("Could not enable nonblocking reads for lexicon-lsp stdout")
 		}
 		self.outputFileDescriptorFlags = outputFileDescriptorFlags
 		process.executableURL = Self.packageRoot().appendingPathComponent(".build/debug/lexicon-lsp")
@@ -252,7 +253,7 @@ private struct LSPProcess {
 		let data = outputBuffer
 		let stderr = String(data: error.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
 		guard process.terminationStatus == 0 else {
-			throw "lexicon-lsp exited with \(process.terminationStatus).\n\(stderr)"
+			throw LexiconError("lexicon-lsp exited with \(process.terminationStatus).\n\(stderr)")
 		}
 		return try Self.messages(in: data)
 	}
@@ -283,7 +284,7 @@ private struct LSPProcess {
 			}
 			Thread.sleep(forTimeInterval: 0.01)
 		}
-		throw "Timed out waiting for lexicon-lsp response \(id)"
+		throw LexiconError("Timed out waiting for lexicon-lsp response \(id)")
 	}
 
 	func didOpen(uri: URL, languageID: String, text: String) throws {

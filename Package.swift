@@ -56,7 +56,8 @@ let package = Package(
 		.testTarget(
 			name: "LexiconTests",
 			dependencies: [
-				"Lexicon"
+				"Lexicon",
+				"SwiftLexicon"
 			],
 			resources: [.copy("Resources")]
 		),

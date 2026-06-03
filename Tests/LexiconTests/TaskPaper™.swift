@@ -5,14 +5,14 @@
 import Testing
 @Suite
 struct TaskPaper™ {
-	
+
 	@Test
 	func test_root_only_taskpaper() async throws {
-		
+
 		let graph = try TaskPaper(taskpaper_example).decode()
-		
+
 		let taskpaper = TaskPaper.encode(graph)
-		
+
 		#expect(taskpaper == taskpaper_example_clean)
 	}
 
@@ -47,6 +47,65 @@ struct TaskPaper™ {
 			let reference = try #require(line.reference)
 			#expect(text.substring(utf16: range) == reference)
 		}
+	}
+
+	@Test
+	func test_encode_sorts_type_references_lexicographically() {
+		let graph = Lexicon.Graph(
+			root: .init(
+				name: "root",
+				children: [
+					"item": .init(
+						name: "item",
+						type: ["root.z", "root.a", "root.m"]
+					)
+				]
+			),
+			date: .init(timeIntervalSinceReferenceDate: 0)
+		)
+
+		#expect(TaskPaper.encode(graph) == """
+		root:
+			item:
+			+ root.a
+			+ root.m
+			+ root.z
+		""")
+	}
+
+	@Test
+	func lexicon_syntax_requires_colons_for_lemmas() throws {
+		let graph = try TaskPaper("""
+		root:
+			ignored
+			actual:
+		""").decode()
+
+		#expect(graph.root.children.keys == ["actual"])
+	}
+
+	@Test
+	func plain_text_outline_syntax_accepts_lemmas_without_colons() throws {
+		let graph = try TaskPaper("""
+		root
+			child
+		""", options: .plainTextOutline).decode()
+
+		#expect(TaskPaper.encode(graph) == """
+		root:
+			child:
+		""")
+	}
+
+	@Test
+	func source_map_uses_selected_lemma_syntax() throws {
+		#expect(try TaskPaper("root").sourceMap().lines.isEmpty)
+		#expect(
+			try TaskPaper("root", options: .plainTextOutline)
+				.sourceMap()
+				.lines
+				.map(\.content) == [.lemma(name: "root")]
+		)
 	}
 }
 

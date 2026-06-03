@@ -6,57 +6,114 @@
 import SwiftUI
 
 public extension EnvironmentValues {
-	
+
 	var events: Events {
-		self[EventsKey.self]
+		get { self[EventsKey.self] }
+		set { self[EventsKey.self] = newValue }
 	}
-	
+
 	private struct EventsKey: EnvironmentKey {
 		static let defaultValue: Events = .init()
 	}
 }
 
 public extension View {
-	
-	@available(
-		*,
-		 deprecated,
-		 message: """
-			No way as yet of guaranteeing SwiftUI will not coexisit \
-			multiple copies of these values, whith the result of ƒ \
-			being called multiple times with the same event.
-			"""
-	)
-	func on(_ events: I..., ƒ: @escaping @MainActor (Event) -> ()) -> some View {
-		modifier(OnEvents(types: events, ƒ: ƒ))
+
+	func events(_ events: Events) -> some View {
+		environment(\.events, events)
+	}
+
+	func onEvent(
+		_ event: some I,
+		perform action: @escaping @MainActor @Sendable (Event) -> Void
+	) -> some View {
+		modifier(OnEvents(predicate: { $0.is(event) }, action: action))
+	}
+
+	func onEvent<A>(
+		_ type: A.Type,
+		perform action: @escaping @MainActor @Sendable (Event) -> Void
+	) -> some View {
+		modifier(OnEvents(predicate: { $0.is(type) }, action: action))
+	}
+
+	func onEvents(
+		_ events: any I...,
+		perform action: @escaping @MainActor @Sendable (Event) -> Void
+	) -> some View {
+		onEvents(events, perform: action)
+	}
+
+	func onEvents(
+		_ events: [any I],
+		perform action: @escaping @MainActor @Sendable (Event) -> Void
+	) -> some View {
+		modifier(OnEvents(isEnabled: !events.isEmpty, predicate: { event in
+			events.contains(where: event.is)
+		}, action: action))
+	}
+
+	func onEvents(
+		perform action: @escaping @MainActor @Sendable (Event) -> Void
+	) -> some View {
+		modifier(OnEvents(predicate: { _ in true }, action: action))
+	}
+
+	func onEvents(
+		where predicate: @escaping @Sendable (Event) -> Bool,
+		perform action: @escaping @MainActor @Sendable (Event) -> Void
+	) -> some View {
+		modifier(OnEvents(predicate: predicate, action: action))
+	}
+
+	@available(*, deprecated, renamed: "onEvents(_:perform:)")
+	func on(_ events: any I..., ƒ: @escaping @MainActor @Sendable (Event) -> Void) -> some View {
+		onEvents(events, perform: ƒ)
 	}
 }
 
-struct OnEvents: ViewModifier {
-	
-	@Environment(\.events) var events
-	
-	let types: [I]
-	let ƒ: @MainActor (Event) -> ()
-	
+private struct OnEvents: ViewModifier {
+
+	@Environment(\.events) private var events
+	@State private var subscriber = Events.Subscriber()
+
+	var isEnabled = true
+	let predicate: @Sendable (Event) -> Bool
+	let action: @MainActor @Sendable (Event) -> Void
+
 	func body(content: Content) -> some View {
-		if types.isEmpty {
-			content
-		} else {
-			content.task {
-				for await event in events.stream {
-					guard types.contains(where: event.is) else {
-						continue
-					}
-					ƒ(event)
-				}
+		// Keep the retained subscriber using the latest closures without
+		// forcing a resubscribe on every render.
+		subscriber.update(where: predicate) { event in
+			await action(event)
+		}
+
+		return content
+			.onAppear {
+				updateSubscriber()
 			}
+			.onChange(of: events.id, initial: true) { _, _ in
+				updateSubscriber()
+			}
+			.onChange(of: isEnabled, initial: false) { _, _ in
+				updateSubscriber()
+			}
+			.onDisappear {
+				subscriber.cancel()
+			}
+	}
+
+	private func updateSubscriber() {
+		if isEnabled {
+			subscriber.subscribe(to: events)
+		} else {
+			subscriber.cancel()
 		}
 	}
 }
 
 public extension View {
-	
+
 	func update<A: AnyObject, B>(_ a: A, _ k: ReferenceWritableKeyPath<A, B>, to b: B) -> Self {
 		a[keyPath: k] = b
 		return self

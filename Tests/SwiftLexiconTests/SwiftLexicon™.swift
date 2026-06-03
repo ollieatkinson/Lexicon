@@ -53,7 +53,7 @@ struct SwiftLexicon™ {
 
 		#expect(l == test.one.more.time.one)
 
-		#expect(k(\.id) == "test.one[1].more[2].time[3].one[0]")
+		#expect(k(\.id) == #"test.one[1].more[2].time["3"].one[0]"#)
 
 		let events = Events()
 		let results = AsyncChannel<Event>()

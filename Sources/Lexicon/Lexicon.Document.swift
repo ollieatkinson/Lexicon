@@ -50,7 +50,7 @@ public extension Lexicon {
 				node = root
 			}
 			guard let root = node else {
-				throw "The document does not declare a root lemma"
+				throw LexiconError("The document does not declare a root lemma")
 			}
 			return Graph(root: root, date: date)
 		}

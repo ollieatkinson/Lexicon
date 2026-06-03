@@ -40,6 +40,10 @@ public struct Event: Sendable, Hashable, Identifiable, CustomStringConvertible {
 		Snapshot(id: id, description: description, lemma: l.__, values: values)
 	}
 
+	public var detail: EventDetail {
+		EventDetail(id: l.__, data: values)
+	}
+
 	public func `is`(_ i: I) -> Bool {
 		switch i {
 			case let i as L:
@@ -100,11 +104,8 @@ public extension JSON {
 		if let string {
 			return string
 		}
-		if let array {
-			return "[" + array.map(\.eventDescription).joined(separator: ", ") + "]"
-		}
-		if let object {
-			return "{" + object.sortedEntries.map { "\($0.key): \($0.value.eventDescription)" }.joined(separator: ", ") + "}"
+		if array != nil || object != nil, let data = try? data(options: [.fragmentsAllowed, .sortedKeys]) {
+			return String(decoding: data, as: UTF8.self)
 		}
 		return String(describing: any)
 	}

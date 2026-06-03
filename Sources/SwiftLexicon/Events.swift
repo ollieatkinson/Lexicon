@@ -5,7 +5,7 @@
 import Foundation
 import Synchronization
 
-public final class Events: Sendable {
+public final class Events: Identifiable, Sendable {
 
 	private struct State: Sendable {
 		var nextID: UInt64 = 0
@@ -16,6 +16,10 @@ public final class Events: Sendable {
 	private let state = Mutex(State())
 
 	public init() {}
+
+	public var id: ObjectIdentifier {
+		ObjectIdentifier(self)
+	}
 
 	public var stream: AsyncStream<Event> {
 		makeStream().stream
@@ -121,9 +125,101 @@ public struct EventHandler: Sendable {
 	}
 }
 
+public extension Events {
+
+	final class Subscriber: Sendable {
+
+		private struct State: Sendable {
+			var eventsID: ObjectIdentifier?
+			var subscription: EventSubscription?
+			var predicate: @Sendable (Event) -> Bool = { _ in true }
+			var action: @Sendable (Event) async -> Void = { _ in }
+		}
+
+		private let state = Mutex(State())
+
+		public init() {}
+
+		public convenience init(
+			where predicate: @escaping @Sendable (Event) -> Bool = { _ in true },
+			perform action: @escaping @Sendable (Event) async -> Void
+		) {
+			self.init()
+			update(where: predicate, perform: action)
+		}
+
+		deinit {
+			cancel()
+		}
+
+		public var isSubscribed: Bool {
+			state.withLock { state in
+				state.subscription != nil
+			}
+		}
+
+		public func update(
+			where predicate: @escaping @Sendable (Event) -> Bool = { _ in true },
+			perform action: @escaping @Sendable (Event) async -> Void
+		) {
+			state.withLock { state in
+				state.predicate = predicate
+				state.action = action
+			}
+		}
+
+		public func subscribe(
+			to events: Events?,
+			where predicate: @escaping @Sendable (Event) -> Bool = { _ in true },
+			perform action: @escaping @Sendable (Event) async -> Void
+		) {
+			update(where: predicate, perform: action)
+			subscribe(to: events)
+		}
+
+		public func subscribe(to events: Events?) {
+			state.withLock { state in
+				let eventsID = events?.id
+				guard state.eventsID != eventsID || (events != nil && state.subscription == nil) else {
+					return
+				}
+
+				state.subscription?.cancel()
+				state.eventsID = eventsID
+				state.subscription = events.map { events in
+					events.subscribe { [weak self] event in
+						await self?.receive(event)
+					}
+				}
+			}
+		}
+
+		public func cancel() {
+			state.withLock { state in
+				state.subscription?.cancel()
+				state.eventsID = nil
+				state.subscription = nil
+			}
+		}
+
+		private func receive(_ event: Event) async {
+			let handler = state.withLock { state in
+				(predicate: state.predicate, action: state.action)
+			}
+
+			guard handler.predicate(event) else {
+				return
+			}
+
+			await handler.action(event)
+		}
+	}
+}
+
 public final class EventSubscription: Hashable, Sendable {
 	private let task: Task<Void, Never>
 	private let onCancel: @Sendable () -> Void
+	private let isCancelled = Mutex(false)
 
 	public init(_ task: Task<Void, Never>, onCancel: @escaping @Sendable () -> Void = {}) {
 		self.task = task
@@ -135,6 +231,16 @@ public final class EventSubscription: Hashable, Sendable {
 	}
 
 	public func cancel() {
+		let shouldCancel = isCancelled.withLock { isCancelled in
+			guard !isCancelled else {
+				return false
+			}
+			isCancelled = true
+			return true
+		}
+		guard shouldCancel else {
+			return
+		}
 		onCancel()
 		task.cancel()
 	}

@@ -622,7 +622,7 @@ public extension Lexicon.Search {
 		) async throws -> [[Double]] {
 			let embeddings = try await provider.embed(texts)
 			guard embeddings.count == texts.count else {
-				throw "Embedding provider returned \(embeddings.count) vectors for \(texts.count) texts."
+				throw LexiconError("Embedding provider returned \(embeddings.count) vectors for \(texts.count) texts.")
 			}
 			return embeddings
 		}
