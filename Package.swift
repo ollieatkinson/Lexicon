@@ -22,6 +22,7 @@ let package = Package(
 		.plugin(name: "SwiftLibraryGeneratorPlugin", targets: ["SwiftLibraryGeneratorPlugin"]),
 	],
 	traits: [
+		.trait(name: "Editor"),
 		.trait(name: "MLXSearch"),
 	],
 	dependencies: [
@@ -51,7 +52,7 @@ let package = Package(
 				.product(name: "Algorithms", package: "swift-algorithms"),
 				.product(name: "Collections", package: "swift-collections")
 			],
-			swiftSettings: [.define("EDITOR")] // TODO: make this opt in
+			swiftSettings: [.define("EDITOR", .when(traits: ["Editor"]))]
 		),
 		.testTarget(
 			name: "LexiconTests",
@@ -59,7 +60,8 @@ let package = Package(
 				"Lexicon",
 				"SwiftLexicon"
 			],
-			resources: [.copy("Resources")]
+			resources: [.copy("Resources")],
+			swiftSettings: [.define("EDITOR", .when(traits: ["Editor"]))]
 		),
 		.testTarget(
 			name: "_CollectionsTests",

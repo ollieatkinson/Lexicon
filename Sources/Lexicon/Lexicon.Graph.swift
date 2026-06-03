@@ -5,17 +5,17 @@
 import Foundation
 
 public extension Lexicon {
-	
+
 	struct Graph: Sendable {
-		
+
 		public var date: Date
 		public var root: Node
-		
+
 		public init(name: Lemma.Name = "root", date: Date = .init()) {
 			self.date = date
 			self.root = Node(name: name)
 		}
-		
+
 		public init(root: Node, date: Date = .init()) {
 			self.date = date
 			self.root = root
@@ -24,9 +24,9 @@ public extension Lexicon {
 }
 
 public extension Lexicon.Graph {
-	
+
 	typealias Path = WritableKeyPath<Node, Node>
-	
+
 	subscript(_ node: Path) -> Node {
 		get {
 			return root[keyPath: node]
@@ -38,15 +38,15 @@ public extension Lexicon.Graph {
 }
 
 extension Lexicon.Graph: Equatable {
-	
-	public static func == (lhs: Lexicon.Graph, rhs: Lexicon.Graph) -> Bool { // TODO: dodgy
+
+	public static func == (lhs: Lexicon.Graph, rhs: Lexicon.Graph) -> Bool {
 		lhs.date == rhs.date &&
-		lhs.root.name == rhs.root.name
+		lhs.root == rhs.root
 	}
 }
 
 extension Lexicon.Graph: CustomStringConvertible {
-	
+
 	public var description: String {
 		"\(Self.self)(root: \(root.name), date: \(date)"
 	}
@@ -56,10 +56,10 @@ extension Lexicon.Graph: CustomStringConvertible {
 import NaturalLanguage
 
 public extension Lexicon.Graph {
-	
+
 	static let underscore = CharacterSet(charactersIn: "_")
 	static let specialSentenceTerminator = CharacterSet(charactersIn: ";–()[]{}")
-	
+
 	static func from(sentences string: String, root name: Lemma.Name = "a") -> Lexicon.Graph {
 
 		var root = Node(name: name)
@@ -105,7 +105,7 @@ public extension Lexicon.Graph {
 					node = node.appending(path: \.[string])
 
 					let type = root[keyPath: word].make(child: token)
-					
+
 					root[keyPath: node].type.insert("\(root.name).word.\(type.name)")
 
 					return true

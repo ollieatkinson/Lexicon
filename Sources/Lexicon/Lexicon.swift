@@ -16,8 +16,6 @@ import _Collections
 	public internal(set) var dictionary: [Lemma.ID: Lemma] = [:]
 	public internal(set) var roots: SortedDictionary<Lemma.Name, Lemma> = [:]
 	
-	private var lemma: Lemma! // TODO: serioulsy?
-	
 	private init(document: Document, graph: Graph) {
 		self.document = document
 		self.graph = graph
@@ -26,7 +24,12 @@ import _Collections
 
 public extension Lexicon {
 	
-	var root: Lemma { lemma! }
+	var root: Lemma {
+		guard let root = roots[graph.root.name] else {
+			preconditionFailure("Connected lexicon is missing root lemma '\(graph.root.name)'.")
+		}
+		return root
+	}
 	
 	subscript(id: Lemma.ID) -> Lemma? {
 		if let o = dictionary[id] {
@@ -44,14 +47,14 @@ public extension Lexicon {
 	static func from(_ graph: Graph) -> Lexicon {
 		let document = Document(graph)
 		let o = make(document: document, graph: graph)
-		all.append(o) // TODO: hard rethink
+		retainForDetachedLemmas(o)
 		return o
 	}
 
 	static func from(_ document: Document, root name: Graph.Node.Name? = nil) throws -> Lexicon {
 		let graph = try document.graph(root: name)
 		let o = make(document: document, graph: graph)
-		all.append(o) // TODO: hard rethink
+		retainForDetachedLemmas(o)
 		return o
 	}
 
@@ -79,7 +82,11 @@ extension Lexicon {
 
 private extension Lexicon {
 	
-	static var all: [Lexicon] = []
+	static var retainedLexicons: [Lexicon] = []
+
+	static func retainForDetachedLemmas(_ lexicon: Lexicon) {
+		retainedLexicons.append(lexicon)
+	}
 
 	static func make(document: Document, graph: Graph) -> Lexicon {
 		let o = Lexicon(document: document, graph: graph)
@@ -102,7 +109,6 @@ private extension Lexicon {
 		for (name, root) in document.roots {
 			lexicon.roots[name] = Lemma(name: name, node: root, parent: nil, lexicon: lexicon)
 		}
-		lexicon.lemma = lexicon.roots[graph.root.name]!
 		lexicon.document = document
 		lexicon.graph = graph
 	}
@@ -118,9 +124,6 @@ private extension Lexicon {
 #if EDITOR
 
 // MARK: graph mutations
-
-// TODO: performance
-// TODO: throwing
 
 public extension Lexicon { // MARK: additive mutations
 	
@@ -154,7 +157,12 @@ public extension Lexicon { // MARK: additive mutations
 		}
 		
 		var new = new
-		new.root.protonym = nil // TODO: allow != nil
+		if
+			let protonym = new.root.protonym,
+			!lemma.resolves(protonym.components(separatedBy: "."))
+		{
+			new.root.protonym = nil
+		}
 		
 		let id = "\(lemma.id).\(name)"
 		
@@ -169,17 +177,8 @@ public extension Lexicon { // MARK: additive mutations
 		}
 
 		graph[path].children[name] = child.regenerateNode { o in
-			for (name, child) in o.ownChildren {
-				if
-					let protonym = child.node.protonym,
-					o[protonym.components(separatedBy: ".")] == nil
-				{
-					o.ownChildren.removeValue(forKey: name)
-				}
-			}
-			for id in o.node.type where self[id] == nil {
-				o.node.type.remove(name)
-			}
+			o.removeInvalidSynonymChildren()
+			o.removeUnavailableOwnTypes(in: self)
 		}
 		
 		reset(to: graph)
@@ -226,27 +225,16 @@ public extension Lexicon { // MARK: non-additive mutations
 					case (0, _):     return children[1]
 					case (_, _):     return children[i - 1]
 				}
-			}
+		}
 		
-		parent.ownChildren.removeValue(forKey: lemma.name)
-		
+		parent.removeOwnChild(named: lemma.name)
+
 		root.graphTraversal(.depthFirst) { o in
-			for (name, type) in o.ownType where type.unwrapped.isInLineage(of: lemma) {
-				o.ownType.removeValue(forKey: name) // TODO: don't like
-				o.children = o.lazy_children() // TODO: don't like
-				o.node.type.remove(name)
-			}
+			o.removeOwnTypesReferencing(lemma)
 		}
 
 		let graph = regenerateGraph { o in
-			for (name, child) in o.ownChildren {
-				if
-					let protonym = child.node.protonym,
-					o[protonym.components(separatedBy: ".")] == nil
-				{
-					o.ownChildren.removeValue(forKey: name)
-				}
-			}
+			o.removeInvalidSynonymChildren()
 		}
 
 		reset(to: graph)
@@ -275,14 +263,7 @@ public extension Lexicon { // MARK: non-additive mutations
 		reset(to: graph)
 		
 		graph = regenerateGraph { o in
-			for (name, child) in o.ownChildren {
-				if
-					let protonym = child.node.protonym,
-					o[protonym.components(separatedBy: ".")] == nil
-				{
-					o.ownChildren.removeValue(forKey: name)
-				}
-			}
+			o.removeInvalidSynonymChildren()
 		}
 		
 		reset(to: graph)
@@ -303,7 +284,7 @@ public extension Lexicon { // MARK: non-additive mutations
 
 		graph[path].protonym = nil
 		
-		reset(to: graph) // TODO: reconsider, as it is not strictly necessary
+		reset(to: graph)
 		return self[lemma.id] ?? root
 	}
 
@@ -330,7 +311,7 @@ public extension Lexicon { // MARK: non-additive mutations
 		root.graphTraversal(.breadthFirst) { o in
 			if
 				let protonym = o.protonym?.unwrapped,
-				protonym.lineage.contains(where: { $0.is(lemma) }) // TODO: measure performance without this
+				protonym.lineageReferences(type: lemma)
 			{
 				o.node.protonym = protonym.lineage
 					.prefix(while: { $0 != o.parent })
@@ -380,6 +361,73 @@ public extension Lexicon { // MARK: non-additive mutations
 		reset(to: graph)
 		
 		return self[id] ?? root
+	}
+}
+
+private extension Lemma {
+
+	func removeOwnChild(named name: Name) {
+		ownChildren.removeValue(forKey: name)
+		children = lazy_children()
+	}
+
+	func removeInvalidSynonymChildren() {
+		for name in Array(ownChildren.keys) {
+			guard
+				let protonym = ownChildren[name]?.node.protonym,
+				!resolves(protonym.components(separatedBy: "."))
+			else {
+				continue
+			}
+			ownChildren.removeValue(forKey: name)
+		}
+	}
+
+	func removeUnavailableOwnTypes(in lexicon: Lexicon) {
+		for id in Array(node.type) where lexicon[id] == nil {
+			node.type.remove(id)
+		}
+	}
+
+	func removeOwnTypesReferencing(_ deleted: Lemma) {
+		var didRemove = false
+		for (id, type) in Array(ownType) where type.unwrapped.isInLineage(of: deleted) {
+			ownType.removeValue(forKey: id)
+			node.type.remove(id)
+			didRemove = true
+		}
+		if didRemove {
+			children = lazy_children()
+		}
+	}
+
+	func lineageReferences(type: Lemma) -> Bool {
+		lineage.contains { $0.is(type) }
+	}
+
+	func resolves<Components>(_ components: Components) -> Bool where Components: Collection, Components.Element == Name {
+		var visited: Set<ID> = []
+		return resolve(components[...], visited: &visited) != nil
+	}
+
+	func resolve<Components>(_ components: Components, visited: inout Set<ID>) -> Lemma? where Components: Collection, Components.Element == Name {
+		guard let name = components.first else {
+			return self
+		}
+		guard visited.insert(id).inserted else {
+			return nil
+		}
+		let remaining = components.dropFirst()
+		if let child = ownChildren[name]?.source {
+			return child.resolve(remaining, visited: &visited)
+		}
+		for (_, type) in ownType {
+			var branchVisited = visited
+			if let child = type.unwrapped.resolve([name], visited: &branchVisited)?.source {
+				return child.resolve(remaining, visited: &branchVisited)
+			}
+		}
+		return nil
 	}
 }
 

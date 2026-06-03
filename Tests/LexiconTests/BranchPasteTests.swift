@@ -5,6 +5,8 @@
 import Testing
 import Foundation
 
+#if EDITOR
+
 @Suite
 
 struct BranchPasteTests {
@@ -87,3 +89,5 @@ struct BranchPasteTests {
 			""")
 	}
 }
+
+#endif
