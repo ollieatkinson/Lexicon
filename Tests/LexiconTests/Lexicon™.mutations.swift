@@ -5,6 +5,8 @@
 import Testing
 import Lexicon
 
+#if EDITOR
+
 extension Lexicon™ {
 	
 	// MARK: additive mutations
@@ -88,7 +90,8 @@ extension Lexicon™ {
 
 		let b = try #require(await dst.make(child: src.graph))
 
-		#expect(await b.lexicon.taskpaper() == """
+		let actual = await b.lexicon.taskpaper()
+		#expect(actual == """
 			o:
 				a:
 					b:
@@ -97,7 +100,39 @@ extension Lexicon™ {
 						x:
 						= c
 					x:
-			""")
+			""", "actual:\n\(actual)")
+	}
+
+	@Test
+	func test_make_child_graph_preserves_valid_root_synonym() async throws {
+
+		let taskpaper = """
+			o:
+				source:
+					target:
+					alias:
+					= target
+				destination:
+					target:
+			"""
+
+		let src = try await taskpaper.lemma("o.source.alias")
+		let dst = try #require(await src.lexicon["o.destination"])
+
+		let alias = try #require(await dst.make(child: src.graph))
+
+		let actual = await alias.lexicon.taskpaper()
+		#expect(actual == """
+			o:
+				destination:
+					alias:
+					= target
+					target:
+				source:
+					alias:
+					= target
+					target:
+			""", "actual:\n\(actual)")
 	}
 	
 	// MARK: non-additive mutations
@@ -122,13 +157,14 @@ extension Lexicon™ {
 		
 		let o = try #require(await b.delete())
 		
-		#expect(await o.lexicon.taskpaper() == """
+		let actual = await o.lexicon.taskpaper()
+		#expect(actual == """
 			o:
 				a:
 				+ o
 				d:
 				= a
-			""")
+			""", "actual:\n\(actual)")
 	}
 	
 	@Test
@@ -288,3 +324,5 @@ extension Lexicon™ {
 			""")
 	}
 }
+
+#endif

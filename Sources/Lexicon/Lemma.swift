@@ -7,45 +7,51 @@ import Collections
 import _Collections
 
 @LexiconActor public final class Lemma {
-	
+
 	public typealias ID = String
 	public typealias Name = String
 	public typealias Protonym = String
 	public typealias Description = String
 	public typealias Children = SortedDictionary<Name, Lemma>
 	public typealias Types = SortedDictionary<ID, Unowned<Lemma>>
-	
+
 	nonisolated public let id: ID
 	nonisolated public let name: Name
 	nonisolated public let breadcrumbs: [Name]
 	nonisolated public let isGraphNode: Bool
+	public let graphPath: Lexicon.Graph.Path?
 	nonisolated public unowned let parent: Lemma?
 	nonisolated public unowned let lexicon: Lexicon
-	
+
 	public internal(set) var node: Lexicon.Graph.Node
 	public internal(set) var ownChildren: Children = [:]
 
 	public internal(set) lazy var protonym: Unowned<Lemma>? = lazy_protonym()
 	public internal(set) lazy var children: Children = lazy_children()
-	public internal(set) lazy var type: Types = lazy_type()
 	public internal(set) lazy var ownType: Types = lazy_ownType()
-	
+	private lazy var cachedType: Types = lazy_type()
+
+	public var type: Types {
+		protonym?.type ?? cachedType
+	}
+
 	init(name: Name, node: Lexicon.Graph.Node, parent: Lemma?, lexicon: Lexicon) {
-		
+
 		self.breadcrumbs = (parent?.breadcrumbs ?? []) + [name]
 		self.id = breadcrumbs.joined(separator: ".")
-		
+
 		self.name = name
 		self.node = node
 		self.parent = parent
 		self.lexicon = lexicon
-		
+
 		self.isGraphNode = parent.map {
 			$0.isGraphNode && $0.node.children.keys.contains(name)
 		} ?? true
-		
+		self.graphPath = isGraphNode ? Self.makeGraphPath(for: breadcrumbs) : nil
+
 		lexicon.dictionary[id] = self // MARK: ads itself to the lexicon map
-		
+
 		for (name, node) in node.children { // MARK: recursively replicate the graph
 			ownChildren[name] = Lemma(name: name, node: node, parent: self, lexicon: lexicon)
 		}
@@ -53,11 +59,11 @@ import _Collections
 }
 
 public extension Lemma {
-	
+
 	@inlinable subscript(descendant: Name...) -> Lemma? {
 		self[descendant]
 	}
-	
+
 	subscript<Descendant>(descendant: Descendant) -> Lemma? where Descendant: Collection, Descendant.Element == Name {
 		var o = self
 		for name in descendant {
@@ -68,7 +74,7 @@ public extension Lemma {
 		}
 		return o
 	}
-	
+
 	func regenerateNode(_ ƒ: ((Lemma) -> ())? = nil) -> Lexicon.Graph.Node {
 		ƒ?(self)
 		if let protonym = node.protonym {
@@ -95,37 +101,28 @@ public extension Lemma {
 }
 
 public extension Lemma {
-	
+
 	var isConnected: Bool {
 		lexicon[id] === self
 	}
-	
+
 	var source: Lemma {
 		sourceProtonym ?? self
 	}
-	
-	var sourceProtonym: Lemma? { // TODO: not needed until we allow synonyms of synonyms
+
+	var sourceProtonym: Lemma? {
 		guard let o = protonym?.unwrapped else { return nil }
 		return o.sourceProtonym ?? o
 	}
-	
+
 	@inlinable var isSynonym: Bool {
 		protonym != nil
 	}
-	
+
 	var graph: Lexicon.Graph {
 		Lexicon.Graph(root: node, date: lexicon.graph.date)
 	}
 
-	var graphPath: Lexicon.Graph.Path? {
-		guard isGraphNode else {
-			return nil
-		}
-		return breadcrumbs.dropFirst().reduce(\.self) { a, e in // TODO: performance
-			a.appending(path: \.[String(e)])
-		}
-	}
-	
 	@inlinable var graphNode: Lexicon.Graph.Node? {
 		isGraphNode ? node : nil
 	}
@@ -133,7 +130,7 @@ public extension Lemma {
 	@inlinable var lineage: UnfoldSequence<Lemma, (Lemma?, Bool)> {
 		sequence(first: self, next: \.parent)
 	}
-	
+
 	func `is`(_ type: Lemma) -> Bool {
 		self.type.keys.contains(type.id)
 	}
@@ -155,25 +152,25 @@ public extension Lemma {
 }
 
 public extension Lemma {
-	
+
 	nonisolated static let validFirstCharacterOfName = CharacterSet.letters
 	nonisolated static let validCharacterOfName = CharacterSet.letters.union(.decimalDigits).union(.init(charactersIn: "_"))
-	
+
 	nonisolated static func isValid(name: String) -> Bool {
 		name.unlessEmpty?.enumerated().allSatisfy { i, c in
 			Lemma.isValid(character: c, appendingTo: name.prefix(i))
 		} ?? false
 	}
-	
+
 	nonisolated static func isValid<S>(character: Character, appendingTo input: S) -> Bool where S: StringProtocol {
 		switch (character, input.last) {
-				
+
 			case (_, nil):
 				return CharacterSet(charactersIn: String(character)).isSubset(of: Lemma.validFirstCharacterOfName)
-				
+
 			case ("_", "_"):
 				return false
-				
+
 			default:
 				return CharacterSet(charactersIn: String(character)).isSubset(of: Lemma.validCharacterOfName)
 		}
@@ -185,7 +182,7 @@ public extension Lemma {
 		name != newName &&
 		Lemma.isValid(name: newName)
 	}
-	
+
 	func isValid(newChildName name: Name) -> Bool {
 		isGraphNode &&
 		children[name] == nil &&
@@ -199,22 +196,27 @@ public extension Lemma {
 		!type.isSynonym &&
 		!self.is(type)
 	}
-	
+
 	func validated(protonym: Lemma) -> Protonym? {
-		guard let parent = parent, isValid(protonym: protonym) else {
+		guard let parent = parent, protonym.isValidProtonym(for: self) else {
 			return nil
 		}
 		return protonym.id.dotPath(after: parent.id)
 	}
-	
-	func isValid(protonym: Lemma) -> Bool { // TODO: reverse naming to lemma.isValidProtonym(for: proposedSynonym)
+
+	func isValid(protonym: Lemma) -> Bool {
+		protonym.isValidProtonym(for: self)
+	}
+
+	func isValidProtonym(for proposedSynonym: Lemma) -> Bool {
+		let source = source
 		guard
-			let parent = parent,
-			protonym != self,
-			!protonym.isSynonym, // TODO: relax this one, one day
-			self.isGraphNode,
-			!protonym.isDescendant(of: self),
-			protonym.isDescendant(of: parent)
+			let parent = proposedSynonym.parent,
+			self != proposedSynonym,
+			proposedSynonym.isGraphNode,
+			!isInLineage(of: proposedSynonym),
+			!source.isInLineage(of: proposedSynonym),
+			isDescendant(of: parent)
 		else {
 			return false
 		}
@@ -222,42 +224,51 @@ public extension Lemma {
 	}
 }
 
-public extension Lemma { // TODO: consider moving these ↓ to Node
-	
+public extension Lemma {
+
 	func isAncestor(of other: Lemma) -> Bool {
 		id.isDotPathAncestor(of: other.id)
 	}
-	
+
 	func isDescendant(of other: Lemma) -> Bool {
 		id.isDotPathDescendant(of: other.id)
 	}
-	
+
 	func isInLineage(of other: Lemma) -> Bool {
 		id == other.id || isDescendant(of: other)
 	}
 }
 
 extension String {
-	
+
 	func isDotPathAncestor(of other: String) -> Bool {
 		other.count > count + 1 &&
 		other[other.index(other.startIndex, offsetBy: count)] == "." &&
 		other.hasPrefix(self)
 	}
-	
+
 	func isDotPathDescendant(of other: String) -> Bool {
 		other.isDotPathAncestor(of: self)
+	}
+}
+
+private extension Lemma {
+
+	nonisolated static func makeGraphPath(for breadcrumbs: [Name]) -> Lexicon.Graph.Path {
+		breadcrumbs.dropFirst().reduce(\.self) { path, name in
+			path.appending(path: \.[String(name)])
+		}
 	}
 }
 
 #if EDITOR
 
 public extension Lemma { // MARK: additive graph mutations
-	
+
 	@inlinable func add(type: Lemma) -> Lemma? {
 		lexicon.add(type: type, to: self)
 	}
-	
+
 	@inlinable func make(child: Lexicon.Graph) -> Lemma? {
 		lexicon.make(child: child, to: self)
 	}
@@ -268,15 +279,15 @@ public extension Lemma { // MARK: additive graph mutations
 }
 
 public extension Lemma { // MARK: non-additive graph mutations
-	
+
 	@inlinable func delete(alwaysReturningParent: Bool = false) -> Lemma? {
 		lexicon.delete(self, alwaysReturningParent: alwaysReturningParent)
 	}
-	
+
 	@inlinable func remove(type: Lemma) -> Lemma? {
 		lexicon.remove(type: type, from: self)
 	}
-	
+
 	@inlinable func removeProtonym() -> Lemma? {
 		lexicon.removeProtonym(of: self)
 	}
@@ -284,7 +295,7 @@ public extension Lemma { // MARK: non-additive graph mutations
 	@inlinable func rename(to name: Lemma.Name) -> Lemma? {
 		lexicon.rename(self, to: name)
 	}
-	
+
 	@inlinable func set(protonym: Lemma) -> Lemma? {
 		lexicon.set(protonym: protonym, of: self)
 	}
@@ -294,7 +305,7 @@ public extension Lemma { // MARK: non-additive graph mutations
 
 extension Lemma: Equatable {
 	@inlinable nonisolated public static func == (lhs: Lemma, rhs: Lemma) -> Bool {
-		lhs === rhs // TODO: lhs.id == rhs.id
+		lhs.id == rhs.id
 	}
 }
 
@@ -305,23 +316,23 @@ extension Lemma: Hashable {
 }
 
 extension Lemma: Comparable {
-	
+
 	@inlinable nonisolated public static func < (lhs: Lemma, rhs: Lemma) -> Bool {
 		lhs.id < rhs.id
 	}
 }
 
 extension Lemma: CustomStringConvertible {
-	
+
 	@inlinable nonisolated public var description: String {
 		id
 	}
 }
 
 public extension Lemma {
-	
+
 	nonisolated static let numericPrefixCharacterSet = CharacterSet(charactersIn: "_")
-	
+
 	nonisolated var displayName: Lemma.Name {
 		switch name.isEmpty {
 			case true: return "_"
@@ -333,7 +344,7 @@ public extension Lemma {
 }
 
 extension Lemma {
-	
+
 	func lazy_protonym() -> Unowned<Lemma>? {
 		guard let suffix = node.protonym else {
 			return nil
@@ -349,7 +360,7 @@ extension Lemma {
 		lexicon.dictionary[id] = protonym // MARK: always map synonym to its protonym
 		return .init(protonym)
 	}
-	
+
 	func lazy_children() -> Children {
 		if let protonym = protonym {
 			var o: Children = [:]
@@ -371,21 +382,16 @@ extension Lemma {
 			return o
 		}
 	}
-	
+
 	func lazy_type() -> Types {
-		if let protonym = protonym { // TODO: make this computed pass through to the protonym
-			return protonym.type
+		var o = ownType
+		o[id] = Unowned(self)
+		for (_, lemma) in ownType {
+			o.merge(lemma.type){ o, _ in o }
 		}
-		else {
-			var o = ownType
-			o[id] = Unowned(self)
-			for (_, lemma) in ownType {
-				o.merge(lemma.type){ o, _ in o }
-			}
-			return o
-		}
+		return o
 	}
-	
+
 	func lazy_ownType() -> Types {
 		var o: Types = [:]
 		if isGraphNode {

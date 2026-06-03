@@ -27,8 +27,11 @@ struct Lexicon™ {
 		
 		#expect(await mindMap.source == tree)
 		#expect(await mindMap.source === tree)
-		
-		// TODO: ...
+
+		let branch = try #require(await mindMap["branch"])
+		let leaf = try #require(await mindMap["leaf"])
+		#expect(branch.id == "root.idea.knowledge.mind_map.branch")
+		#expect(leaf.id == "root.idea.knowledge.mind_map.leaf")
 	}
 }
 

@@ -153,6 +153,7 @@ struct DocumentMetadataTests {
 		])
 	}
 
+	#if EDITOR
 	@Test
 	func test_multi_root_graph_reset_preserves_sibling_roots() async throws {
 
@@ -176,6 +177,7 @@ struct DocumentMetadataTests {
 		#expect(sharedKind.id == "shared.kind")
 		#expect(new.id == "app.new")
 	}
+	#endif
 
 	@Test
 	func test_lemma_default_values_resolve_through_types_and_synonyms() async throws {
