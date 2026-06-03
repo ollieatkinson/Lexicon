@@ -18,6 +18,21 @@ struct SwiftLexiconGeneratorTests {
 
 		#expect(code == (try "swift-lexicon.swift".file().string()))
 	}
+
+	@Test
+	func test_custom_type_prefixes() async throws {
+		let code = try await swiftLexicon(prefixes: .init(class: "Node", protocol: "Kind"))
+
+		#expect(code.contains(#"public let test = Node_test("test")"#))
+		#expect(code.contains("public final class Node_test: L, @unchecked Sendable, Kind_test"))
+		#expect(code.contains("public protocol Kind_test: I {}"))
+	}
+
+	private func swiftLexicon(prefixes: StandAloneTypePrefixes) async throws -> String {
+		var json = try await "test".taskpaper().lexicon().json()
+		json.date = Date(timeIntervalSinceReferenceDate: 0)
+		return try SwiftLexiconGenerator.generateSource(json, prefixes: prefixes)
+	}
 }
 
 @Suite
@@ -41,6 +56,21 @@ struct SwiftStandAloneGeneratorTests {
 		#expect(test.two.bad == test.two.no.good)
 		#expect(test.two.bad(\.id) == "test.two.no.good")
 	}
+
+	@Test
+	func test_custom_type_prefixes() async throws {
+		let code = try await swiftStandAlone(prefixes: .init(class: "Node", protocol: "Kind"))
+
+		#expect(code.contains(#"public let test = Node_test("test")"#))
+		#expect(code.contains("public final class Node_test: L, @unchecked Sendable, Kind_test"))
+		#expect(code.contains("public protocol Kind_test: I {}"))
+	}
+
+	private func swiftStandAlone(prefixes: StandAloneTypePrefixes) async throws -> String {
+		var json = try await "test".taskpaper().lexicon().json()
+		json.date = Date(timeIntervalSinceReferenceDate: 0)
+		return try SwiftStandAloneGenerator.generateSource(json, prefixes: prefixes)
+	}
 }
 
 @Suite
@@ -56,6 +86,21 @@ struct KotlinStandAloneGeneratorTests {
 
 		#expect(code == (try "test.kt".file().string()))
 	}
+
+	@Test
+	func test_custom_type_prefixes() async throws {
+		let code = try await kotlin(prefixes: .init(class: "Node", protocol: "Kind"))
+
+		#expect(code.contains(#"val test = Node_test("test")"#))
+		#expect(code.contains("data class Node_test(override val identifier: String): L(identifier = identifier), Kind_test"))
+		#expect(code.contains("interface Kind_test: I"))
+	}
+
+	private func kotlin(prefixes: StandAloneTypePrefixes) async throws -> String {
+		var json = try await "test".taskpaper().lexicon().json()
+		json.date = Date(timeIntervalSinceReferenceDate: 0)
+		return try KotlinStandAloneGenerator.generateSource(json, prefixes: prefixes)
+	}
 }
 
 @Suite
@@ -70,6 +115,15 @@ struct TypeScriptStandAloneGeneratorTests {
 		let code = try TypeScriptStandAloneGenerator.generate(json).string()
 
 		#expect(code == (try "test.ts".file().string()))
+	}
+
+	@Test
+	func test_custom_type_prefixes() async throws {
+		let code = try await typeScript(prefixes: .init(class: "Node", protocol: "Kind"))
+
+		#expect(code.contains(#"const test = new Node_test("test");"#))
+		#expect(code.contains("class Node_test extends L implements Kind_test"))
+		#expect(code.contains("interface Kind_test extends I"))
 	}
 
 	@Test
@@ -130,5 +184,11 @@ struct TypeScriptStandAloneGeneratorTests {
 		var json = try await taskpaper.lexicon().json()
 		json.date = Date(timeIntervalSinceReferenceDate: 0)
 		return try TypeScriptStandAloneGenerator.generate(json).string()
+	}
+
+	private func typeScript(prefixes: StandAloneTypePrefixes) async throws -> String {
+		var json = try await "test".taskpaper().lexicon().json()
+		json.date = Date(timeIntervalSinceReferenceDate: 0)
+		return try TypeScriptStandAloneGenerator.generateSource(json, prefixes: prefixes)
 	}
 }

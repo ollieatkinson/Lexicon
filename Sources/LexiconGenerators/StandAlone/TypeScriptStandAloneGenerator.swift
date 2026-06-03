@@ -13,21 +13,24 @@ public extension UTType {
 }
 
 public enum TypeScriptStandAloneGenerator: SourceCodeGenerator {
-	
-	// TODO: prefixes?
-	
+
 	public static let utType = UTType.typescript
 	public static let command = "ts"
 
 	public static func generateSource(_ json: Lexicon.Graph.JSON) throws -> String {
-		try json.ts()
+		try generateSource(json, prefixes: .default)
+	}
+
+	public static func generateSource(_ json: Lexicon.Graph.JSON, prefixes: StandAloneTypePrefixes) throws -> String {
+		try json.ts(prefixes: prefixes)
 	}
 }
 
 private extension Lexicon.Graph.JSON {
-	
-	func ts() throws -> String {
-		try SourceTemplate(
+
+	func ts(prefixes: StandAloneTypePrefixes) throws -> String {
+		let names = StandAloneTypeNames(id: name, prefixes: prefixes)
+		return try SourceTemplate(
 			"""
 			interface I { }
 
@@ -44,25 +47,26 @@ private extension Lexicon.Graph.JSON {
 
 			// MARK: generated types
 			{{types}}
-			const {{root}} = new L_{{root}}("{{root}}");
+			const {{root}} = new {{rootClassName}}("{{root}}");
 
 			"""
 		).render([
 			"root": name,
-			"types": try classes.flatMap { try $0.ts(prefix: ("L", "I"), classes: classes) }.joined(separator: "\n"),
+			"rootClassName": names.className,
+			"types": try classes.flatMap { try $0.ts(prefixes: prefixes, classes: classes) }.joined(separator: "\n"),
 		])
 	}
 }
 
 private extension Lexicon.Graph.Node.Class.JSON {
-	
-	func ts(prefix: (class: String, protocol: String), classes: [Lexicon.Graph.Node.Class.JSON]) throws -> [String] {
-		
+
+	func ts(prefixes: StandAloneTypePrefixes, classes: [Lexicon.Graph.Node.Class.JSON]) throws -> [String] {
+
 		guard mixin == nil else {
 			return []
 		}
-		
-		let names = StandAloneTypeNames(id: id, prefix: prefix)
+
+		let names = StandAloneTypeNames(id: id, prefixes: prefixes)
 		
 		if let protonym = protonym {
 			return [
@@ -82,9 +86,9 @@ private extension Lexicon.Graph.Node.Class.JSON {
 					"""
 				).render([
 					"className": names.className,
-					"baseClass": names.classPrefix,
+					"baseClass": names.baseClassName,
 					"protocolName": names.protocolName,
-					"classBlock": typeScriptBlock(emptyTypeScriptClassMembers(prefix: prefix, classes: classes)),
+					"classBlock": typeScriptBlock(emptyTypeScriptClassMembers(prefixes: prefixes, classes: classes)),
 					"protocolBase": names.protocolBase(supertype: supertype),
 					"protocolBlock": typeScriptBlock([]),
 				])
@@ -99,11 +103,11 @@ private extension Lexicon.Graph.Node.Class.JSON {
 				"""
 			).render([
 				"className": names.className,
-				"baseClass": names.classPrefix,
+				"baseClass": names.baseClassName,
 				"protocolName": names.protocolName,
-				"classBlock": typeScriptBlock(typeScriptClassMembers(prefix: prefix, classes: classes)),
+				"classBlock": typeScriptBlock(typeScriptClassMembers(prefixes: prefixes, classes: classes)),
 				"protocolBase": names.protocolBase(supertype: supertype),
-				"protocolBlock": typeScriptBlock(typeScriptProtocolMembers(prefix: prefix)),
+				"protocolBlock": typeScriptBlock(typeScriptProtocolMembers(prefixes: prefixes)),
 			])
 		]
 	}
@@ -116,19 +120,19 @@ private extension Lexicon.Graph.Node.Class.JSON {
 	}
 
 	func emptyTypeScriptClassMembers(
-		prefix: (class: String, protocol: String),
+		prefixes: StandAloneTypePrefixes,
 		classes: [Lexicon.Graph.Node.Class.JSON]
 	) -> [String] {
-		let names = StandAloneTypeNames(id: id, prefix: prefix)
+		let names = StandAloneTypeNames(id: id, prefixes: prefixes)
 		return standAloneInheritedAccessors(classes: classes)
 			.filter { !$0.isSynonym }
 			.map { accessor in
 				"  \(accessor.name)!: \(names.className(for: accessor.sourceID));"
-			}
+		}
 	}
 
-	func typeScriptClassMembers(prefix: (class: String, protocol: String), classes: [Lexicon.Graph.Node.Class.JSON]) -> [String] {
-		let names = StandAloneTypeNames(id: id, prefix: prefix)
+	func typeScriptClassMembers(prefixes: StandAloneTypePrefixes, classes: [Lexicon.Graph.Node.Class.JSON]) -> [String] {
+		let names = StandAloneTypeNames(id: id, prefixes: prefixes)
 		let typeMembers = standAloneTypeAccessors(classes: classes).map { accessor in
 			"  \(accessor.name)!: \(names.className(for: accessor.sourceID));"
 		}
@@ -144,8 +148,8 @@ private extension Lexicon.Graph.Node.Class.JSON {
 		return typeMembers + ownMembers
 	}
 
-	func typeScriptProtocolMembers(prefix: (class: String, protocol: String)) -> [String] {
-		let names = StandAloneTypeNames(id: id, prefix: prefix)
+	func typeScriptProtocolMembers(prefixes: StandAloneTypePrefixes) -> [String] {
+		let names = StandAloneTypeNames(id: id, prefixes: prefixes)
 		return standAloneAccessors().filter { !$0.isSynonym }.map { accessor in
 			"  \(accessor.name): \(names.protocolName(for: accessor.sourceID));"
 		}

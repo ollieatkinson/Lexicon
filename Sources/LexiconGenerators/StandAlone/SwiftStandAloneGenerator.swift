@@ -9,21 +9,24 @@ import UniformTypeIdentifiers
 #endif
 
 public enum SwiftStandAloneGenerator: SourceCodeGenerator {
-	
-	// TODO: prefixes?
-	
+
 	public static let utType = UTType.swiftSource
 	public static let command = "swift-standalone"
 
 	public static func generateSource(_ json: Lexicon.Graph.JSON) throws -> String {
-		try json.swift()
+		try generateSource(json, prefixes: .default)
+	}
+
+	public static func generateSource(_ json: Lexicon.Graph.JSON, prefixes: StandAloneTypePrefixes) throws -> String {
+		try json.swift(prefixes: prefixes)
 	}
 }
 
 private extension Lexicon.Graph.JSON {
-	
-	func swift() throws -> String {
-		try SourceTemplate(
+
+	func swift(prefixes: StandAloneTypePrefixes) throws -> String {
+		let names = StandAloneTypeNames(id: name, prefixes: prefixes)
+		return try SourceTemplate(
 			"""
 		import Foundation
 		
@@ -73,14 +76,15 @@ private extension Lexicon.Graph.JSON {
 		
 		// MARK: generated types
 		
-		public let %%root%% = L_%%root%%("%%root%%")
+		public let %%root%% = %%rootClassName%%("%%root%%")
 		
 		%%types%%
 		""",
 			delimiters: .percentSigns
 		).render([
 			"root": name,
-			"types": try classes.flatMap { try $0.swiftTypeDeclarations(prefix: ("L", "I")) }.joined(separator: "\n"),
+			"rootClassName": names.className,
+			"types": try classes.flatMap { try $0.swiftTypeDeclarations(prefixes: prefixes) }.joined(separator: "\n"),
 		])
 	}
 }

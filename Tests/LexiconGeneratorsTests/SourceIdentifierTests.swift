@@ -19,13 +19,27 @@ struct SourceIdentifierTests {
 
 	@Test
 	func test_stand_alone_type_names_share_prefix_rules() {
-		let names = StandAloneTypeNames(id: "root.some_type", prefix: ("L", "I"))
+		let names = StandAloneTypeNames(id: "root.some_type", prefixes: .default)
 
 		#expect(names.className == "L_root_some__type")
 		#expect(names.protocolName == "I_root_some__type")
 		#expect(names.className(for: "root.some_type.child") == "L_root_some__type_child")
 		#expect(names.protocolBase(supertype: nil) == "I")
 		#expect(names.protocolBase(supertype: "root.a_&_root.bad") == "I_root_a, I_root_bad")
+	}
+
+	@Test
+	func test_stand_alone_type_names_keep_base_symbols_separate_from_generated_prefixes() {
+		let prefixes = StandAloneTypePrefixes(class: "Node", protocol: "Kind")
+		let names = StandAloneTypeNames(id: "root.some_type", prefixes: prefixes)
+
+		#expect(names.baseClassName == "L")
+		#expect(names.baseProtocolName == "I")
+		#expect(names.className == "Node_root_some__type")
+		#expect(names.protocolName == "Kind_root_some__type")
+		#expect(names.className(for: "root.some_type.child") == "Node_root_some__type_child")
+		#expect(names.protocolBase(supertype: nil) == "I")
+		#expect(names.protocolBase(supertype: "root.a_&_root.bad") == "Kind_root_a, Kind_root_bad")
 	}
 
 	@Test

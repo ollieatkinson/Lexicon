@@ -6,12 +6,12 @@ import Lexicon
 
 extension Lexicon.Graph.Node.Class.JSON {
 
-	func swiftTypeDeclarations(prefix: (class: String, protocol: String)) throws -> [String] {
+	func swiftTypeDeclarations(prefixes: StandAloneTypePrefixes) throws -> [String] {
 		guard mixin == nil else {
 			return []
 		}
 
-		let names = StandAloneTypeNames(id: id, prefix: prefix)
+		let names = StandAloneTypeNames(id: id, prefixes: prefixes)
 
 		if let protonym = protonym {
 			return [
@@ -35,7 +35,7 @@ extension Lexicon.Graph.Node.Class.JSON {
 				delimiters: .percentSigns
 			).render([
 				"className": names.className,
-				"baseClass": names.classPrefix,
+				"baseClass": names.baseClassName,
 				"protocolName": names.protocolName,
 				"localized": id,
 			]),
@@ -48,7 +48,7 @@ extension Lexicon.Graph.Node.Class.JSON {
 			])
 		]
 
-		let properties = try swiftProperties(prefix: prefix)
+		let properties = try swiftProperties(prefixes: prefixes)
 		if !properties.isEmpty {
 			lines.append(
 				try SourceTemplate(

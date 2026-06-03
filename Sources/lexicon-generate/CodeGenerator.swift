@@ -42,7 +42,16 @@ struct CodeGeneratorCommand: AsyncParsableCommand {
 	@Option(help: "Package name to use for generated Go source.")
 	var goPackage: String = "lexicon"
 
+	@Option(help: "Prefix to use for generated class names in Swift, Kotlin, and TypeScript source.")
+	var classPrefix: String = StandAloneTypePrefixes.default.classPrefix
+
+	@Option(help: "Prefix to use for generated protocol/interface names in Swift, Kotlin, and TypeScript source.")
+	var protocolPrefix: String = StandAloneTypePrefixes.default.protocolPrefix
+
 	private var isLogging: Bool { !quiet }
+	private var typePrefixes: StandAloneTypePrefixes {
+		.init(class: classPrefix, protocol: protocolPrefix)
+	}
 
 	mutating func run() async throws {
 		let name = String(input.lastPathComponent.split(separator: ".")[0])
@@ -64,9 +73,21 @@ struct CodeGeneratorCommand: AsyncParsableCommand {
 			guard let `extension` = generator.utType.preferredFilenameExtension else {
 				fatalError("\(command) does not have a valid uniform type identifier: \(generator.utType)")
 			}
-			let data = command == GoStandAloneGenerator.command
-				? Data(try GoStandAloneGenerator.generateSource(json, packageName: goPackage).utf8)
-				: try generator.generate(json)
+			let data: Data
+			switch command {
+				case GoStandAloneGenerator.command:
+					data = Data(try GoStandAloneGenerator.generateSource(json, packageName: goPackage).utf8)
+				case SwiftLexiconGenerator.command:
+					data = Data(try SwiftLexiconGenerator.generateSource(json, prefixes: typePrefixes).utf8)
+				case SwiftStandAloneGenerator.command:
+					data = Data(try SwiftStandAloneGenerator.generateSource(json, prefixes: typePrefixes).utf8)
+				case KotlinStandAloneGenerator.command:
+					data = Data(try KotlinStandAloneGenerator.generateSource(json, prefixes: typePrefixes).utf8)
+				case TypeScriptStandAloneGenerator.command:
+					data = Data(try TypeScriptStandAloneGenerator.generateSource(json, prefixes: typePrefixes).utf8)
+				default:
+					data = try generator.generate(json)
+			}
 			return (
 				file: output?.appendingPathExtension(`extension`)
 					?? input.deletingLastPathComponent()
