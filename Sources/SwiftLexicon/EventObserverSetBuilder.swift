@@ -2,14 +2,14 @@
 // github.com/screensailor 2022
 //
 
-public typealias Bear = EventSubscriptionSetBuilder
-public typealias Mind = Set<EventSubscription>
+public typealias Bear = EventObserverSetBuilder
+public typealias Mind = Set<EventObserver>
 
-@resultBuilder public enum EventSubscriptionSetBuilder {}
+@resultBuilder public enum EventObserverSetBuilder {}
 
-public extension EventSubscriptionSetBuilder {
+public extension EventObserverSetBuilder {
 
-	typealias Element = EventSubscription
+	typealias Element = EventObserver
 	typealias Component = Set<Element>
 
 	static func buildBlock(_ components: Element...) -> Component {
@@ -49,21 +49,21 @@ public extension EventSubscriptionSetBuilder {
 	}
 }
 
-public extension Set where Element == EventSubscription {
+public extension Set where Element == EventObserver {
 
-	@inlinable static func += <A: Collection>(lhs: inout Self, rhs: A) where A.Element == EventSubscription {
+	@inlinable static func += <A: Collection>(lhs: inout Self, rhs: A) where A.Element == EventObserver {
 		lhs.formUnion(rhs)
 	}
 
-	@inlinable static func += (lhs: inout Self, rhs: EventSubscription) {
+	@inlinable static func += (lhs: inout Self, rhs: EventObserver) {
 		lhs.insert(rhs)
 	}
 
-	@inlinable mutating func `in`(_ mind: EventSubscription) {
+	@inlinable mutating func `in`(_ mind: EventObserver) {
 		insert(mind)
 	}
 
-	@inlinable mutating func `in`<A: Sequence>(_ mind: A) where A.Element == EventSubscription {
+	@inlinable mutating func `in`<A: Sequence>(_ mind: A) where A.Element == EventObserver {
 		formUnion(mind)
 	}
 }

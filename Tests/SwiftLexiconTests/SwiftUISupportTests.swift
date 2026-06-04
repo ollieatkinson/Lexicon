@@ -27,11 +27,10 @@ struct SwiftUISupportTests {
 		let events = Events()
 		let view = EmptyView()
 			.events(events)
-			.onEvent(test.one) { _ in }
-			.onEvent(I_test_one.self) { _ in }
-			.onEvents(test.one, test.two) { _ in }
-			.onEvents { _ in }
-			.onEvents(where: { _ in true }) { _ in }
+			.on(test.one) { _ in }
+			.on(test.one["value"], test.two) { _ in }
+			.on(I_test_one.self) { _ in }
+			.on { _ in }
 
 		_ = view
 	}

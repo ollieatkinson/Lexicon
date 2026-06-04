@@ -23,92 +23,141 @@ public extension View {
 		environment(\.events, events)
 	}
 
-	func onEvent(
-		_ event: some I,
+	func on<each Observed: I>(
+		_ events: repeat each Observed,
 		perform action: @escaping @MainActor @Sendable (Event) -> Void
 	) -> some View {
-		modifier(OnEvents(predicate: { $0.is(event) }, action: action))
+		var matchers: [EventMatcher] = []
+		for event in repeat each events {
+			matchers.append(EventMatcher(event))
+		}
+		return modifier(OnEvents(request: EventObservationRequest(matchers), action: action))
 	}
 
-	func onEvent<A>(
+	func on<Observed: I>(
+		_ events: [Observed],
+		perform action: @escaping @MainActor @Sendable (Event) -> Void
+	) -> some View {
+		modifier(OnEvents(request: EventObservationRequest(events.map(EventMatcher.init)), action: action))
+	}
+
+	func on<A>(
 		_ type: A.Type,
 		perform action: @escaping @MainActor @Sendable (Event) -> Void
 	) -> some View {
-		modifier(OnEvents(predicate: { $0.is(type) }, action: action))
+		modifier(OnEvents(request: EventObservationRequest(type), action: action))
 	}
 
-	func onEvents(
-		_ events: any I...,
+	func on(
 		perform action: @escaping @MainActor @Sendable (Event) -> Void
 	) -> some View {
-		onEvents(events, perform: action)
-	}
-
-	func onEvents(
-		_ events: [any I],
-		perform action: @escaping @MainActor @Sendable (Event) -> Void
-	) -> some View {
-		modifier(OnEvents(isEnabled: !events.isEmpty, predicate: { event in
-			events.contains(where: event.is)
-		}, action: action))
-	}
-
-	func onEvents(
-		perform action: @escaping @MainActor @Sendable (Event) -> Void
-	) -> some View {
-		modifier(OnEvents(predicate: { _ in true }, action: action))
-	}
-
-	func onEvents(
-		where predicate: @escaping @Sendable (Event) -> Bool,
-		perform action: @escaping @MainActor @Sendable (Event) -> Void
-	) -> some View {
-		modifier(OnEvents(predicate: predicate, action: action))
-	}
-
-	@available(*, deprecated, renamed: "onEvents(_:perform:)")
-	func on(_ events: any I..., ƒ: @escaping @MainActor @Sendable (Event) -> Void) -> some View {
-		onEvents(events, perform: ƒ)
+		modifier(OnEvents(request: .all, action: action))
 	}
 }
 
 private struct OnEvents: ViewModifier {
 
 	@Environment(\.events) private var events
-	@State private var subscriber = Events.Subscriber()
+	private var action: EventAction
 
-	var isEnabled = true
-	let predicate: @Sendable (Event) -> Bool
-	let action: @MainActor @Sendable (Event) -> Void
+	let request: EventObservationRequest?
 
-	func body(content: Content) -> some View {
-		// Keep the retained subscriber using the latest closures without
-		// forcing a resubscribe on every render.
-		subscriber.update(where: predicate) { event in
-			await action(event)
-		}
-
-		return content
-			.onAppear {
-				updateSubscriber()
-			}
-			.onChange(of: events.id, initial: true) { _, _ in
-				updateSubscriber()
-			}
-			.onChange(of: isEnabled, initial: false) { _, _ in
-				updateSubscriber()
-			}
-			.onDisappear {
-				subscriber.cancel()
-			}
+	init(
+		request: EventObservationRequest?,
+		action: @escaping @MainActor @Sendable (Event) -> Void
+	) {
+		self.request = request
+		self.action = EventAction(action)
 	}
 
-	private func updateSubscriber() {
-		if isEnabled {
-			subscriber.subscribe(to: events)
+	@ViewBuilder
+	func body(content: Content) -> some View {
+		if let request {
+			let action = action.box
+			content
+				.task(id: TaskID(events: events, request: request)) {
+					let observer = events.on(where: request.matches) { event in
+						await action.perform(event)
+					}
+					await withTaskCancellationHandler {
+						await observer.wait()
+					} onCancel: {
+						observer.cancel()
+					}
+				}
 		} else {
-			subscriber.cancel()
+			content
 		}
+	}
+
+	private struct TaskID: Hashable {
+		var events: ObjectIdentifier
+		var request: EventObservationRequest.ID
+
+		init(events: Events, request: EventObservationRequest) {
+			self.events = events.id
+			self.request = request.id
+		}
+	}
+}
+
+private struct EventAction: @MainActor DynamicProperty {
+
+	@State fileprivate var box = Box()
+	private let action: @MainActor @Sendable (Event) -> Void
+
+	init(_ action: @escaping @MainActor @Sendable (Event) -> Void) {
+		self.action = action
+	}
+
+	@MainActor mutating func update() {
+		box.update(action)
+	}
+
+	@MainActor final class Box {
+		private var action: @MainActor @Sendable (Event) -> Void = { _ in }
+
+		func update(_ action: @escaping @MainActor @Sendable (Event) -> Void) {
+			self.action = action
+		}
+
+		func perform(_ event: Event) {
+			action(event)
+		}
+	}
+}
+
+private struct EventObservationRequest: Sendable {
+
+	enum ID: Hashable, Sendable {
+		case all
+		case events([String])
+		case type(ObjectIdentifier)
+	}
+
+	let id: ID
+	let matches: @Sendable (Event) -> Bool
+
+	static let all = EventObservationRequest(id: .all) { _ in true }
+
+	init?(_ matchers: [EventMatcher]) {
+		guard !matchers.isEmpty else {
+			return nil
+		}
+		self.init(id: .events(matchers.map(\.id))) { event in
+			matchers.contains { $0.matches(event) }
+		}
+	}
+
+	init<A>(_ type: A.Type) {
+		self.init(id: .type(ObjectIdentifier(type))) { event in
+			event.is(type)
+		}
+	}
+
+	private init(id: ID, matches: @escaping @Sendable (Event) -> Bool) {
+		self.id = id
+		self.matches = matches
 	}
 }
 
