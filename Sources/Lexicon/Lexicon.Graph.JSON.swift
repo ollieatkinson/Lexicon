@@ -5,78 +5,6 @@
 import Collections
 import Foundation
 
-public struct OrderedJSONDictionary<Value: Codable & Sendable>: Sendable {
-	public var values: OrderedDictionary<String, Value>
-
-	public init(_ values: OrderedDictionary<String, Value>) {
-		self.values = values
-	}
-
-	public init<S>(uniqueKeysWithValues keysAndValues: S) where S: Sequence, S.Element == (String, Value) {
-		self.values = OrderedDictionary(uniqueKeysWithValues: keysAndValues)
-	}
-}
-
-extension OrderedJSONDictionary: ExpressibleByDictionaryLiteral {
-	public init(dictionaryLiteral elements: (String, Value)...) {
-		self.init(uniqueKeysWithValues: elements)
-	}
-}
-
-extension OrderedJSONDictionary: Sequence {
-	public typealias Element = (key: String, value: Value)
-
-	public var isEmpty: Bool {
-		values.isEmpty
-	}
-
-	public func makeIterator() -> AnyIterator<Element> {
-		var iterator = values.makeIterator()
-		return AnyIterator {
-			iterator.next()
-		}
-	}
-}
-
-extension OrderedJSONDictionary: Codable {
-	public init(from decoder: Decoder) throws {
-		let container = try decoder.container(keyedBy: OrderedJSONDictionaryKey.self)
-		let pairs = try container.allKeys
-			.sorted { $0.stringValue < $1.stringValue }
-			.map { key in
-				(key.stringValue, try container.decode(Value.self, forKey: key))
-			}
-		self.init(uniqueKeysWithValues: pairs)
-	}
-
-	public func encode(to encoder: Encoder) throws {
-		var container = encoder.container(keyedBy: OrderedJSONDictionaryKey.self)
-		for (key, value) in values {
-			try container.encode(value, forKey: OrderedJSONDictionaryKey(key))
-		}
-	}
-}
-
-extension OrderedJSONDictionary: Equatable where Value: Equatable {}
-
-private struct OrderedJSONDictionaryKey: CodingKey {
-	var stringValue: String
-	var intValue: Int?
-
-	init(_ stringValue: String) {
-		self.stringValue = stringValue
-		self.intValue = nil
-	}
-
-	init?(stringValue: String) {
-		self.init(stringValue)
-	}
-
-	init?(intValue: Int) {
-		return nil
-	}
-}
-
 public extension Lexicon.Graph {
 
 	struct JSON: Codable, Sendable {
@@ -413,5 +341,77 @@ private extension JSONValue {
 			default:
 				return fields.isEmpty ? self : nil
 		}
+	}
+}
+
+public struct OrderedJSONDictionary<Value: Codable & Sendable>: Sendable {
+	public var values: OrderedDictionary<String, Value>
+
+	public init(_ values: OrderedDictionary<String, Value>) {
+		self.values = values
+	}
+
+	public init<S>(uniqueKeysWithValues keysAndValues: S) where S: Sequence, S.Element == (String, Value) {
+		self.values = OrderedDictionary(uniqueKeysWithValues: keysAndValues)
+	}
+}
+
+extension OrderedJSONDictionary: ExpressibleByDictionaryLiteral {
+	public init(dictionaryLiteral elements: (String, Value)...) {
+		self.init(uniqueKeysWithValues: elements)
+	}
+}
+
+extension OrderedJSONDictionary: Sequence {
+	public typealias Element = (key: String, value: Value)
+
+	public var isEmpty: Bool {
+		values.isEmpty
+	}
+
+	public func makeIterator() -> AnyIterator<Element> {
+		var iterator = values.makeIterator()
+		return AnyIterator {
+			iterator.next()
+		}
+	}
+}
+
+extension OrderedJSONDictionary: Codable {
+	public init(from decoder: Decoder) throws {
+		let container = try decoder.container(keyedBy: OrderedJSONDictionaryKey.self)
+		let pairs = try container.allKeys
+			.sorted { $0.stringValue < $1.stringValue }
+			.map { key in
+				(key.stringValue, try container.decode(Value.self, forKey: key))
+			}
+		self.init(uniqueKeysWithValues: pairs)
+	}
+
+	public func encode(to encoder: Encoder) throws {
+		var container = encoder.container(keyedBy: OrderedJSONDictionaryKey.self)
+		for (key, value) in values {
+			try container.encode(value, forKey: OrderedJSONDictionaryKey(key))
+		}
+	}
+}
+
+extension OrderedJSONDictionary: Equatable where Value: Equatable {}
+
+private struct OrderedJSONDictionaryKey: CodingKey {
+	var stringValue: String
+	var intValue: Int?
+
+	init(_ stringValue: String) {
+		self.stringValue = stringValue
+		self.intValue = nil
+	}
+
+	init?(stringValue: String) {
+		self.init(stringValue)
+	}
+
+	init?(intValue: Int) {
+		return nil
 	}
 }
