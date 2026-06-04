@@ -30,7 +30,7 @@ struct SwiftLexicon™ {
 			await collect(1, from: results)
 		}
 
-		let o = l >> events.then { event in
+		let o = l >> events.handler { event in
 			await results.send(event)
 		}
 		defer {
@@ -61,7 +61,7 @@ struct SwiftLexicon™ {
 			await collect(1, from: results)
 		}
 
-		let o = l >> events.then { event in
+		let o = l >> events.handler { event in
 			await results.send(event)
 		}
 		defer {
@@ -139,14 +139,14 @@ struct SwiftLexicon™ {
 			await collect(3, from: all)
 		}
 
-		let oTicks = test.one.more.time["✅"].one >> events.then { event in
+		let oTicks = test.one.more.time["✅"].one >> events.handler { event in
 			guard let o: String = try? event[test.one.more.time] else {
 				return
 			}
 			await ticks.send(o)
 		}
 
-		let oAll = I_test_one.self >> events.then { event in
+		let oAll = I_test_one.self >> events.handler { event in
 			guard let o: String = try? event[test.one.more.time] else {
 				return
 			}

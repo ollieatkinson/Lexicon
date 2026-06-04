@@ -7,20 +7,20 @@ import Testing
 @testable import SwiftLexicon
 
 @Suite
-struct EventSubscriberTests {
+struct EventObserverTests {
 
 	@Test
-	func subscriber_delivers_matching_events() async throws {
+	func observer_delivers_matching_events() async throws {
 		let events = Events()
 		let log = EventLog()
-		let subscriber = Events.Subscriber(where: { $0.is(test.one) }) { event in
+		let observer = events.on(test.one) { event in
 			await log.append(event)
 		}
 		defer {
-			subscriber.cancel()
+			observer.cancel()
+			events.finish()
 		}
 
-		subscriber.subscribe(to: events)
 		await events.send(Event(test.two)).value
 		await events.send(Event(test.one)).value
 
@@ -30,105 +30,171 @@ struct EventSubscriberTests {
 	}
 
 	@Test
-	func subscriber_is_idempotent_when_subscribed_to_the_same_events() async throws {
+	func observer_matches_bracketed_event_values() async throws {
 		let events = Events()
 		let log = EventLog()
-		let subscriber = Events.Subscriber(where: { $0.is(test.one) }) { event in
+		let observer = events.on(test.one["matched"]) { event in
 			await log.append(event)
 		}
 		defer {
-			subscriber.cancel()
+			observer.cancel()
+			events.finish()
 		}
 
-		subscriber.subscribe(to: events)
-		subscriber.subscribe(to: events)
-		await events.send(Event(test.one)).value
+		await events.send(Event(test.one["skipped"])).value
+		await events.send(Event(test.one["matched"])).value
 
 		await log.wait(for: 1)
 
-		#expect(subscriber.isSubscribed)
+		#expect(observer.isObserving)
+		#expect(await log.snapshot() == ["test.one[matched]"])
+	}
+
+	@Test
+	func matcher_identity_includes_bracketed_event_values() {
+		#expect(EventMatcher(test.one["old"]).id == "test.one[old]")
+		#expect(EventMatcher(test.one["new"]).id == "test.one[new]")
+	}
+
+	@Test
+	func observer_matches_event_types() async throws {
+		let events = Events()
+		let log = EventLog()
+		let observer = events.on(I_test_one.self) { event in
+			await log.append(event)
+		}
+		defer {
+			observer.cancel()
+			events.finish()
+		}
+
+		await events.send(Event(test.two)).value
+		await events.send(Event(test.one)).value
+		await events.send(Event(test.one.more)).value
+
+		await log.wait(for: 1)
+
 		#expect(await log.snapshot() == ["test.one"])
 	}
 
 	@Test
-	func subscriber_resubscribes_to_new_events_and_cancels_the_old_subscription() async throws {
-		let first = Events()
-		let second = Events()
+	func observer_matches_any_listed_event() async throws {
+		let events = Events()
 		let log = EventLog()
-		let subscriber = Events.Subscriber(where: { $0.is(test.one) }) { event in
+		let observer = events.on(test.one, test.two["matched"]) { event in
 			await log.append(event)
 		}
 		defer {
-			subscriber.cancel()
+			observer.cancel()
+			events.finish()
 		}
 
-		subscriber.subscribe(to: first)
-		await first.send(Event(test.one["initial"])).value
-		await log.wait(for: 1)
-
-		subscriber.subscribe(to: second)
-		await first.send(Event(test.one["stale"])).value
-		await second.send(Event(test.one["fresh"])).value
+		await events.send(Event(test.two["skipped"])).value
+		await events.send(Event(test.one)).value
+		await events.send(Event(test.two["matched"])).value
 
 		await log.wait(for: 2)
 
-		#expect(await log.snapshot() == ["test.one[initial]", "test.one[fresh]"])
+		#expect(await log.snapshot() == ["test.one", "test.two[matched]"])
 	}
 
 	@Test
-	func subscriber_updates_its_handler_without_resubscribing() async throws {
+	func observer_can_listen_to_all_events() async throws {
 		let events = Events()
 		let log = EventLog()
-		let subscriber = Events.Subscriber()
+		let observer = events.on { event in
+			await log.append(event)
+		}
 		defer {
-			subscriber.cancel()
+			observer.cancel()
+			events.finish()
 		}
 
-		subscriber.subscribe(to: events, where: { $0.is(test.one) }) { event in
+		test.one >> events
+		test.two >> events
+
+		await log.wait(for: 2)
+
+		#expect(await log.snapshot() == ["test.one", "test.two"])
+	}
+
+	@Test
+	func observer_with_empty_event_list_is_a_noop() async throws {
+		let events = Events()
+		let log = EventLog()
+		let observer = events.on([L_test_one]()) { event in
 			await log.append(event)
 		}
-		subscriber.update(where: { $0.is(test.two) }) { event in
-			await log.append(event)
+		defer {
+			observer.cancel()
+			events.finish()
 		}
 
 		await events.send(Event(test.one)).value
-		await events.send(Event(test.two)).value
 
+		#expect(!observer.isObserving)
+		#expect(await log.snapshot().isEmpty)
+	}
+
+	@Test
+	func observer_wait_completes_when_events_finish() async throws {
+		let events = Events()
+		let log = EventLog()
+		let observer = events.on(test.one) { event in
+			await log.append(event)
+		}
+		defer {
+			observer.cancel()
+			events.finish()
+		}
+
+		await events.send(Event(test.one)).value
 		await log.wait(for: 1)
 
-		#expect(await log.snapshot() == ["test.two"])
+		events.finish()
+		await observer.wait()
+
+		#expect(!observer.isObserving)
+		#expect(await log.snapshot() == ["test.one"])
 	}
 
 	@Test
-	func subscriber_cancel_stops_delivery() async throws {
+	func observer_cancel_stops_delivery() async throws {
 		let events = Events()
 		let log = EventLog()
-		let subscriber = Events.Subscriber(where: { $0.is(test.one) }) { event in
+		let observer = events.on(test.one) { event in
 			await log.append(event)
 		}
 
-		subscriber.subscribe(to: events)
-		subscriber.cancel()
+		observer.cancel()
 		await events.send(Event(test.one)).value
 
-		#expect(!subscriber.isSubscribed)
+		#expect(!observer.isObserving)
 		#expect(await log.snapshot().isEmpty)
 	}
 
 	@Test
-	func subscriber_subscribe_to_nil_cancels_subscription() async throws {
+	func observer_where_filters_and_cancels_delivery() async throws {
 		let events = Events()
 		let log = EventLog()
-		let subscriber = Events.Subscriber(where: { $0.is(test.one) }) { event in
+		let observer = events.on(where: { $0.is(test.one) }) { event in
 			await log.append(event)
 		}
+		defer {
+			observer.cancel()
+			events.finish()
+		}
 
-		subscriber.subscribe(to: events)
-		subscriber.subscribe(to: nil)
-		await events.send(Event(test.one)).value
+		await events.send(Event(test.two)).value
+		await events.send(Event(test.one["matched"])).value
 
-		#expect(!subscriber.isSubscribed)
-		#expect(await log.snapshot().isEmpty)
+		await log.wait(for: 1)
+		#expect(await log.snapshot() == ["test.one[matched]"])
+
+		observer.cancel()
+		await events.send(Event(test.one["stale"])).value
+
+		#expect(await log.snapshot() == ["test.one[matched]"])
 	}
 
 	@Test
@@ -168,14 +234,14 @@ struct EventSubscriberTests {
 	}
 
 	@Test
-	func direct_subscription_filters_and_cancels_delivery() async throws {
+	func handler_operator_observes_matching_events() async throws {
 		let events = Events()
 		let log = EventLog()
-		let subscription = events.subscribe(where: { $0.is(test.one) }) { event in
+		let observer = test.one >> events.handler { event in
 			await log.append(event)
 		}
 		defer {
-			subscription.cancel()
+			observer.cancel()
 			events.finish()
 		}
 
@@ -185,7 +251,7 @@ struct EventSubscriberTests {
 		await log.wait(for: 1)
 		#expect(await log.snapshot() == ["test.one[matched]"])
 
-		subscription.cancel()
+		observer.cancel()
 		await events.send(Event(test.one["stale"])).value
 
 		#expect(await log.snapshot() == ["test.one[matched]"])
@@ -216,7 +282,7 @@ struct EventSubscriberTests {
 	}
 
 	@Test @MainActor
-	func context_subscription_uses_weak_context_and_stops_after_context_deinitializes() async throws {
+	func context_observer_uses_weak_context_and_stops_after_context_deinitializes() async throws {
 		let events = Events()
 		let log = EventLog()
 		let deinitSignal = DeinitSignal()
@@ -226,9 +292,9 @@ struct EventSubscriberTests {
 		let handler = makeHandler { object, event in
 			await object.record(event)
 		}
-		let subscription = test.one >> handler
+		let observer = test.one >> handler
 		defer {
-			subscription.cancel()
+			observer.cancel()
 			events.finish()
 		}
 
