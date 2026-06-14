@@ -19,14 +19,14 @@ public enum JSONClasses: CodeGenerator {
 		return try encoder.encode(json)
 	}
 	
-	public class Encoder: JSONEncoder, @unchecked Sendable {
+	public class Encoder: JSONEncoder {
 		public override init() {
 			super.init()
 			self.dateEncodingStrategy = .formatted(JSONClasses.makeDateFormatter())
 		}
 	}
 	
-	public class Decoder: JSONDecoder, @unchecked Sendable {
+	public class Decoder: JSONDecoder {
 		public override init() {
 			super.init()
 			self.dateDecodingStrategy = .formatted(JSONClasses.makeDateFormatter())

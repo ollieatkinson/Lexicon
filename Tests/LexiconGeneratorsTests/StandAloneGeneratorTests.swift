@@ -24,7 +24,7 @@ struct SwiftLexiconGeneratorTests {
 		let code = try await swiftLexicon(prefixes: .init(class: "Node", protocol: "Kind"))
 
 		#expect(code.contains(#"public let test = Node_test("test")"#))
-		#expect(code.contains("public final class Node_test: L, @unchecked Sendable, Kind_test"))
+		#expect(code.contains("public final class Node_test: L, Kind_test"))
 		#expect(code.contains("public protocol Kind_test: I {}"))
 	}
 
@@ -62,7 +62,7 @@ struct SwiftStandAloneGeneratorTests {
 		let code = try await swiftStandAlone(prefixes: .init(class: "Node", protocol: "Kind"))
 
 		#expect(code.contains(#"public let test = Node_test("test")"#))
-		#expect(code.contains("public final class Node_test: L, @unchecked Sendable, Kind_test"))
+		#expect(code.contains("public final class Node_test: L, Kind_test"))
 		#expect(code.contains("public protocol Kind_test: I {}"))
 	}
 

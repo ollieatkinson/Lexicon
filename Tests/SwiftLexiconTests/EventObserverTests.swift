@@ -3,6 +3,7 @@
 //
 
 import Foundation
+import Synchronization
 import Testing
 @testable import SwiftLexicon
 
@@ -370,7 +371,7 @@ private func collectUntilFinished(from stream: AsyncStream<Event>) async -> [Eve
 	return events
 }
 
-@MainActor private final class EventContextProbe: EventContext, @unchecked Sendable {
+@MainActor private final class EventContextProbe: EventContext {
 
 	let events: Events
 	private let log: EventLog
@@ -411,18 +412,21 @@ private final class WeakBox<Value: AnyObject> {
 	}
 }
 
-private final class DeinitSignal: @unchecked Sendable {
+private final class DeinitSignal: Sendable {
 
-	private let lock = NSLock()
-	private var didSignal = false
-	private var continuations: [CheckedContinuation<Void, Never>] = []
+	private struct State: Sendable {
+		var didSignal = false
+		var continuations: [CheckedContinuation<Void, Never>] = []
+	}
+
+	private let state = Mutex(State())
 
 	func signal() {
-		lock.lock()
-		didSignal = true
-		let pending = continuations
-		continuations.removeAll()
-		lock.unlock()
+		let pending = state.withLock { state in
+			state.didSignal = true
+			defer { state.continuations.removeAll() }
+			return state.continuations
+		}
 
 		for continuation in pending {
 			continuation.resume()
@@ -431,13 +435,15 @@ private final class DeinitSignal: @unchecked Sendable {
 
 	func wait() async {
 		await withCheckedContinuation { continuation in
-			lock.lock()
-			if didSignal {
-				lock.unlock()
+			let shouldResume = state.withLock { state in
+				if state.didSignal {
+					return true
+				}
+				state.continuations.append(continuation)
+				return false
+			}
+			if shouldResume {
 				continuation.resume()
-			} else {
-				continuations.append(continuation)
-				lock.unlock()
 			}
 		}
 	}

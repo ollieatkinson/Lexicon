@@ -26,10 +26,10 @@ extension Lexicon.Graph.Node.Class.JSON {
 		}
 
 		var lines = [
-			try SourceTemplate(
-				"""
-				public final class %%className%%: %%baseClass%%, @unchecked Sendable, %%protocolName%% {
-					public override class var localized: String { NSLocalizedString("%%localized%%", comment: "") }
+				try SourceTemplate(
+					"""
+				public final class %%className%%: %%baseClass%%, %%protocolName%% {
+					public nonisolated override class var localized: String { NSLocalizedString("%%localized%%", comment: "") }
 				}
 				""",
 				delimiters: .percentSigns
