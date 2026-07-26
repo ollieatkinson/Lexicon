@@ -19,14 +19,17 @@ public enum JSONClasses: CodeGenerator {
 		return try encoder.encode(json)
 	}
 	
-	public class Encoder: JSONEncoder {
+	// Foundation declares these base classes @unchecked Sendable. These
+	// subclasses add no stored state, so restate the inherited conformance.
+	// Remove this when Foundation provides checked Sendable conformances.
+	public class Encoder: JSONEncoder, @unchecked Sendable {
 		public override init() {
 			super.init()
 			self.dateEncodingStrategy = .formatted(JSONClasses.makeDateFormatter())
 		}
 	}
 	
-	public class Decoder: JSONDecoder {
+	public class Decoder: JSONDecoder, @unchecked Sendable {
 		public override init() {
 			super.init()
 			self.dateDecodingStrategy = .formatted(JSONClasses.makeDateFormatter())
