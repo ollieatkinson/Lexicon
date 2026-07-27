@@ -375,9 +375,7 @@ struct CRDTDocumentMergeTests {
 	}
 }
 
-private final class RemoteImportURLProtocol: URLProtocol {}
-
-private extension RemoteImportURLProtocol {
+private final class RemoteImportURLProtocol: URLProtocol {
 	override class func canInit(with request: URLRequest) -> Bool {
 		request.url?.host == "remote-import.test"
 	}
