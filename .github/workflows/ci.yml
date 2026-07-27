@@ -19,31 +19,45 @@ env:
   RUST_VERSION: "1.94.0"
 
 jobs:
-  swift:
-    name: Swift / ${{ matrix.name }}
-    runs-on: ${{ matrix.runner }}
+  swift-macos:
+    name: Swift / macOS
+    runs-on: macos-26
     timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: macOS
-            runner: macos-26
-          - name: Linux
-            runner: ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Select Xcode 26.5
-        if: runner.os == 'macOS'
         run: sudo xcode-select -s /Applications/Xcode_26.5.app/Contents/Developer
 
-      - name: Install Swift
-        if: runner.os == 'Linux'
-        uses: swift-actions/setup-swift@7ca6abe6b3b0e8b5421b88be48feee39cbf52c6a # v2.4.0
-        with:
-          swift-version: ${{ env.SWIFT_VERSION }}
+      - name: Verify Swift version
+        run: |
+          swift --version
+          swift --version | grep "Swift version $SWIFT_VERSION"
+
+      - name: Build command-line product
+        run: swift build --product lexicon -Xswiftc -warnings-as-errors
+
+      - name: Test default traits
+        run: swift test -Xswiftc -warnings-as-errors
+
+      - name: Test Editor trait
+        run: swift test --traits Editor -Xswiftc -warnings-as-errors
+
+      - name: Test complete strict concurrency
+        run: swift test -Xswiftc -strict-concurrency=complete -Xswiftc -warnings-as-errors
+
+      - name: Verify root dependency lock
+        run: git diff --exit-code -- Package.resolved
+
+  swift-linux:
+    name: Swift / Linux
+    runs-on: ubuntu-24.04
+    container: swift:6.3.2-noble
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Verify Swift version
         run: |
@@ -119,11 +133,6 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - name: Install Swift
-        uses: swift-actions/setup-swift@7ca6abe6b3b0e8b5421b88be48feee39cbf52c6a # v2.4.0
-        with:
-          swift-version: ${{ env.SWIFT_VERSION }}
-
       - name: Install Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -156,7 +165,6 @@ jobs:
 
       - name: Verify toolchain versions
         run: |
-          swift --version
           node --version
           go version
           kotlinc -version
@@ -190,9 +198,6 @@ jobs:
           assert grammar["repository"] == "https://github.com/shunsambongi/tree-sitter-gitignore"
           assert grammar["rev"] == "f4685bf11ac466dd278449bcfe5fd014e94aa504"
           PY
-
-      - name: Test source generators
-        run: swift test --filter LexiconGeneratorsTests -Xswiftc -warnings-as-errors
 
       - name: Compile generated language fixtures
         run: |
