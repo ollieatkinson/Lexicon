@@ -178,7 +178,7 @@ struct GoGeneratorTests {
 		let source = try code.string()
 
 		#expect(source.contains("É L_root_é"))
-		#expect(!source.contains("\u{301}"))
+		#expect(source.contains("return \"root.\(decomposedName)\""))
 
 		guard Self.hasCommand("gofmt") else {
 			return
