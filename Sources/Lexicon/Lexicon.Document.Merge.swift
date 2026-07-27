@@ -3,6 +3,7 @@
 //
 
 import Foundation
+import Synchronization
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
@@ -634,38 +635,41 @@ enum RemoteImportLoader {
 		return redirectedURL.hasSameOrigin(as: allowedOrigin)
 	}
 
-	private final class RequestState: @unchecked Sendable {
-		private let lock = NSLock()
-		private var storedResult: Result?
-		private var storedBlockedRedirect: URL?
-		private var responseData = Data()
-		private var responseURL: URL?
+	private final class RequestState: Sendable {
+		private struct State: Sendable {
+			var result: Result?
+			var blockedRedirect: URL?
+			var responseData = Data()
+			var responseURL: URL?
+		}
+
+		private let state = Mutex(State())
 
 		var result: Result? {
-			lock.withLock { storedResult }
+			state.withLock(\.result)
 		}
 
 		var blockedRedirect: URL? {
-			lock.withLock { storedBlockedRedirect }
+			state.withLock(\.blockedRedirect)
 		}
 
 		func complete(_ result: Result) {
-			lock.withLock {
-				if storedResult == nil {
-					storedResult = result
+			state.withLock {
+				if $0.result == nil {
+					$0.result = result
 				}
 			}
 		}
 
 		func blockRedirect(_ url: URL) {
-			lock.withLock {
-				storedBlockedRedirect = url
+			state.withLock {
+				$0.blockedRedirect = url
 			}
 		}
 
 		func beginResponse(at url: URL) {
-			lock.withLock {
-				responseURL = url
+			state.withLock {
+				$0.responseURL = url
 			}
 		}
 
@@ -673,36 +677,36 @@ enum RemoteImportLoader {
 			_ data: Data,
 			maximumResponseBytes: Int
 		) -> Bool {
-			lock.withLock {
-				guard storedResult == nil else {
+			state.withLock {
+				guard $0.result == nil else {
 					return false
 				}
-				guard data.count <= maximumResponseBytes - responseData.count else {
-					storedResult = .failure(
+				guard data.count <= maximumResponseBytes - $0.responseData.count else {
+					$0.result = .failure(
 						RemoteImportLoader.oversizeMessage(maximumResponseBytes)
 					)
 					return false
 				}
-				responseData.append(data)
+				$0.responseData.append(data)
 				return true
 			}
 		}
 
 		func finishResponse() {
-			lock.withLock {
-				guard storedResult == nil else {
+			state.withLock {
+				guard $0.result == nil else {
 					return
 				}
-				guard let responseURL else {
-					storedResult = .failure("Remote import returned no HTTP response.")
+				guard let responseURL = $0.responseURL else {
+					$0.result = .failure("Remote import returned no HTTP response.")
 					return
 				}
-				storedResult = .success(.init(data: responseData, url: responseURL))
+				$0.result = .success(.init(data: $0.responseData, url: responseURL))
 			}
 		}
 	}
 
-	private enum Result {
+	private enum Result: Sendable {
 		case success(Response)
 		case failure(String)
 	}
@@ -711,8 +715,7 @@ enum RemoteImportLoader {
 		"Remote import exceeds the maximum response size of \(maximumResponseBytes) bytes."
 	}
 
-	private final class DataDelegate: NSObject, URLSessionDataDelegate,
-		@unchecked Sendable {
+	private final class DataDelegate: NSObject, URLSessionDataDelegate, Sendable {
 
 		let allowedOrigin: URL?
 		let maximumResponseBytes: Int
