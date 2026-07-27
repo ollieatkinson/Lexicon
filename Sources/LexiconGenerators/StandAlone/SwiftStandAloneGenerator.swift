@@ -25,7 +25,23 @@ public enum SwiftStandAloneGenerator: SourceCodeGenerator {
 private extension Lexicon.Graph.JSON {
 
 	func swift(prefixes: StandAloneTypePrefixes) throws -> String {
-		let names = StandAloneTypeNames(id: name, prefixes: prefixes)
+		try validateStandAloneRoot(
+			language: "Swift",
+			reserved: [
+				"CallAsFunctionExtensions",
+				"LexiconActor",
+				"SourceCodeIdentifiable",
+				"TypeLocalized",
+			]
+		)
+		try validateStandAloneSymbols(prefixes: prefixes)
+		try validateStandAloneMembers(
+			language: "Swift",
+			reserved: ["__", "debugDescription"]
+		)
+		let rootID = Lemma.ID(root: name)
+		let root = rootID.description
+		let names = StandAloneTypeNames(id: rootID, prefixes: prefixes)
 		return try SourceTemplate(
 			"""
 		import Foundation
@@ -81,15 +97,18 @@ private extension Lexicon.Graph.JSON {
 		
 		// MARK: generated types
 		
-		public let %%root%% = %%rootClassName%%("%%root%%")
+		public let %%rootIdentifier%% = %%rootClassName%%("%%root%%")
 		
 		%%types%%
 		""",
 			delimiters: .percentSigns
 		).render([
-			"root": name,
+			"root": root,
+			"rootIdentifier": root.swiftDeclarationIdentifier,
 			"rootClassName": names.className,
-			"types": try classes.flatMap { try $0.swiftTypeDeclarations(prefixes: prefixes) }.joined(separator: "\n"),
+			"types": try classes.flatMap {
+				try $0.swiftTypeDeclarations(prefixes: prefixes, classes: classes)
+			}.joined(separator: "\n"),
 		])
 	}
 }

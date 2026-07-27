@@ -19,9 +19,13 @@ type Exists = (file: string) => boolean;
 export function resolveServerCommand(
 	configuration: ServerBinaryConfiguration,
 	workspaceFolders: readonly WorkspaceFolder[] | undefined,
+	workspaceTrusted: boolean,
 	pathValue = process.env.PATH ?? "",
 	exists: Exists = isExecutable
 ): string | undefined {
+	if (!workspaceTrusted) {
+		return undefined;
+	}
 	const configured = configuredServerCommand(configuration.path, workspaceFolders, exists);
 	if (configured !== undefined) {
 		return configured;

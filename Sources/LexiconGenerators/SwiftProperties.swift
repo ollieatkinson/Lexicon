@@ -6,11 +6,14 @@ import Lexicon
 
 extension Lexicon.Graph.Node.Class.JSON {
 
-	func swiftProperties(prefixes: StandAloneTypePrefixes) throws -> [String] {
+	func swiftProperties(
+		prefixes: StandAloneTypePrefixes,
+		classes: [Lexicon.Graph.Node.Class.JSON]
+	) throws -> [String] {
 		let names = StandAloneTypeNames(id: id, prefixes: prefixes)
 		var properties: [String] = []
 
-		for accessor in standAloneAccessors() {
+		for accessor in try standAloneAccessors(classes: classes) {
 			let template = accessor.isSynonym
 				? "\tvar `%%name%%`: %%className%% { %%protonym%% }"
 				: "\tvar `%%name%%`: %%className%% { .init(\"\\(__).%%name%%\") }"
@@ -19,9 +22,9 @@ extension Lexicon.Graph.Node.Class.JSON {
 					template,
 					delimiters: .percentSigns
 				).render([
-					"name": accessor.name,
+					"name": accessor.name.rawValue,
 					"className": names.className(for: accessor.sourceID),
-					"protonym": accessor.pathSuffix,
+					"protonym": accessor.pathSuffix.swiftMemberPath,
 				])
 			)
 		}

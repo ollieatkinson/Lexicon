@@ -87,7 +87,7 @@ public extension Lexicon.Graph.Node {
 		
 		public let node: Node
 
-		private lazy var buffer: Deque<Element> = [(node, \.self)]
+		private lazy var buffer: Deque<Element> = [(node, [])]
 
 		public init(of node: Node) {
 			self.node = node
@@ -97,8 +97,8 @@ public extension Lexicon.Graph.Node {
 			guard let (node, path) = buffer.popFirst() else {
 				return nil
 			}
-			let children = node.children.values.lazy
-				.map{ child in (child, path.appending(path: \.[child.name])) }
+			let children = node.children.lazy
+				.map { name, child in (child, path + [name]) }
 			buffer.append(contentsOf: children)
 			return (node, path)
 		}
@@ -116,7 +116,7 @@ public extension Lexicon.Graph.Node {
 
 		public let node: Node
 		
-		private lazy var buffer: [Element] = [(node, \.self)]
+		private lazy var buffer: [Element] = [(node, [])]
 
 		public init(of node: Node) {
 			self.node = node
@@ -126,8 +126,8 @@ public extension Lexicon.Graph.Node {
 			guard let (node, path) = buffer.popLast() else {
 				return nil
 			}
-			let children = node.children.values.reversed().lazy
-				.map{ child in (child, path.appending(path: \.[child.name])) }
+			let children = node.children.reversed().lazy
+				.map { name, child in (child, path + [name]) }
 			buffer.append(contentsOf: children)
 			return (node, path)
 		}

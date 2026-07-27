@@ -27,14 +27,16 @@ struct Lemma™ {
 		#expect(Lemma.isValid(character: "_", appendingTo: "yet_another"))
 
 		#expect(!(Lemma.isValid(character: "_", appendingTo: "not_another_")))
-		#expect(!(Lemma.isValid(character: "_", appendingTo: "")))
+		#expect(Lemma.isValid(character: "_", appendingTo: ""))
 	}
 
 	@Test
 	func test_inherited_node_own_type() async throws {
 
-		let root = try await Lexicon.from(
-			TaskPaper(inherited_node_own_type).decode()
+		let document = try TaskPaper(inherited_node_own_type).decodeDocument()
+		let root = try await Lexicon(
+			document: document,
+			selectedRoot: "root"
 		).root
 
 		let userId = try #require(await root["user", "id"])
@@ -48,8 +50,10 @@ struct Lemma™ {
 	@Test
 	func test_inherited_node_own_type_nested() async throws {
 
-		let root = try await Lexicon.from(
-			TaskPaper(inherited_node_own_type).decode()
+		let document = try TaskPaper(inherited_node_own_type).decodeDocument()
+		let root = try await Lexicon(
+			document: document,
+			selectedRoot: "root"
 		).root
 
 		do {
@@ -68,60 +72,66 @@ struct Lemma™ {
 	}
 
 	@Test
-	func equality_uses_stable_id() async throws {
-		let left = try await Lexicon.from(TaskPaper(inherited_node_own_type).decode())
-		let right = try await Lexicon.from(TaskPaper(inherited_node_own_type).decode())
+	func equality_includes_lexicon_identity_and_revision() async throws {
+		let document = try TaskPaper(inherited_node_own_type).decodeDocument()
+		let left = try await Lexicon(document: document, selectedRoot: "root")
+		let right = try await Lexicon(document: document, selectedRoot: "root")
 
 		let leftLemma = try #require(await left["root.user.id"])
 		let rightLemma = try #require(await right["root.user.id"])
+		let sameGenerationLemma = try #require(await left["root.user.id"])
 
-		#expect(leftLemma == rightLemma)
-		#expect(leftLemma !== rightLemma)
+		#expect(leftLemma.id == rightLemma.id)
+		#expect(leftLemma != rightLemma)
+		#expect(leftLemma == sameGenerationLemma)
 	}
 
 	@Test
-	func graph_path_is_cached_for_graph_nodes() async throws {
-		let lexicon = try await Lexicon.from(TaskPaper(inherited_node_own_type).decode())
-		try await expectGraphPathIsCached(in: lexicon)
+	func graph_nodes_are_distinguished_from_inherited_nodes() async throws {
+		let document = try TaskPaper(inherited_node_own_type).decodeDocument()
+		let lexicon = try await Lexicon(document: document, selectedRoot: "root")
+		try await expectGraphNodeIdentity(in: lexicon)
 	}
 
 	@Test
-	func protonym_validation_accepts_synonym_candidates() async throws {
-		let lexicon = try await Lexicon.from(TaskPaper("""
+	func protonym_chains_resolve_to_their_canonical_source() async throws {
+		let document = try TaskPaper("""
 		root:
 			target:
 			synonym:
 			= target
 			proposed:
-		""").decode())
+		""").decodeDocument()
+		let lexicon = try await Lexicon(document: document, selectedRoot: "root")
 
 		let target = try #require(await lexicon["root.target"])
 		let synonym = try #require(await lexicon["root.synonym"])
 		let proposed = try #require(await lexicon["root.proposed"])
 
-		#expect(await target.isValidProtonym(for: proposed))
-		#expect(await proposed.isValid(protonym: target))
-		#expect(await synonym.isValidProtonym(for: proposed))
-		#expect(!(await synonym.isValidProtonym(for: target)))
+		#expect(await synonym.protonym == target)
+		#expect(await synonym.source == target)
+		#expect(await proposed.protonym == nil)
 
 		#if EDITOR
-		let updated = try #require(await proposed.set(protonym: synonym))
+		let updated = try await lexicon.setProtonym(synonym, of: proposed)
+		let currentTarget = try #require(await lexicon["root.target"])
 
 		#expect(await updated.node.protonym == "synonym")
-		#expect(await updated.source == target)
+		#expect(await updated.source == currentTarget)
 		#endif
 	}
 
 	@Test
 	func synonym_type_passes_through_to_source() async throws {
-		let lexicon = try await Lexicon.from(TaskPaper("""
+		let document = try TaskPaper("""
 		root:
 			type:
 			target:
 			+ root.type
 			synonym:
 			= target
-		""").decode())
+		""").decodeDocument()
+		let lexicon = try await Lexicon(document: document, selectedRoot: "root")
 
 		let target = try #require(await lexicon["root.target"])
 		let synonym = try #require(await lexicon["root.synonym"])
@@ -130,13 +140,15 @@ struct Lemma™ {
 }
 
 @LexiconActor
-private func expectGraphPathIsCached(in lexicon: Lexicon) throws {
+private func expectGraphNodeIdentity(in lexicon: Lexicon) throws {
 	let graphNode = try #require(lexicon["root.user"])
 	let inheritedNode = try #require(lexicon["root.user.id"])
-	let path = try #require(graphNode.graphPath)
 
-	#expect(lexicon.graph[path].name == "user")
-	#expect(inheritedNode.graphPath == nil)
+	#expect(graphNode.isGraphNode)
+	#expect(graphNode.graphNode != nil)
+	#expect(!inheritedNode.isGraphNode)
+	#expect(inheritedNode.graphNode == nil)
+	#expect(inheritedNode.source.id == "root.db.collection.id")
 }
 
 @LexiconActor
@@ -150,14 +162,14 @@ root:
 	a:
 	+ root.one
 		b:
-		+ root.two
+		+ root.one.two
 			c:
-			+ root.three
+			+ root.one.two.three
 	one:
 		two:
 		+ root.a
 			three:
-			+ root.b
+			+ root.a.b
 	db:
 		collection:
 			id:

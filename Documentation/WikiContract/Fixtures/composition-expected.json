@@ -1,0 +1,9 @@
+{
+  "path": "commerce.status",
+  "value": "local",
+  "precedence": [
+    "composition-base.lexicon",
+    "composition-overlay.lexicon",
+    "source document"
+  ]
+}

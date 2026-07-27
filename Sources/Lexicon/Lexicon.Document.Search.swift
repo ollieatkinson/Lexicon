@@ -207,13 +207,15 @@ public extension Lexicon.Search {
 	}
 
 	struct EmbeddingCache: Codable, Hashable, Sendable {
+		public static let currentVersion = 2
+
 		public var version: Int
 		public var descriptor: EmbeddingDescriptor
 		public var fingerprint: String
 		public var vectors: [Lemma.ID: [Double]]
 
 		public init(
-			version: Int = 2,
+			version: Int = Self.currentVersion,
 			descriptor: EmbeddingDescriptor,
 			fingerprint: String,
 			vectors: [Lemma.ID: [Double]]
@@ -321,6 +323,55 @@ public extension Lexicon.Search.EmbeddingProvider {
 	}
 }
 
+private extension Lexicon.Search.EmbeddingCache {
+
+	func validate(
+		expectedIDs: Set<Lemma.ID>,
+		descriptor expectedDescriptor: Lexicon.Search.EmbeddingDescriptor? = nil
+	) throws {
+		guard version == Self.currentVersion else {
+			throw LexiconError(
+				"Embedding cache version \(version) is unsupported; expected \(Self.currentVersion)"
+			)
+		}
+		if let expectedDescriptor, descriptor != expectedDescriptor {
+			throw LexiconError("Embedding cache descriptor does not match the provider")
+		}
+		guard Set(vectors.keys) == expectedIDs else {
+			throw LexiconError("Embedding cache keys do not match the indexed lemma IDs")
+		}
+		if let dimensions = descriptor.dimensions, dimensions <= 0 {
+			throw LexiconError(
+				"Embedding cache descriptor dimensions must be positive, got \(dimensions)"
+			)
+		}
+		guard let first = vectors.values.first else {
+			return
+		}
+		guard first.isNotEmpty else {
+			throw LexiconError("Embedding cache contains an empty vector")
+		}
+		let dimensions = first.count
+		if let expected = descriptor.dimensions, expected != dimensions {
+			throw LexiconError(
+				"Embedding cache dimension \(dimensions) does not match descriptor dimension \(expected)"
+			)
+		}
+		for (id, vector) in vectors {
+			guard vector.count == dimensions else {
+				throw LexiconError(
+					"Embedding cache vector '\(id)' has dimension \(vector.count); expected \(dimensions)"
+				)
+			}
+			guard vector.allSatisfy(\.isFinite) else {
+				throw LexiconError(
+					"Embedding cache vector '\(id)' contains a non-finite value"
+				)
+			}
+		}
+	}
+}
+
 public extension Lexicon.Search {
 
 	struct Index: Sendable {
@@ -330,7 +381,7 @@ public extension Lexicon.Search {
 		public var fingerprint: String {
 			var hash = StableHash()
 			for entry in entries.sorted(by: { $0.id < $1.id }) {
-				hash.append(entry.id)
+				hash.append(entry.id.description)
 				hash.append(entry.embeddingText)
 			}
 			return hash.hex
@@ -361,8 +412,17 @@ public extension Lexicon.Search {
 			let queryVector = queryVector ?? (options.mode.usesSemanticSearch
 				? SemanticEmbedding.vector(for: query.embeddingText)
 				: nil)
+			let validEmbeddingCache: EmbeddingCache? = embeddingCache.flatMap { cache in
+				guard
+					cache.fingerprint == fingerprint,
+					(try? cache.validate(expectedIDs: Set(entries.map(\.id)))) != nil
+				else {
+					return nil
+				}
+				return cache
+			}
 			let results = entries.compactMap { entry in
-				let entryVector = embeddingCache?.vectors[entry.id]
+				let entryVector = validEmbeddingCache?.vectors[entry.id]
 					?? semanticVector(for: entry, queryVector: queryVector)
 				return entry.result(
 					for: query,
@@ -493,12 +553,23 @@ public extension Lexicon.Search {
 			provided queryVector: [Double]?,
 			using provider: Provider
 		) async throws -> [Double]? {
-			guard queryVector == nil,
-				  options.mode.usesSemanticSearch,
-				  query.hasTerms,
-				  options.limit != 0
-			else {
+			if let queryVector {
+				if options.mode.usesSemanticSearch {
+					try Self.validate(
+						embeddings: [queryVector],
+						expectedCount: 1,
+						descriptor: provider.descriptor,
+						context: "provided query"
+					)
+				}
 				return queryVector
+			}
+			guard
+				options.mode.usesSemanticSearch,
+				query.hasTerms,
+				options.limit != 0
+			else {
+				return nil
 			}
 			return try await providerEmbeddings(
 				for: ["search_query: \(query.embeddingText)"],
@@ -515,7 +586,11 @@ public extension Lexicon.Search {
 			}
 			if let embeddingCache,
 			   embeddingCache.fingerprint == fingerprint,
-			   embeddingCache.descriptor == provider.descriptor
+			   embeddingCache.descriptor == provider.descriptor,
+			   (try? embeddingCache.validate(
+					expectedIDs: Set(entries.map(\.id)),
+					descriptor: provider.descriptor
+			   )) != nil
 			{
 				return embeddingCache
 			}
@@ -624,20 +699,68 @@ public extension Lexicon.Search {
 			guard embeddings.count == texts.count else {
 				throw LexiconError("Embedding provider returned \(embeddings.count) vectors for \(texts.count) texts.")
 			}
+			try Self.validate(
+				embeddings: embeddings,
+				expectedCount: texts.count,
+				descriptor: provider.descriptor,
+				context: "provider response"
+			)
 			return embeddings
+		}
+
+		private static func validate(
+			embeddings: [[Double]],
+			expectedCount: Int,
+			descriptor: EmbeddingDescriptor,
+			context: String
+		) throws {
+			guard embeddings.count == expectedCount else {
+				throw LexiconError(
+					"\(context) contains \(embeddings.count) vectors; expected \(expectedCount)"
+				)
+			}
+			if let dimensions = descriptor.dimensions, dimensions <= 0 {
+				throw LexiconError(
+					"Embedding descriptor dimensions must be positive, got \(dimensions)"
+				)
+			}
+			guard let first = embeddings.first else {
+				return
+			}
+			guard first.isNotEmpty else {
+				throw LexiconError("\(context) contains an empty embedding vector")
+			}
+			let dimensions = first.count
+			if let expected = descriptor.dimensions, dimensions != expected {
+				throw LexiconError(
+					"\(context) vector dimension \(dimensions) does not match descriptor dimension \(expected)"
+				)
+			}
+			for (index, vector) in embeddings.enumerated() {
+				guard vector.count == dimensions else {
+					throw LexiconError(
+						"\(context) vector \(index) has dimension \(vector.count); expected \(dimensions)"
+					)
+				}
+				guard vector.allSatisfy(\.isFinite) else {
+					throw LexiconError(
+						"\(context) vector \(index) contains a non-finite value"
+					)
+				}
+			}
 		}
 
 		@LexiconActor private func contextEntries(
 			in document: Lexicon.Document,
 			seedResults: [Result]
 		) async throws -> [Entry] {
+			let rootName = try selectedRoot(in: document)
 			guard seedResults.isNotEmpty else {
 				return []
 			}
-			let rootName = options.root?
-				.split(separator: ".", maxSplits: 1)
-				.first
-				.map(String.init)
+			guard let rootName else {
+				return []
+			}
 			let lexicon = try Lexicon.temporary(from: document, root: rootName)
 			let entryIDs = Set(entries.map(\.id))
 			let seedIDs = seedResults
@@ -662,11 +785,12 @@ public extension Lexicon.Search {
 			}
 
 			for entry in entries where selected.count < options.bounds.candidates {
-				let isRelated = entry.type.contains { typeID in
-					seedIDSet.contains { seedID in
-						seedID.isSameOrDescendant(of: typeID) || typeID.isSameOrDescendant(of: seedID)
-					}
-				}
+				let isRelated = entry.type.contains(where: { typeID in
+					seedIDSet.contains(where: { seedID in
+						seedID.isSameOrDescendant(of: typeID) ||
+						typeID.isSameOrDescendant(of: seedID)
+					})
+				})
 				if isRelated {
 					add(entry.id)
 				}
@@ -688,10 +812,9 @@ public extension Lexicon.Search {
 		}
 
 		@LexiconActor private func resolvedSearchEntries(in document: Lexicon.Document) throws -> [Entry] {
-			let rootName = options.root?
-				.split(separator: ".", maxSplits: 1)
-				.first
-				.map(String.init)
+			guard let rootName = try selectedRoot(in: document) else {
+				return []
+			}
 			let lexicon = try Lexicon.temporary(from: document, root: rootName)
 			let roots: [Lemma]
 			if let root = options.root {
@@ -722,6 +845,25 @@ public extension Lexicon.Search {
 			}
 
 			return entries
+		}
+
+		private func selectedRoot(
+			in document: Lexicon.Document
+		) throws -> Lemma.Name? {
+			if let explicit = options.root?.root {
+				guard document.roots[explicit] != nil else {
+					throw LexiconError(
+						"Search root '\(explicit)' is not declared by the document"
+					)
+				}
+				return explicit
+			}
+			guard document.roots.count <= 1 else {
+				throw LexiconError(
+					"Searching a multi-root document in \(options.scope.rawValue) scope requires an explicit root"
+				)
+			}
+			return document.roots.keys.first
 		}
 	}
 
@@ -831,8 +973,8 @@ private extension Lexicon.Document {
 
 	func searchEntries(options: Lexicon.Search.Options) -> [Lexicon.Search.Entry] {
 		var entries: [Lexicon.Search.Entry] = []
-		for root in roots.values {
-			root.traverse { id, _, node in
+		for (rootName, root) in roots {
+			root.traverse(id: Lemma.ID(root: rootName)) { id, _, node in
 				guard options.root.map({ id.isSameOrDescendant(of: $0) }) ?? true else {
 					return
 				}
@@ -845,7 +987,7 @@ private extension Lexicon.Document {
 
 private extension Lexicon.Graph.Node {
 
-	var searchSignature: String {
+	func searchSignature(name: Lemma.Name) -> String {
 		let defaultSignature: String
 		switch defaultValue {
 			case .reference(let id):
@@ -856,33 +998,45 @@ private extension Lexicon.Graph.Node {
 				defaultSignature = ""
 		}
 		return [
-			name,
-			protonym ?? "",
-			type.sorted().joined(separator: "|"),
+			name.rawValue,
+			protonym?.description ?? "",
+			type.sorted().map(\.description).joined(separator: "|"),
 			defaultSignature,
-			children.keys.joined(separator: "|"),
+			children.keys.map(\.rawValue).joined(separator: "|"),
 		].joined(separator: ":")
 	}
 
-	func searchEntry(id: String, options: Lexicon.Search.Options) -> Lexicon.Search.Entry {
+	func searchEntry(id: Lemma.ID, options: Lexicon.Search.Options) -> Lexicon.Search.Entry {
+		let name = id.name
+		let absoluteProtonym = protonym.flatMap { reference in
+			id.parent?.appending(reference)
+		}
 		var fields = [
-			Lexicon.Search.Document(field: .id, value: id, weight: 6.0),
-			Lexicon.Search.Document(field: .name, value: name, weight: 8.0),
+			Lexicon.Search.Document(field: .id, value: id.description, weight: 6.0),
+			Lexicon.Search.Document(field: .name, value: name.rawValue, weight: 8.0),
 		]
 
 		if options.includeReferences {
 			fields.append(contentsOf: type.sorted().map {
-				Lexicon.Search.Document(field: .type, value: $0, weight: 4.0)
+				Lexicon.Search.Document(field: .type, value: $0.description, weight: 4.0)
 			})
 			if let protonym {
-				fields.append(.init(field: .protonym, value: protonym, weight: 4.0))
+				fields.append(.init(
+					field: .protonym,
+					value: protonym.description,
+					weight: 4.0
+				))
 			}
 		}
 
 		if options.includeDefaults, let defaultValue {
 			switch defaultValue {
 				case .reference(let id):
-					fields.append(.init(field: .defaultReference, value: id, weight: 4.0))
+					fields.append(.init(
+						field: .defaultReference,
+						value: id.description,
+						weight: 4.0
+					))
 				case .literal(let value):
 					fields.append(.init(field: .defaultLiteral, value: value.searchText, weight: 1.5))
 			}
@@ -908,7 +1062,7 @@ private extension Lexicon.Graph.Node {
 			name: name,
 			fields: fields,
 			type: type.sorted(),
-			protonym: protonym,
+			protonym: absoluteProtonym,
 			defaultValue: defaultValue.map(Lexicon.Graph.Node.DefaultValue.JSON.init),
 			notes: notes,
 			comments: comments,
@@ -923,7 +1077,7 @@ private extension Lemma {
 		if isGraphNode {
 			return "graph:\(id)"
 		}
-		return "inherited:\(node.searchSignature)"
+		return "inherited:\(node.searchSignature(name: name))"
 	}
 
 	func searchTraversal(
@@ -972,17 +1126,29 @@ private extension Lemma {
 		var fields = base.fields
 
 		for ancestor in id.ancestorIDs.dropLast() {
-			fields.append(.init(field: .ancestor, value: ancestor, weight: 2.5))
+			fields.append(.init(
+				field: .ancestor,
+				value: ancestor.description,
+				weight: 2.5
+			))
 		}
 
 		let resolvedType = Array(type.keys).sorted()
 		if options.includeReferences {
 			for typeID in resolvedType where !base.type.contains(typeID) {
-				fields.append(.init(field: .type, value: typeID, weight: 3.5))
+				fields.append(.init(
+					field: .type,
+					value: typeID.description,
+					weight: 3.5
+				))
 			}
 			let sourceID = source.id
 			if sourceID != id {
-				fields.append(.init(field: .protonym, value: sourceID, weight: 3.5))
+				fields.append(.init(
+					field: .protonym,
+					value: sourceID.description,
+					weight: 3.5
+				))
 			}
 		}
 
@@ -1012,7 +1178,7 @@ private extension Lemma {
 			name: name,
 			fields: fields.uniqued(),
 			type: resolvedType,
-			protonym: protonym?.unwrapped.id,
+			protonym: protonym?.id,
 			defaultValue: defaultValue.map(Lexicon.Graph.Node.DefaultValue.JSON.init),
 			notes: node.notes,
 			comments: node.comments,
@@ -1026,7 +1192,11 @@ private extension Lexicon.Graph.Node.DefaultValue {
 	func searchDocument(weight: Double) -> Lexicon.Search.Document {
 		switch self {
 			case .reference(let id):
-				return .init(field: .defaultReference, value: id, weight: weight)
+				return .init(
+					field: .defaultReference,
+					value: id.description,
+					weight: weight
+				)
 			case .literal(let value):
 				return .init(field: .defaultLiteral, value: value.searchText, weight: weight)
 		}
@@ -1349,6 +1519,19 @@ private extension String {
 		}
 		return parts.indices.map { index in
 			parts[...index].joined(separator: ".")
+		}
+	}
+}
+
+private extension Lemma.ID {
+
+	func isSameOrDescendant(of ancestor: Self) -> Bool {
+		self == ancestor || isDescendant(of: ancestor)
+	}
+
+	var ancestorIDs: [Self] {
+		components.indices.map { index in
+			try! Self(components: Array(components[...index]))
 		}
 	}
 }

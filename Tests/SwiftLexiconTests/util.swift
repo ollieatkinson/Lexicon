@@ -19,7 +19,11 @@ extension String {
 	}
 	
 	func lexicon() async throws -> Lexicon {
-		try await Lexicon.from(TaskPaper(self).decode())
+		let document = try TaskPaper(self).decodeDocument()
+		guard let root = document.roots.keys.first else {
+			throw LexiconError("A lexicon document must declare a root")
+		}
+		return try await Lexicon(document: document, selectedRoot: root)
 	}
 }
 

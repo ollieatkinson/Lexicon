@@ -25,7 +25,21 @@ public enum GoStandAloneGenerator: SourceCodeGenerator {
 private extension Lexicon.Graph.JSON {
 
 	func go(packageName: String) throws -> String {
-		try SourceTemplate(
+		try validateStandAloneSymbols(prefixes: .default)
+		let rootSelector = name.goSelector
+		guard !["I", "L", "Lemma"].contains(rootSelector) else {
+			throw GoGenerationError.reservedSelector(owner: nil, selector: rootSelector)
+		}
+		for type in classes where type.mixin == nil {
+			for accessor in try type.standAloneGeneratedAccessors(classes: classes)
+			where ["ID", "L", "Localized"].contains(accessor.name.goSelector) {
+				throw GoGenerationError.reservedSelector(
+					owner: type.id,
+					selector: accessor.name.goSelector
+				)
+			}
+		}
+		return try SourceTemplate(
 			"""
 		package {{packageName}}
 
@@ -68,7 +82,7 @@ private extension Lexicon.Graph.JSON {
 			"packageName": try packageName.goPackageName,
 			"rootVariable": name.goSelector,
 			"rootType": name.goTypeSuffix,
-			"rootID": name,
+			"rootID": name.rawValue,
 			"types": try classes.flatMap { try $0.go(classes: classes) }.joined(separator: "\n\n"),
 		]) + "\n"
 	}
@@ -84,16 +98,20 @@ private extension Lexicon.Graph.Node.Class.JSON {
 		let type = "L_\(id.goTypeSuffix)"
 
 		if let protonym = protonym {
+			let canonicalID = try classes.standAloneCanonicalID(
+				for: protonym,
+				referencedBy: id
+			)
 			return [
 				try SourceTemplate("type {{type}} = L_{{protonym}}").render([
 					"type": type,
-					"protonym": protonym.goTypeSuffix,
+					"protonym": canonicalID.goTypeSuffix,
 				])
 			]
 		}
 
-		let ownAccessors = standAloneAccessors()
-		let inheritedAccessors = standAloneInheritedAccessors(classes: classes)
+		let ownAccessors = try standAloneAccessors(classes: classes)
+		let inheritedAccessors = try standAloneInheritedAccessors(classes: classes)
 			.filter { inherited in !ownAccessors.contains(where: { $0.name == inherited.name }) }
 		try (ownAccessors + inheritedAccessors).validateUniqueGoSelectors(owner: id)
 
@@ -115,7 +133,7 @@ private extension Lexicon.Graph.Node.Class.JSON {
 				"""
 			).render([
 				"type": type,
-				"localized": id,
+				"localized": id.description,
 				"fields": ownAccessors
 					.map { "\n\t\($0.name.goSelector) L_\($0.sourceID.goTypeSuffix)" }
 					.joined(),
@@ -154,16 +172,16 @@ private extension StandAloneAccessor {
 
 private extension Array where Element == StandAloneAccessor {
 
-	func validateUniqueGoSelectors(owner: String) throws {
-		var selectors: [String: String] = [:]
+	func validateUniqueGoSelectors(owner: Lemma.ID) throws {
+		var selectors: [String: Lemma.Name] = [:]
 		for accessor in self {
 			let selector = accessor.name.goSelector
 			if let existing = selectors[selector], existing != accessor.name {
 				throw GoGenerationError.selectorCollision(
 					owner: owner,
 					selector: selector,
-					first: existing,
-					second: accessor.name
+					first: existing.rawValue,
+					second: accessor.name.rawValue
 				)
 			}
 			selectors[selector] = accessor.name
@@ -185,10 +203,13 @@ private extension String {
 	}
 
 	var goIdentifier: String {
-		let sanitized = map { character -> Character in
-			character.isLetter || character.isNumber ? character : "_"
+		let normalized = precomposedStringWithCanonicalMapping
+		let sanitized = normalized.unicodeScalars.map { scalar -> String in
+			scalar == "_" || scalar.isGoIdentifierLetter || scalar.isGoIdentifierDigit
+				? String(scalar)
+				: "_"
 		}
-		return String(sanitized).unlessEmpty ?? "lexicon"
+		return sanitized.joined().unlessEmpty ?? "lexicon"
 	}
 
 	var goSelector: String {
@@ -204,10 +225,16 @@ private extension String {
 
 	var goPackageName: String {
 		get throws {
-			guard self == goIdentifier, first?.isNumber != true, !isGoKeyword else {
+			let identifier = goIdentifier
+			guard
+				self == identifier,
+				identifier != "_",
+				identifier.first?.isNumber != true,
+				!identifier.isGoKeyword
+			else {
 				throw GoGenerationError.invalidPackageName(self)
 			}
-			return self
+			return identifier
 		}
 	}
 
@@ -225,14 +252,49 @@ private extension String {
 	}
 }
 
+private extension Unicode.Scalar {
+
+	var isGoIdentifierLetter: Bool {
+		switch properties.generalCategory {
+			case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter,
+				.modifierLetter, .otherLetter:
+				return true
+			default:
+				return false
+		}
+	}
+
+	var isGoIdentifierDigit: Bool {
+		properties.generalCategory == .decimalNumber
+	}
+}
+
+private extension Lemma.Name {
+
+	var goTypeSuffix: String { rawValue.goTypeSuffix }
+	var goSelector: String { rawValue.goSelector }
+}
+
+private extension Lemma.ID {
+
+	var goTypeSuffix: String { description.goTypeSuffix }
+}
+
 private enum GoGenerationError: Error, CustomStringConvertible {
 	case invalidPackageName(String)
-	case selectorCollision(owner: String, selector: String, first: String, second: String)
+	case reservedSelector(owner: Lemma.ID?, selector: String)
+	case selectorCollision(owner: Lemma.ID, selector: String, first: String, second: String)
 
 	var description: String {
 		switch self {
 		case .invalidPackageName(let packageName):
 			"'\(packageName)' is not a valid Go package name."
+		case .reservedSelector(let owner, let selector):
+			if let owner {
+				"Go reserves selector '\(selector)' in generated class '\(owner)'."
+			} else {
+				"Go root selector '\(selector)' conflicts with a generated base type."
+			}
 		case .selectorCollision(let owner, let selector, let first, let second):
 			"""
 			Go selector collision in '\(owner)': '\(first)' and '\(second)' both generate '\(selector)'.

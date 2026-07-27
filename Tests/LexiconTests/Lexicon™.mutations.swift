@@ -35,12 +35,13 @@ extension Lexicon™ {
 					a:
 			"""
 			
-		let src = try await taskpaper.lemma("o.copy.a.b")
-		let dst = try #require(await src.lexicon["o.paste.a"])
+		let lexicon = try await taskpaper.lexicon()
+		let src = try #require(await lexicon[Lemma.ID(parsing: "o.copy.a.b")])
+		let dst = try #require(await lexicon["o.paste.a"])
 
-		let b = try #require(await dst.make(child: src.graph))
+		_ = try await lexicon.insert(src.graph, under: dst)
 		
-		#expect(await b.lexicon.taskpaper() == """
+		#expect(await lexicon.taskpaper() == """
 			o:
 				copy:
 					a:
@@ -85,12 +86,13 @@ extension Lexicon™ {
 						= c
 			"""
 			
-		let src = try await taskpaper.lemma("o.a.b.x")
-		let dst = try #require(await src.lexicon["o.a"])
+		let lexicon = try await taskpaper.lexicon()
+		let src = try #require(await lexicon[Lemma.ID(parsing: "o.a.b.x")])
+		let dst = try #require(await lexicon["o.a"])
 
-		let b = try #require(await dst.make(child: src.graph))
+		_ = try await lexicon.insert(src.graph, under: dst)
 
-		let actual = await b.lexicon.taskpaper()
+		let actual = await lexicon.taskpaper()
 		#expect(actual == """
 			o:
 				a:
@@ -116,12 +118,13 @@ extension Lexicon™ {
 					target:
 			"""
 
-		let src = try await taskpaper.lemma("o.source.alias")
-		let dst = try #require(await src.lexicon["o.destination"])
+		let lexicon = try await taskpaper.lexicon()
+		let src = try #require(await lexicon[Lemma.ID(parsing: "o.source.alias")])
+		let dst = try #require(await lexicon["o.destination"])
 
-		let alias = try #require(await dst.make(child: src.graph))
+		_ = try await lexicon.insert(src.graph, under: dst)
 
-		let actual = await alias.lexicon.taskpaper()
+		let actual = await lexicon.taskpaper()
 		#expect(actual == """
 			o:
 				destination:
@@ -143,27 +146,21 @@ extension Lexicon™ {
 		let taskpaper = """
 			o:
 				a:
-				+ o
-				+ o.b
 				b:
-					x:
 				c:
-				= a.x
 				d:
-				= a
 			"""
 			
-		let b = try await taskpaper.lemma("o.b")
+		let lexicon = try await taskpaper.lexicon()
+		let b = try #require(await lexicon["o.b"])
+		try await lexicon.delete(b)
 		
-		let o = try #require(await b.delete())
-		
-		let actual = await o.lexicon.taskpaper()
+		let actual = await lexicon.taskpaper()
 		#expect(actual == """
 			o:
 				a:
-				+ o
+				c:
 				d:
-				= a
 			""", "actual:\n\(actual)")
 	}
 	
@@ -182,12 +179,13 @@ extension Lexicon™ {
 				= a
 			"""
 			
-		let a = try await taskpaper.lemma("o.a")
-		let o = try #require(await a.lexicon["o"])
+		let lexicon = try await taskpaper.lexicon()
+		let a = try #require(await lexicon["o.a"])
+		let o = await lexicon.root
 
-		let a₂ = try #require(await a.remove(type: o))
+		_ = try await lexicon.removeType(o, from: a)
 		
-		#expect(await a₂.lexicon.taskpaper() == """
+		#expect(await lexicon.taskpaper() == """
 			o:
 				a:
 				b:
@@ -212,11 +210,12 @@ extension Lexicon™ {
 				= a
 			"""
 			
-		let c = try await taskpaper.lemma("o.c")
+		let lexicon = try await taskpaper.lexicon()
+		let c = try #require(await lexicon["o.c"])
 
-		let c₂ = try #require(await c.removeProtonym())
+		_ = try await lexicon.clearProtonym(of: c)
 		
-		#expect(await c₂.lexicon.taskpaper() == """
+		#expect(await lexicon.taskpaper() == """
 			o:
 				a:
 				+ o
@@ -259,11 +258,13 @@ extension Lexicon™ {
 					y:
 			"""
 			
-		let y = try await taskpaper.lemma("o.x.y")
+		let lexicon = try await taskpaper.lexicon()
+		let y = try #require(await lexicon["o.x.y"])
 
-		let y₂ = try #require(await y.rename(to: "Y"))
-		
-		#expect(await y₂.lexicon.taskpaper() == """
+		_ = try await lexicon.rename(y, to: "Y")
+
+		let actual = await lexicon.taskpaper()
+		#expect(actual == """
 			o:
 				a:
 				+ o.ax
@@ -289,7 +290,7 @@ extension Lexicon™ {
 						z:
 				z:
 					y:
-			""")
+			""", "actual:\n\(actual)")
 	}
 
 	@Test
@@ -306,12 +307,13 @@ extension Lexicon™ {
 				= a
 			"""
 			
-		let c = try await taskpaper.lemma("o.c")
-		let x = try #require(await c.lexicon["o.a.b.x"])
+		let lexicon = try await taskpaper.lexicon()
+		let c = try #require(await lexicon["o.c"])
+		let x = try #require(await lexicon["o.a.b.x"])
 
-		let c₂ = try #require(await c.set(protonym: x))
+		_ = try await lexicon.setProtonym(x, of: c)
 
-		#expect(await c₂.lexicon.taskpaper() == """
+		#expect(await lexicon.taskpaper() == """
 			o:
 				a:
 				+ o

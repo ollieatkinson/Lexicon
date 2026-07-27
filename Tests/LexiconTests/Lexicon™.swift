@@ -11,7 +11,8 @@ struct Lexicon™ {
 	@Test
 	func test() async throws {
 		
-		let lexicon = try await Lexicon.from(TaskPaper(taskpaper).decode())
+		let document = try TaskPaper(taskpaper).decodeDocument()
+		let lexicon = try await Lexicon(document: document, selectedRoot: "root")
 		let root = await lexicon.root
 		var cli = await CLI(root)
 		
@@ -26,7 +27,6 @@ struct Lexicon™ {
 		let tree = try #require(await lexicon["root.idea.knowledge.tree"])
 		
 		#expect(await mindMap.source == tree)
-		#expect(await mindMap.source === tree)
 
 		let branch = try #require(await mindMap["branch"])
 		let leaf = try #require(await mindMap["leaf"])

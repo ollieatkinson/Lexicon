@@ -42,10 +42,32 @@ describe("server command resolution", () => {
 		const command = resolveServerCommand(
 			{ arguments: [], env: {} },
 			[workspace],
+			true,
 			"/path",
 			(file) => file === workspaceCommand
 		);
 		assert.strictEqual(command, workspaceCommand);
+	});
+
+	it("does not inspect or resolve any server command before workspace trust", () => {
+		let inspectedExecutable = false;
+		const command = resolveServerCommand(
+			{
+				path: "bin/lexicon-lsp",
+				arguments: ["--workspace-controlled"],
+				env: { WORKSPACE_CONTROLLED: "true" },
+			},
+			[workspace],
+			false,
+			"/path",
+			() => {
+				inspectedExecutable = true;
+				return true;
+			}
+		);
+
+		assert.strictEqual(command, undefined);
+		assert.strictEqual(inspectedExecutable, false);
 	});
 });
 

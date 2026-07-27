@@ -142,11 +142,11 @@ let benchmarks: @Sendable () -> Void = {
 	}
 
 	Benchmark("CRDT materialize operation set", configuration: benchmarkConfiguration()) { benchmark in
-		let replica = makeReplica(nodes: 320)
+		let replica = try makeReplica(nodes: 320)
 
 		benchmark.startMeasurement()
 		for _ in benchmark.scaledIterations {
-			blackHole(replica.materialized())
+			blackHole(try replica.materialized())
 		}
 		benchmark.stopMeasurement()
 	}
@@ -318,26 +318,30 @@ private func makeMergeDocuments(count: Int, children: Int) throws -> [Lexicon.Do
 	}
 }
 
-private func makeReplica(nodes: Int) -> Lexicon.CRDT.Replica {
+private func makeReplica(nodes: Int) throws -> Lexicon.CRDT.Replica {
 	var replica = Lexicon.CRDT.Replica()
 	var counter: UInt64 = 0
 
-	func apply(_ kind: Lexicon.CRDT.Kind) {
+	func apply(_ kind: Lexicon.CRDT.Kind) throws {
 		counter += 1
-		replica.apply(.init(kind, id: .init(actor: "benchmark", counter: counter)))
+		try replica.apply(.init(
+			kind,
+			id: .init(timestamp: counter, actor: "benchmark")
+		))
 	}
 
-	apply(.setDocumentDate(Date(timeIntervalSince1970: 0)))
-	apply(.createNode(path: "root", parentPath: nil, name: "root"))
-	apply(.createNode(path: "root.type", parentPath: "root", name: "type"))
-	apply(.createNode(path: "root.type.value", parentPath: "root.type", name: "value"))
+	try apply(.setDocumentDate(Date(timeIntervalSince1970: 0)))
+	try apply(.createNode(path: "root", parentPath: nil, name: "root"))
+	try apply(.createNode(path: "root.type", parentPath: "root", name: "type"))
+	try apply(.createNode(path: "root.type.value", parentPath: "root.type", name: "value"))
 
 	for index in 0..<nodes {
-		let path = "root.node\(index)"
-		apply(.createNode(path: path, parentPath: "root", name: "node\(index)"))
-		apply(.addTypeReference(path: path, type: "root.type.value"))
-		apply(.setDefaultValue(path: path, value: .literal(.string("value \(index)"))))
-		apply(.addNote(path: path, noteID: "note\(index)", text: "note \(index)"))
+		let path = try Lemma.ID(parsing: "root.node\(index)")
+		let name = try Lemma.Name(validating: "node\(index)")
+		try apply(.createNode(path: path, parentPath: "root", name: name))
+		try apply(.addTypeReference(path: path, type: "root.type.value"))
+		try apply(.setDefaultValue(path: path, value: .literal(.string("value \(index)"))))
+		try apply(.insertNote(path: path, after: nil, text: "note \(index)"))
 	}
 
 	return replica

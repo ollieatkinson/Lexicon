@@ -151,7 +151,7 @@ private struct EventObservationRequest: Sendable {
 
 	init<A>(_ type: A.Type) {
 		self.init(id: .type(ObjectIdentifier(type))) { event in
-			event.is(type)
+			event.matches(type)
 		}
 	}
 

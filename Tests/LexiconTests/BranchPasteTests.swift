@@ -14,7 +14,7 @@ struct BranchPasteTests {
 	@Test
 	func test_branch_export_rewrites_internal_references_and_reports_external_references() async throws {
 
-		let lexicon = try await Lexicon.from(TaskPaper("""
+		let document = try TaskPaper("""
 			root:
 				shared:
 					kind:
@@ -25,7 +25,8 @@ struct BranchPasteTests {
 					? @ root.branch.kind
 					external:
 					+ root.shared.kind
-			""").decodeDocument())
+			""").decodeDocument()
+		let lexicon = try await Lexicon(document: document, selectedRoot: "root")
 
 		let branch = try #require(await lexicon["root.branch"])
 		let exported = await branch.exportBranchDocument()
@@ -49,12 +50,13 @@ struct BranchPasteTests {
 	@Test
 	func test_paste_rewrites_branch_internal_references_at_destination() async throws {
 
-		let lexicon = try await Lexicon.from(TaskPaper("""
+		let document = try TaskPaper("""
 			root:
 				anchor:
 				outside:
 					type:
-			""").decodeDocument())
+			""").decodeDocument()
+		let lexicon = try await Lexicon(document: document, selectedRoot: "root")
 		let branch = try TaskPaper("""
 			branch:
 				kind:
@@ -62,24 +64,24 @@ struct BranchPasteTests {
 				+ branch.kind
 				? @ branch.kind
 				external:
-				+ outside.type
+				+ root.outside.type
 			""").decodeDocument()
 		#expect(Array(branch.roots.keys) == ["branch"])
 
 		let anchor = try #require(await lexicon["root.anchor"])
-		let result = await lexicon.paste(branch, to: anchor)
+		let result = try await lexicon.paste(branch, root: "branch", to: anchor)
 		let encoded = await TaskPaper.encode(lexicon.document)
 
 		#expect(result.lemmaID == "root.anchor.branch")
 		#expect(result.diagnostics == [
-			.init(kind: .externalType, path: "branch.external", reference: "outside.type"),
+			.init(kind: .externalType, path: "branch.external", reference: "root.outside.type"),
 		])
 		#expect(encoded == """
 			root:
 				anchor:
 					branch:
 						external:
-						+ outside.type
+						+ root.outside.type
 						item:
 						? @ root.anchor.branch.kind
 						+ root.anchor.branch.kind

@@ -16,7 +16,7 @@ public enum SKOSJSONLD: CodeGenerator {
 	public static func generate(_ json: Lexicon.Graph.JSON) throws -> Data {
 		let encoder = JSONClasses.Encoder()
 		encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-		return try encoder.encode(Document(json))
+		return try encoder.encode(try Document(json))
 	}
 }
 
@@ -26,18 +26,24 @@ private extension SKOSJSONLD {
 		var context: Context = .init()
 		var graph: [Concept]
 
-		init(_ json: Lexicon.Graph.JSON) {
+		init(_ json: Lexicon.Graph.JSON) throws {
 			let concepts = json.classes.filter { $0.mixin == nil && $0.protonym == nil }
-			let aliases = concepts.reduce(into: [String: [Alias]]()) { aliases, concept in
+			var aliases: [Lemma.ID: [Alias]] = [:]
+			for concept in concepts {
 				for (name, protonym) in concept.synonyms ?? [:] {
-					let protonymID = "\(concept.id).\(protonym)"
-					aliases[protonymID, default: []].append(
-						Alias(name: name, protonym: protonymID)
+					let aliasName = try Lemma.Name(validating: name)
+					let immediateID = concept.id.appending(protonym)
+					let canonicalID = try json.classes.standAloneCanonicalID(
+						for: immediateID,
+						referencedBy: concept.id.appending(aliasName)
+					)
+					aliases[canonicalID, default: []].append(
+						Alias(name: aliasName.rawValue, protonym: canonicalID.description)
 					)
 				}
 			}
 			let narrowerIDs = Dictionary(uniqueKeysWithValues: concepts.map { concept in
-				(concept.id, (concept.children ?? []).map { "\(concept.id).\($0)" })
+				(concept.id, (concept.children ?? []).map { concept.id.appending($0) })
 			})
 			self.graph = concepts
 				.map { Concept($0, narrower: narrowerIDs[$0.id] ?? [], aliases: aliases[$0.id] ?? []) }
@@ -67,14 +73,11 @@ private extension SKOSJSONLD {
 		var note: [String]?
 		var defaultValue: Lexicon.Graph.Node.DefaultValue.JSON?
 
-		init(_ concept: Lexicon.Graph.Node.Class.JSON, narrower: [String], aliases: [Alias]) {
-			self.id = concept.id
-			self.prefLabel = concept.id
-				.split(separator: ".")
-				.last
-				.map(String.init)?
-				.replacingOccurrences(of: "_", with: " ") ?? concept.id
-			self.broader = concept.id.parentID.map(Reference.init)
+		init(_ concept: Lexicon.Graph.Node.Class.JSON, narrower: [Lemma.ID], aliases: [Alias]) {
+			self.id = concept.id.description
+			self.prefLabel = concept.id.name.rawValue
+				.replacingOccurrences(of: "_", with: " ")
+			self.broader = concept.id.parent.map(Reference.init)
 			self.narrower = narrower
 				.sorted()
 				.map(Reference.init)
@@ -111,8 +114,8 @@ private extension SKOSJSONLD {
 	struct Reference: Codable {
 		var id: String
 
-		init(_ id: String) {
-			self.id = id
+		init(_ id: Lemma.ID) {
+			self.id = id.description
 		}
 
 		private enum CodingKeys: String, CodingKey {
@@ -123,15 +126,5 @@ private extension SKOSJSONLD {
 	struct Alias: Codable {
 		var name: String
 		var protonym: String
-	}
-}
-
-private extension String {
-
-	var parentID: String? {
-		guard let index = lastIndex(of: ".") else {
-			return nil
-		}
-		return String(prefix(upTo: index))
 	}
 }

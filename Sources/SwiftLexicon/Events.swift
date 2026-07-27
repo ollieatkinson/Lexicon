@@ -9,13 +9,87 @@ public final class Events: Identifiable, Sendable {
 
 	private struct State: Sendable {
 		var nextID: UInt64 = 0
+		var sequence: UInt64 = 0
+		var isFinished = false
 		var continuations: [UInt64: AsyncStream<Event>.Continuation] = [:]
-		var delivery: Task<Void, Never>?
 	}
 
+	/// Controls how each observer buffers events while it is slower than the sender.
+	public enum BufferingPolicy: Hashable, Sendable {
+		/// Retain every pending event.
+		case unbounded
+		/// Retain the newest `capacity` events and drop the oldest pending event when full.
+		case newest(Int)
+		/// Retain the oldest `capacity` events and drop each newly sent event when full.
+		case oldest(Int)
+	}
+
+	/// Describes how a synchronous send was handled by the current observers.
+	public struct SendReceipt: Hashable, Sendable {
+		/// The monotonically increasing sequence assigned to this accepted send.
+		public let sequence: UInt64
+		/// Observers whose continuation accepted without overflowing its buffer.
+		public let enqueuedObservers: Int
+		/// Observers whose buffer overflowed. `.oldest` rejected this event;
+		/// `.newest` accepted it while displacing the oldest pending event.
+		public let droppedObservers: Int
+		/// Observers whose continuation had already terminated.
+		public let terminatedObservers: Int
+
+		public init(
+			sequence: UInt64,
+			enqueuedObservers: Int,
+			droppedObservers: Int,
+			terminatedObservers: Int
+		) {
+			self.sequence = sequence
+			self.enqueuedObservers = enqueuedObservers
+			self.droppedObservers = droppedObservers
+			self.terminatedObservers = terminatedObservers
+		}
+	}
+
+	public enum Error: Swift.Error, Equatable, Sendable, CustomStringConvertible {
+		case invalidBufferCapacity(Int)
+		case finished
+
+		public var description: String {
+			switch self {
+			case .invalidBufferCapacity(let capacity):
+				"Event buffer capacity must be positive, received \(capacity)."
+			case .finished:
+				"Cannot send an event after the event stream has finished."
+			}
+		}
+	}
+
+	private let bufferingPolicy: BufferingPolicy
+	private let delivery = Mutex(())
 	private let state = Mutex(State())
 
-	public init() {}
+	/// Creates an event bus that retains the oldest 256 pending events per observer.
+	public init() {
+		self.bufferingPolicy = .oldest(256)
+	}
+
+	/// Creates an event bus with an explicit per-observer buffering policy.
+	///
+	/// Bounded policies require a positive capacity.
+	public init(bufferingPolicy: BufferingPolicy) throws {
+		switch bufferingPolicy {
+		case .unbounded:
+			break
+		case .newest(let capacity), .oldest(let capacity):
+			guard capacity > 0 else {
+				throw Error.invalidBufferCapacity(capacity)
+			}
+		}
+		self.bufferingPolicy = bufferingPolicy
+	}
+
+	deinit {
+		finish()
+	}
 
 	public var id: ObjectIdentifier {
 		ObjectIdentifier(self)
@@ -25,34 +99,65 @@ public final class Events: Identifiable, Sendable {
 		makeStream().stream
 	}
 
-	@discardableResult public func send(_ event: Event) -> Task<Void, Never> {
-		state.withLock { state in
-			let continuations = Array(state.continuations.values)
-			let previous = state.delivery
-			let delivery = Task {
-				await previous?.value
-				guard !Task.isCancelled else {
-					return
+	/// Publishes an event synchronously to every current observer.
+	///
+	/// Sends are serialized with other sends and ``finish()``. The returned receipt
+	/// reports each continuation's yield result.
+	@discardableResult public func send(_ event: Event) throws -> SendReceipt {
+		try delivery.withLock { _ in
+			let (sequence, continuations) = try state.withLock { state in
+				guard !state.isFinished else {
+					throw Error.finished
 				}
-				for continuation in continuations {
-					continuation.yield(event)
+				state.sequence += 1
+				return (state.sequence, Array(state.continuations.values))
+			}
+
+			var enqueued = 0
+			var dropped = 0
+			var terminated = 0
+			for continuation in continuations {
+				switch continuation.yield(event) {
+				case .enqueued:
+					enqueued += 1
+				case .dropped:
+					dropped += 1
+				case .terminated:
+					terminated += 1
+				@unknown default:
+					terminated += 1
 				}
 			}
-			state.delivery = delivery
-			return delivery
+			return SendReceipt(
+				sequence: sequence,
+				enqueuedObservers: enqueued,
+				droppedObservers: dropped,
+				terminatedObservers: terminated
+			)
 		}
 	}
 
-	public func finish() {
-		let (continuations, delivery) = state.withLock { state in
-			defer { state.continuations.removeAll() }
-			let delivery = state.delivery
-			state.delivery = nil
-			return (Array(state.continuations.values), delivery)
-		}
-		delivery?.cancel()
-		for continuation in continuations {
-			continuation.finish()
+	/// Closes the bus after all previously accepted events.
+	///
+	/// Buffered events remain available to observers before their streams end.
+	/// The first call returns `true`; later calls return `false`.
+	@discardableResult public func finish() -> Bool {
+		delivery.withLock { _ in
+			let continuations = state.withLock { state -> [AsyncStream<Event>.Continuation]? in
+				guard !state.isFinished else {
+					return nil
+				}
+				state.isFinished = true
+				defer { state.continuations.removeAll() }
+				return Array(state.continuations.values)
+			}
+			guard let continuations else {
+				return false
+			}
+			for continuation in continuations {
+				continuation.finish()
+			}
+			return true
 		}
 	}
 
@@ -65,11 +170,14 @@ public final class Events: Identifiable, Sendable {
 		perform action: @escaping @Sendable (Event) async -> Void
 	) -> Observer {
 		let observation = makeStream()
+		guard let observationID = observation.id else {
+			return .finished()
+		}
 		let state = Observer.State()
-		let task = Task { [weak self] in
+		let task = Task { @concurrent [weak self] in
 			defer {
 				state.finish()
-				self?.remove(continuation: observation.id)
+				self?.remove(continuation: observationID)
 			}
 			for await event in observation.stream {
 				guard !Task.isCancelled else {
@@ -82,22 +190,32 @@ public final class Events: Identifiable, Sendable {
 			}
 		}
 		return Observer(task, state: state) { [weak self] in
-			self?.remove(continuation: observation.id)
+			self?.remove(continuation: observationID)
 			observation.continuation.finish()
 		}
 	}
 
-	private func makeStream() -> (id: UInt64, stream: AsyncStream<Event>, continuation: AsyncStream<Event>.Continuation) {
-		let stream = AsyncStream<Event>.makeStream()
-		let id = insert(stream.continuation)
+	private func makeStream() -> (
+		id: UInt64?,
+		stream: AsyncStream<Event>,
+		continuation: AsyncStream<Event>.Continuation
+	) {
+		let stream = AsyncStream<Event>.makeStream(bufferingPolicy: bufferingPolicy.asyncStreamPolicy)
+		guard let id = insert(stream.continuation) else {
+			stream.continuation.finish()
+			return (nil, stream.stream, stream.continuation)
+		}
 		stream.continuation.onTermination = { [weak self] _ in
 			self?.remove(continuation: id)
 		}
 		return (id, stream.stream, stream.continuation)
 	}
 
-	private func insert(_ continuation: AsyncStream<Event>.Continuation) -> UInt64 {
+	private func insert(_ continuation: AsyncStream<Event>.Continuation) -> UInt64? {
 		state.withLock { state in
+			guard !state.isFinished else {
+				return nil
+			}
 			state.nextID += 1
 			state.continuations[state.nextID] = continuation
 			return state.nextID
@@ -107,6 +225,19 @@ public final class Events: Identifiable, Sendable {
 	private func remove(continuation id: UInt64) {
 		state.withLock { state in
 			_ = state.continuations.removeValue(forKey: id)
+		}
+	}
+}
+
+private extension Events.BufferingPolicy {
+	var asyncStreamPolicy: AsyncStream<Event>.Continuation.BufferingPolicy {
+		switch self {
+		case .unbounded:
+			.unbounded
+		case .newest(let capacity):
+			.bufferingNewest(capacity)
+		case .oldest(let capacity):
+			.bufferingOldest(capacity)
 		}
 	}
 }
@@ -195,6 +326,7 @@ public extension Events {
 
 		public func wait() async {
 			await task.value
+			state.finish()
 		}
 
 		public static func == (lhs: Observer, rhs: Observer) -> Bool {
@@ -264,7 +396,7 @@ public extension Events {
 		perform action: @escaping @Sendable (Event) async -> Void
 	) -> EventObserver {
 		on(where: { event in
-			event.is(type)
+			event.matches(type)
 		}, perform: action)
 	}
 
@@ -306,20 +438,6 @@ public extension Events {
 			matchers.contains { $0.matches(event) }
 		}, perform: action)
 	}
-}
-
-// MARK: send
-
-public func >> (event: Event, publisher: Events) {
-	publisher.send(event)
-}
-
-public func >> <A: L>(event: A, publisher: Events) {
-	publisher.send(Event(event))
-}
-
-public func >> <A: L>(event: K<A>, publisher: Events) {
-	publisher.send(Event(event))
 }
 
 // MARK: receive out of context

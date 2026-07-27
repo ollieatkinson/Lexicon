@@ -118,8 +118,7 @@ extension Lexicon.Search.Index {
 			Lexicon.Search.EmbeddingCache.self,
 			from: Data(contentsOf: url)
 		   ),
-		   cache.descriptor == provider.descriptor,
-		   cache.fingerprint == fingerprint
+		   isUsable(cache, for: provider)
 		{
 			return cache
 		}
@@ -134,8 +133,44 @@ extension Lexicon.Search.Index {
 		)
 		let encoder = JSONEncoder()
 		encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-		try encoder.encode(cache).write(to: url)
+		try encoder.encode(cache).write(to: url, options: .atomic)
 		return cache
+	}
+
+	private func isUsable(
+		_ cache: Lexicon.Search.EmbeddingCache,
+		for provider: some Lexicon.Search.EmbeddingProvider
+	) -> Bool {
+		guard
+			cache.version == Lexicon.Search.EmbeddingCache.currentVersion,
+			cache.descriptor == provider.descriptor,
+			cache.fingerprint == fingerprint,
+			Set(cache.vectors.keys) == Set(entries.map(\.id))
+		else {
+			return false
+		}
+		if let dimensions = provider.descriptor.dimensions, dimensions <= 0 {
+			return false
+		}
+
+		var observedDimensions: Int?
+		for vector in cache.vectors.values {
+			guard !vector.isEmpty, vector.allSatisfy(\.isFinite) else {
+				return false
+			}
+			if let dimensions = provider.descriptor.dimensions {
+				guard vector.count == dimensions else {
+					return false
+				}
+			} else if let observedDimensions {
+				guard vector.count == observedDimensions else {
+					return false
+				}
+			} else {
+				observedDimensions = vector.count
+			}
+		}
+		return true
 	}
 	#endif
 

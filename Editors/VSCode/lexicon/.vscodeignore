@@ -1,10 +1,8 @@
 src/**
-out/test/**
+out/**
+node_modules/**
 *.vsix
 .gitignore
 tsconfig.json
-out/**/*.map
-node_modules/**/.cache/**
-node_modules/**/test/**
-node_modules/**/tests/**
-node_modules/**/*.map
+package-lock.json
+dist/**/*.map

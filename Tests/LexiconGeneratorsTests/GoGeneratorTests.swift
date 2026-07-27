@@ -28,7 +28,7 @@ struct GoGeneratorTests {
 			func:
 			select:
 		"""
-		var json = try await Lexicon.from(TaskPaper(source).decode()).json()
+		var json = try await TaskPaper(source).lexicon().json()
 		json.date = Date(timeIntervalSinceReferenceDate: 0)
 
 		let code = try GoStandAloneGenerator.generate(json).string()
@@ -58,7 +58,7 @@ struct GoGeneratorTests {
 			type:
 			type_:
 		"""
-		var json = try await Lexicon.from(TaskPaper(source).decode()).json()
+		var json = try await TaskPaper(source).lexicon().json()
 		json.date = Date(timeIntervalSinceReferenceDate: 0)
 
 		let code = try GoStandAloneGenerator.generate(json).string()
@@ -76,7 +76,7 @@ struct GoGeneratorTests {
 			type:
 			Type:
 		"""
-		var json = try await Lexicon.from(TaskPaper(source).decode()).json()
+		var json = try await TaskPaper(source).lexicon().json()
 		json.date = Date(timeIntervalSinceReferenceDate: 0)
 
 		do {
@@ -90,6 +90,70 @@ struct GoGeneratorTests {
 	}
 
 	@Test
+	func test_generated_source_rejects_base_selector_collisions() async throws {
+		for source in [
+			"l:",
+			"lemma:",
+			"root:\n\tID:",
+			"root:\n\tL:",
+			"root:\n\tLocalized:",
+		] {
+			let json = try await source.lexicon().json()
+			do {
+				_ = try GoStandAloneGenerator.generateSource(json)
+				Issue.record("Expected Go base selector collision to throw.")
+			} catch {
+				#expect(String(describing: error).contains("Go"))
+				#expect(String(describing: error).contains("selector '"))
+			}
+		}
+	}
+
+	@Test
+	func test_protonym_chain_compiles_and_resolves_to_canonical_id() async throws {
+		guard Self.hasCommand("go"), Self.hasCommand("gofmt") else {
+			return
+		}
+		let json = try await """
+		root:
+			target:
+			alias1:
+			= target
+			alias2:
+			= alias1
+		""".lexicon().json()
+		let code = try GoStandAloneGenerator.generate(json)
+		let source = try code.string()
+
+		#expect(source.contains("type L_root_alias1 = L_root_target"))
+		#expect(source.contains("type L_root_alias2 = L_root_target"))
+		#expect(source.contains("l.Alias2 = new_L_root_target(id + \".target\")"))
+
+		let directory = FileManager.default.temporaryDirectory
+			.appendingPathComponent("LexiconGoProtonymTests-\(UUID().uuidString)")
+		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+		defer { try? FileManager.default.removeItem(at: directory) }
+
+		try code.write(to: directory.appendingPathComponent("lexicon.go"))
+		try Data("module lexicon.test\n\ngo 1.18\n".utf8)
+			.write(to: directory.appendingPathComponent("go.mod"))
+		try Data("""
+		package lexicon
+
+		import "testing"
+
+		func TestProtonymChain(t *testing.T) {
+			if Root.Alias2.ID() != "root.target" {
+				t.Fatalf("got %q", Root.Alias2.ID())
+			}
+		}
+		""".utf8).write(to: directory.appendingPathComponent("lexicon_test.go"))
+
+		try Self.run("gofmt -w .", in: directory)
+		try Self.run("go test .", in: directory)
+	}
+
+	@Test
 	func test_generated_type_names_preserve_path_separators() async throws {
 		let source = """
 		root:
@@ -97,13 +161,35 @@ struct GoGeneratorTests {
 			foo:
 				bar:
 		"""
-		var json = try await Lexicon.from(TaskPaper(source).decode()).json()
+		var json = try await TaskPaper(source).lexicon().json()
 		json.date = Date(timeIntervalSinceReferenceDate: 0)
 
 		let code = try GoStandAloneGenerator.generate(json).string()
 
 		#expect(code.contains("type L_root_foo__bar struct"))
 		#expect(code.contains("type L_root_foo_bar struct"))
+	}
+
+	@Test
+	func test_decomposed_lexicon_letters_generate_valid_go_identifiers() async throws {
+		let decomposedName = "e\u{301}"
+		let json = try await "root:\n\t\(decomposedName):".lexicon().json()
+		let code = try GoStandAloneGenerator.generate(json)
+		let source = try code.string()
+
+		#expect(source.contains("É L_root_é"))
+		#expect(!source.contains("\u{301}"))
+
+		guard Self.hasCommand("gofmt") else {
+			return
+		}
+		let directory = FileManager.default.temporaryDirectory
+			.appendingPathComponent("LexiconGoUnicodeTests-\(UUID().uuidString)")
+		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+		defer { try? FileManager.default.removeItem(at: directory) }
+
+		try code.write(to: directory.appendingPathComponent("lexicon.go"))
+		try Self.run("gofmt -w lexicon.go", in: directory)
 	}
 
 	@Test
@@ -121,11 +207,15 @@ struct GoGeneratorTests {
 		var json = try await "test".taskpaper().lexicon().json()
 		json.date = Date(timeIntervalSinceReferenceDate: 0)
 
-		do {
-			_ = try GoStandAloneGenerator.generateSource(json, packageName: "type")
-			Issue.record("Expected invalid Go package name to throw.")
-		} catch {
-			#expect(String(describing: error).contains("'type' is not a valid Go package name."))
+		for packageName in ["type", "_"] {
+			do {
+				_ = try GoStandAloneGenerator.generateSource(json, packageName: packageName)
+				Issue.record("Expected invalid Go package name to throw.")
+			} catch {
+				#expect(String(describing: error).contains(
+					"'\(packageName)' is not a valid Go package name."
+				))
+			}
 		}
 	}
 
@@ -252,7 +342,18 @@ extension String {
 	}
 
 	func lexicon() async throws -> Lexicon {
-		try await Lexicon.from(TaskPaper(self).decode())
+		try await TaskPaper(self).lexicon()
+	}
+}
+
+extension TaskPaper {
+
+	func lexicon() async throws -> Lexicon {
+		let document = try decodeDocument()
+		guard let selectedRoot = document.roots.keys.first else {
+			throw LexiconError("The document must contain a root")
+		}
+		return try await Lexicon(document: document, selectedRoot: selectedRoot)
 	}
 }
 

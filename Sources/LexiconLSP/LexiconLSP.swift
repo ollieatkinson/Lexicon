@@ -67,21 +67,24 @@ public struct LexiconPathIndex: Sendable {
 		baseURL: URL? = nil,
 		resolver: (any LexiconImportResolving)? = nil
 	) throws {
-		var document = try TaskPaper(lexiconText).decodeDocument()
+		var document = TaskPaper(lexiconText).parse().document
 		if let resolver {
 			document = try Self.composed(document, resolving: resolver)
-		} else if let baseURL {
-			document = try Self.composed(document, resolving: FileLexiconImportResolver(baseURL: baseURL))
+			} else if let baseURL {
+				document = try Self.composed(document, resolving: FileLexiconImportResolver(baseURL: baseURL))
 		}
 		self.init(document: document)
 	}
 
 	public init(lexiconURL: URL, resolver: (any LexiconImportResolving)? = nil) throws {
 		let document = try TaskPaper(Data(contentsOf: lexiconURL)).decodeDocument()
-		self.init(document: try Self.composed(
-			document,
-			resolving: resolver ?? FileLexiconImportResolver(baseURL: lexiconURL.deletingLastPathComponent())
-		))
+			self.init(document: try Self.composed(
+				document,
+				resolving: resolver ?? FileLexiconImportResolver(
+					baseURL: lexiconURL.deletingLastPathComponent(),
+					rootURL: lexiconURL
+				)
+			))
 	}
 
 	public init(document: Lexicon.Document) {
@@ -155,12 +158,15 @@ private struct LexiconPathGraph {
 
 	init(document: Lexicon.Document) {
 		for (name, root) in document.roots {
-			root.traverse(name: name) { item in
-				let parentComponents = item.id.split(separator: ".").dropLast()
-				let parentID = parentComponents.isEmpty ? nil : parentComponents.joined(separator: ".")
-				entries[item.id] = Entry(id: item.id, parentID: parentID, node: item.node)
+			root.traverse(id: Lemma.ID(root: name)) { item in
+				let id = item.id.description
+				entries[id] = Entry(
+					id: id,
+					parentID: item.id.parent?.description,
+					node: item.node
+				)
 			}
-			roots.append(name)
+			roots.append(name.description)
 		}
 	}
 
@@ -188,7 +194,10 @@ private struct LexiconPathGraph {
 			return [:]
 		}
 		if let protonym = entry.node.protonym {
-			guard let protonymSourceID = resolvedSourceID(protonym, fromParentOf: sourceID) else {
+			guard let protonymSourceID = resolvedSourceID(
+				protonym.description,
+				fromParentOf: sourceID
+			) else {
 				return [:]
 			}
 			guard active.contains(protonymSourceID) == false else {
@@ -199,11 +208,18 @@ private struct LexiconPathGraph {
 
 		var children = Dictionary(
 			uniqueKeysWithValues: entry.node.children.keys.map { name in
-				(name, "\(sourceID).\(name)")
+				(name.description, "\(sourceID).\(name)")
 			}
 		)
-		for typeID in entry.node.type.sorted() where active.contains(typeID) == false {
-			for (name, childSourceID) in childSources(for: typeID, active: active.union([typeID]))
+		for typedID in entry.node.type.sorted() {
+			let typeID = typedID.description
+			guard active.contains(typeID) == false else {
+				continue
+			}
+			for (name, childSourceID) in childSources(
+				for: typeID,
+				active: active.union([typeID])
+			)
 				where children[name] == nil
 			{
 				children[name] = childSourceID
@@ -213,11 +229,8 @@ private struct LexiconPathGraph {
 	}
 
 	private func resolvedSourceID(_ reference: String, fromParentOf sourceID: String) -> String? {
-		if let sourceID = self.sourceID(forPath: reference) {
-			return sourceID
-		}
 		guard let parentID = entries[sourceID]?.parentID else {
-			return self.sourceID(forPath: reference)
+			return nil
 		}
 		return self.sourceID(forPath: "\(parentID).\(reference)")
 	}
@@ -276,7 +289,9 @@ public struct LexiconLSPService: Sendable {
 					message: "Unknown Lexicon path '\($0.path)'."
 				)
 			}
-		return lexiconDocument ? LexiconDocumentSyntax.indentationDiagnostics(in: text) + pathDiagnostics : pathDiagnostics
+		return lexiconDocument
+			? LexiconDocumentSyntax.syntaxDiagnostics(in: text) + pathDiagnostics
+			: pathDiagnostics
 	}
 }
 

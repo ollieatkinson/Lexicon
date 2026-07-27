@@ -86,8 +86,8 @@ struct DocumentMetadataTests {
 		let graph = try TaskPaper("""
 			zeta:
 			alpha:
-			""").decode()
-		#expect(graph.root.name == "alpha")
+			""").decodeGraph(root: "alpha")
+		#expect(graph.rootName == "alpha")
 
 		#expect(TaskPaper.encode(document) == """
 			alpha:
@@ -100,16 +100,16 @@ struct DocumentMetadataTests {
 	@Test
 	func test_document_backing_collections_keep_keys_sorted() throws {
 
-		var root = Lexicon.Graph.Node(name: "root")
-		root.children["zeta"] = .init(name: "zeta")
-		root.children["alpha"] = .init(name: "alpha")
-		root.children["middle"] = .init(name: "middle")
-		root.children["alpha"] = .init(name: "alpha")
+		var root = Lexicon.Graph.Node()
+		root.children["zeta"] = .init()
+		root.children["alpha"] = .init()
+		root.children["middle"] = .init()
+		root.children["alpha"] = .init()
 
 		var document = Lexicon.Document()
-		document.roots["zeta"] = .init(name: "zeta")
+		document.roots["zeta"] = .init()
 		document.roots["alpha"] = root
-		document.roots["middle"] = .init(name: "middle")
+		document.roots["middle"] = .init()
 		document.roots["alpha"] = root
 
 		#expect(Array(root.children.keys) == ["alpha", "middle", "zeta"])
@@ -129,7 +129,7 @@ struct DocumentMetadataTests {
 				child:
 			""").decodeDocument()
 
-		let lexicon = try await Lexicon.from(document)
+		let lexicon = try await Lexicon(document: document, selectedRoot: "app")
 		let rootNames = await Array(lexicon.roots.keys)
 		let selectedRootName = await lexicon.root.name
 		let sharedKind = try #require(await lexicon["shared.kind"])
@@ -148,8 +148,6 @@ struct DocumentMetadataTests {
 			"app.item",
 			"shared",
 			"shared.kind",
-			"zeta",
-			"zeta.child",
 		])
 	}
 
@@ -164,10 +162,12 @@ struct DocumentMetadataTests {
 				item:
 			""").decodeDocument()
 		var graph = try document.graph(root: "app")
-		graph.root.children["new"] = .init(name: "new")
+		graph.root.children["new"] = .init()
 
-		let lexicon = try await Lexicon.from(document, root: "app")
-		await lexicon.reset(to: graph)
+		let lexicon = try await Lexicon(document: document, selectedRoot: "app")
+		var replacement = document
+		replacement.roots["app"] = graph.root
+		try await lexicon.replaceDocument(with: replacement, selectedRoot: "app")
 
 		let rootNames = await Array(lexicon.document.roots.keys)
 		let sharedKind = try #require(await lexicon["shared.kind"])
@@ -182,7 +182,7 @@ struct DocumentMetadataTests {
 	@Test
 	func test_lemma_default_values_resolve_through_types_and_synonyms() async throws {
 
-		let root = try await Lexicon.from(TaskPaper("""
+		let document = try TaskPaper("""
 			root:
 				kind:
 				? "kind default"
@@ -205,7 +205,11 @@ struct DocumentMetadataTests {
 				multi:
 				+ root.other
 				+ root.kind
-			""").decode()).root
+			""").decodeDocument()
+		let root = try await Lexicon(
+			document: document,
+			selectedRoot: "root"
+		).root
 
 		let instance = try #require(await root["instance"])
 		let inheritedUnique = try #require(await instance["unique"])
@@ -232,13 +236,17 @@ struct DocumentMetadataTests {
 	@Test
 	func test_json_classes_include_default_values_and_notes() async throws {
 
-		let json = try await Lexicon.from(TaskPaper("""
+		let document = try TaskPaper("""
 			root:
 			> root note
 			? @ root.kind
 				kind:
 				? "kind default"
-			""").decode()).json()
+			""").decodeDocument()
+		let json = try await Lexicon(
+			document: document,
+			selectedRoot: "root"
+		).json()
 
 		let root = try json.classes.first { $0.id == "root" }.try()
 		let kind = try json.classes.first { $0.id == "root.kind" }.try()
@@ -251,7 +259,7 @@ struct DocumentMetadataTests {
 	@Test
 	func test_json_default_values_only_include_matching_fields() async throws {
 
-		let json = try await Lexicon.from(TaskPaper("""
+		let document = try TaskPaper("""
 			root:
 			? {"direct":"kept","kind":{"inherited":"kept","unknown":"drop"},"unknown":"drop"}
 				direct:
@@ -260,7 +268,11 @@ struct DocumentMetadataTests {
 				instance:
 				+ root.kind
 				? {"inherited":"kept","unknown":"drop"}
-			""").decode()).json()
+			""").decodeDocument()
+		let json = try await Lexicon(
+			document: document,
+			selectedRoot: "root"
+		).json()
 
 		let root = try json.classes.first { $0.id == "root" }.try()
 		let instance = try json.classes.first { $0.id == "root.instance" }.try()
@@ -283,10 +295,8 @@ struct DocumentMetadataTests {
 			date: Date(timeIntervalSinceReferenceDate: 0),
 			roots: [
 				"root": .init(
-					name: "root",
 					children: [
 						"value": .init(
-							name: "value",
 							type: ["root.type"],
 							defaultValue: .literal(.object([
 								"count": .number(2),
