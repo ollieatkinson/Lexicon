@@ -75,13 +75,13 @@ struct LexiconLSPCommandTests {
 		""")
 		let sourceURL = directory.url.appendingPathComponent("demo.rs")
 		let sharedURL = directory.url.appendingPathComponent("shared.lexicon")
-		let source = "fn main() { let complete = l!(test.type.even.); }"
+		let source = "fn main() { let complete = l!(shared.type.even.); }"
 
 		var server = try LSPProcess()
 		defer { server.stop() }
 		try server.initialize(root: directory.url)
 		try server.didOpen(uri: sourceURL, languageID: "rust", text: source)
-		try server.completion(id: 2, uri: sourceURL, in: source, after: "fn main() { let complete = l!(test.type.even.")
+		try server.completion(id: 2, uri: sourceURL, in: source, after: "fn main() { let complete = l!(shared.type.even.")
 
 		try server.didOpen(uri: sharedURL, languageID: "lexicon", text: """
 		shared:
@@ -91,7 +91,7 @@ struct LexiconLSPCommandTests {
 					good:
 		""")
 
-		try server.completion(id: 3, uri: sourceURL, in: source, after: "fn main() { let complete = l!(test.type.even.")
+		try server.completion(id: 3, uri: sourceURL, in: source, after: "fn main() { let complete = l!(shared.type.even.")
 		let messages = try server.finish()
 
 		#expect(try #require(messages.response(id: 2)).completionLabels == ["bad"])
@@ -175,18 +175,18 @@ struct LexiconLSPCommandTests {
 		let sourceURL = directory.url.appendingPathComponent("demo.lexicon")
 		let source = """
 		consumer:
-			+ test.type.odd.
-			+ test.type.odd.no.
-			+ test.connected.
+		+ test.type.odd.
+		+ test.type.odd.no.
+		+ test.connected.
 		"""
 
 		var server = try LSPProcess()
 		defer { server.stop() }
 		try server.initialize(root: directory.url)
 		try server.didOpen(uri: sourceURL, languageID: "lexicon", text: source)
-		try server.completion(id: 2, uri: sourceURL, in: source, after: "\t+ test.type.odd.")
-		try server.completion(id: 3, uri: sourceURL, in: source, after: "\t+ test.type.odd.no.")
-		try server.completion(id: 4, uri: sourceURL, in: source, after: "\t+ test.connected.")
+		try server.completion(id: 2, uri: sourceURL, in: source, after: "+ test.type.odd.")
+		try server.completion(id: 3, uri: sourceURL, in: source, after: "+ test.type.odd.no.")
+		try server.completion(id: 4, uri: sourceURL, in: source, after: "+ test.connected.")
 
 		let messages = try server.finish()
 

@@ -4,72 +4,18 @@ import Lexicon
 
 extension Lexicon.Document {
 
-	func lemma(_ id: String) async throws -> Lemma {
-		let root = try rootName(for: id)
-		let lexicon = try await Lexicon.from(self, root: root)
-		guard let lemma = await lexicon[id] else {
+	@LexiconActor
+	func lemma(_ rawID: String) throws -> Lemma {
+		let id = try Lemma.ID(parsing: rawID)
+		let lexicon = try Lexicon(document: self, selectedRoot: id.root)
+		guard let lemma = lexicon[id] else {
 			throw ValidationError("Could not find lemma: \(id)")
 		}
 		return lemma
 	}
 
 	var validationDiagnostics: [AgentDiagnostic] {
-		var diagnostics: [AgentDiagnostic] = []
-		var index: Set<String> = []
-		var nodes: [(id: String, node: Lexicon.Graph.Node)] = []
-
-		for root in roots.values {
-			root.traverse { id, _, node in
-				index.insert(id)
-				nodes.append((id, node))
-			}
-		}
-
-		for (id, node) in nodes {
-			if !Lemma.isValid(name: node.name) {
-				diagnostics.append(.init(
-					severity: "error",
-					kind: "invalidName",
-					path: id,
-					reference: nil,
-					message: "Invalid lemma name '\(node.name)'."
-				))
-			}
-
-			for type in node.type.sorted() where !index.contains(type) {
-				diagnostics.append(.init(
-					severity: "error",
-					kind: "unresolvedType",
-					path: id,
-					reference: type,
-					message: "Type reference '\(type)' does not resolve in this document."
-				))
-			}
-
-			if let protonym = node.protonym, !index.resolvesRelative(protonym, fromParentOf: id) {
-				diagnostics.append(.init(
-					severity: "error",
-					kind: "unresolvedProtonym",
-					path: id,
-					reference: protonym,
-					message: "Protonym reference '\(protonym)' does not resolve from '\(id)'."
-				))
-			}
-
-			if case .reference(let reference) = node.defaultValue, !index.resolves(reference, fromParentOf: id) {
-				diagnostics.append(.init(
-					severity: "error",
-					kind: "unresolvedDefault",
-					path: id,
-					reference: reference,
-					message: "Default reference '\(reference)' does not resolve from '\(id)'."
-				))
-			}
-		}
-
-		return diagnostics.sorted {
-			($0.path, $0.kind, $0.reference ?? "") < ($1.path, $1.kind, $1.reference ?? "")
-		}
+		validate().map(AgentDiagnostic.init)
 	}
 
 	var lintDiagnostics: [AgentDiagnostic] {
@@ -78,23 +24,17 @@ extension Lexicon.Document {
 		let ids = Set(index.keys)
 		let importedReferences = Set(imports.map(\.reference))
 
-		for (id, node) in index.sorted(by: { $0.key < $1.key }) {
-			if node.protonym != nil && (node.children.isNotEmpty || node.type.isNotEmpty) {
-				diagnostics.append(.init(
-					severity: "warning",
-					kind: "synonymCarriesDefinition",
-					path: id,
-					reference: node.protonym,
-					message: "Synonym node '\(id)' also declares children or types."
-				))
-			}
+		for id in index.keys.sorted() {
 			for reference in references(from: id, index: ids) where !reference.exists {
-				let root = reference.reference.components(separatedBy: ".").first ?? reference.reference
-				if !importedReferences.contains(root) && !importedReferences.contains(reference.reference) {
+				let root = reference.reference.split(separator: ".").first.map(String.init)
+					?? reference.reference
+				if !importedReferences.contains(root) &&
+					!importedReferences.contains(reference.reference)
+				{
 					diagnostics.append(.init(
 						severity: "warning",
 						kind: "externalReferenceWithoutImport",
-						path: id,
+						path: id.description,
 						reference: reference.reference,
 						message: "Reference '\(reference.reference)' does not resolve locally and no matching import is declared."
 					))
@@ -109,179 +49,258 @@ extension Lexicon.Document {
 	}
 
 	func firstRootID() throws -> String {
-		guard let id = roots.keys.first else {
-			throw ValidationError("The document does not declare a root lemma.")
+		guard roots.count == 1, let name = roots.keys.first else {
+			if roots.isEmpty {
+				throw ValidationError("The document does not declare a root lemma.")
+			}
+			throw ValidationError("The document declares multiple roots; provide an explicit lemma ID.")
 		}
-		return String(id)
+		return Lemma.ID(root: name).description
 	}
 
-	func nodeIndex() -> [String: Lexicon.Graph.Node] {
-		var index: [String: Lexicon.Graph.Node] = [:]
-		for root in roots.values {
-			root.traverse { id, _, node in
-				index[id] = node
+	func nodeIndex() -> [Lemma.ID: Lexicon.Graph.Node] {
+		var index: [Lemma.ID: Lexicon.Graph.Node] = [:]
+		for (name, root) in roots {
+			root.traverse(id: Lemma.ID(root: name)) { item in
+				index[item.id] = item.node
 			}
 		}
 		return index
 	}
 
-	func node(_ id: String) throws -> Lexicon.Graph.Node {
-		let components = id.pathComponents
-		guard let rootName = components.first, let root = roots[rootName] else {
-			throw ValidationError("Could not find lemma: \(id)")
+	func node(_ rawID: String) throws -> Lexicon.Graph.Node {
+		try declaredNode(Lemma.ID(parsing: rawID))
+	}
+
+	func ownTree(id rawID: String, depth: Int, metadata: Bool) throws -> TreeNode {
+		let id = try Lemma.ID(parsing: rawID)
+		return try TreeNode.own(
+			id: id,
+			node: declaredNode(id),
+			depth: max(0, depth),
+			metadata: metadata
+		)
+	}
+
+	func references(from rawID: String, index: Set<Lemma.ID>) -> [ReferenceUse] {
+		guard let id = try? Lemma.ID(parsing: rawID) else {
+			return []
 		}
-		return try root.node(path: components.dropFirst())
+		return references(from: id, index: index)
 	}
 
-	func ownTree(id: String, depth: Int, metadata: Bool) throws -> TreeNode {
-		try TreeNode.own(id: id, node: node(id), depth: max(0, depth), metadata: metadata)
-	}
-
-	func references(from id: String, index: Set<String>) -> [ReferenceUse] {
-		guard let node = try? node(id) else {
+	func references(from id: Lemma.ID, index: Set<Lemma.ID>) -> [ReferenceUse] {
+		guard let node = try? declaredNode(id) else {
 			return []
 		}
 		var references: [ReferenceUse] = []
-		func append(kind: String, reference: String, resolved: String?) {
+		func append(kind: String, reference: String, resolved: Lemma.ID?) {
 			references.append(.init(
 				kind: kind,
-				path: id,
+				path: id.description,
 				reference: reference,
-				resolved: resolved,
+				resolved: resolved?.description,
 				exists: resolved != nil
 			))
 		}
 		for type in node.type.sorted() {
-			append(kind: "type", reference: type, resolved: type.resolved(fromParentOf: id, in: index))
+			append(
+				kind: "type",
+				reference: type.description,
+				resolved: index.contains(type) ? type : nil
+			)
 		}
-		if let protonym = node.protonym {
-			append(kind: "protonym", reference: protonym, resolved: protonym.resolvedRelative(fromParentOf: id, in: index))
+		if let protonym = node.protonym, let parent = id.parent {
+			let target = parent.appending(protonym)
+			append(
+				kind: "protonym",
+				reference: protonym.description,
+				resolved: index.contains(target) ? target : nil
+			)
 		}
 		if case .reference(let reference) = node.defaultValue {
-			append(kind: "default", reference: reference, resolved: reference.resolved(fromParentOf: id, in: index))
+			append(
+				kind: "default",
+				reference: reference.description,
+				resolved: index.contains(reference) ? reference : nil
+			)
 		}
 		return references.sorted {
 			($0.kind, $0.reference) < ($1.kind, $1.reference)
 		}
 	}
 
-	mutating func updateNode(_ id: String, _ body: (inout Lexicon.Graph.Node) throws -> Void) throws {
-		let components = id.pathComponents
-		guard let rootName = components.first, roots[rootName] != nil else {
-			throw ValidationError("Could not find lemma: \(id)")
-		}
-		try roots.mutate(rootName) { root in
-			try root.mutate(path: components.dropFirst(), body: body)
+	mutating func updateNode(
+		_ rawID: String,
+		sourceURL: URL,
+		_ body: (inout Lexicon.Graph.Node) throws -> Void
+	) throws {
+		let id = try Lemma.ID(parsing: rawID)
+		try transaction(sourceURL: sourceURL) { document in
+			try document.mutateDeclaredNode(id, body)
 		}
 	}
 
-	mutating func rename(_ id: String, to newName: String) throws {
-		guard Lemma.isValid(name: newName) else {
-			throw ValidationError("Invalid lemma name: \(newName)")
+	mutating func rename(
+		_ rawID: String,
+		to rawName: String,
+		sourceURL: URL
+	) throws {
+		let id = try Lemma.ID(parsing: rawID)
+		let name = try Lemma.Name(validating: rawName)
+		let newID = id.parent?.appending(name) ?? Lemma.ID(root: name)
+		guard newID != id else {
+			throw ValidationError("Lemma '\(id)' already has name '\(name)'.")
 		}
-		let components = id.pathComponents
-		guard let rootName = components.first, roots[rootName] != nil else {
-			throw ValidationError("Could not find lemma: \(id)")
-		}
-		let oldIndex = Set(nodeIndex().keys)
-		let newID = (components.dropLast() + [newName]).joined(separator: ".")
-		if components.count == 1 {
-			guard roots[newName] == nil else {
-				throw ValidationError("Root '\(newName)' already exists.")
-			}
-			var root = roots.removeValue(forKey: rootName)!
-			root.name = newName
-			roots[newName] = root
-		} else {
-			let parentPath = components.dropFirst().dropLast()
-			let oldName = components.last!
-			try roots.mutate(rootName) { root in
-				try root.mutate(path: parentPath) { parent in
-					guard parent.children[newName] == nil else {
-						throw ValidationError("Parent already has a child named '\(newName)'.")
+
+		try transaction(sourceURL: sourceURL) { document in
+			let references = try document.referenceSnapshot()
+			if let parentID = id.parent {
+				try document.mutateDeclaredNode(parentID) { parent in
+					guard parent.children[name] == nil else {
+						throw ValidationError("Lemma '\(newID)' already exists.")
 					}
-					guard var node = parent.children.removeValue(forKey: oldName) else {
+					guard let node = parent.children.removeValue(forKey: id.name) else {
 						throw ValidationError("Could not find lemma: \(id)")
 					}
-					node.name = newName
-					parent.children[newName] = node
+					parent.children[name] = node
 				}
+			} else {
+				guard document.roots[name] == nil else {
+					throw ValidationError("Root '\(name)' already exists.")
+				}
+				guard let root = document.roots.removeValue(forKey: id.root) else {
+					throw ValidationError("Could not find root: \(id)")
+				}
+				document.roots[name] = root
 			}
+			try document.rewriteReferences(references, from: id, to: newID)
 		}
-		rewriteReferences(from: id, to: newID, resolvingIn: oldIndex)
 	}
 
-	mutating func move(_ id: String, under parentID: String) throws {
-		let components = id.pathComponents
-		guard let name = components.last else {
-			throw ValidationError("Could not find lemma: \(id)")
-		}
-		guard !parentID.isSameOrDescendant(of: id) else {
+	mutating func move(
+		_ rawID: String,
+		under rawParentID: String,
+		sourceURL: URL
+	) throws {
+		let id = try Lemma.ID(parsing: rawID)
+		let parentID = try Lemma.ID(parsing: rawParentID)
+		guard !parentID.isInLineage(of: id) else {
 			throw ValidationError("Cannot move '\(id)' under its own descendant '\(parentID)'.")
 		}
-		let oldIndex = Set(nodeIndex().keys)
-		var node = try take(id)
-		node.name = name
-		try updateNode(parentID) { parent in
-			guard parent.children[name] == nil else {
-				throw ValidationError("Destination '\(parentID)' already has a child named '\(name)'.")
-			}
-			parent.children[name] = node
-		}
-		rewriteReferences(from: id, to: "\(parentID).\(name)", resolvingIn: oldIndex)
-	}
+		let newID = parentID.appending(id.name)
 
-	mutating func add(_ node: Lexicon.Graph.Node, under parentID: String) throws {
-		guard !roots.isEmpty else {
-			throw ValidationError("The document has no roots.")
-		}
-		let components = parentID.pathComponents
-		guard let rootName = components.first, roots[rootName] != nil else {
-			throw ValidationError("Could not find parent: \(parentID)")
-		}
-		try roots.mutate(rootName) { root in
-			try root.mutate(path: components.dropFirst()) { parent in
-				guard parent.children[node.name] == nil else {
-					throw ValidationError("Parent '\(parentID)' already has a child named '\(node.name)'.")
+		try transaction(sourceURL: sourceURL) { document in
+			let references = try document.referenceSnapshot()
+			let node = try document.takeDeclaredNode(id)
+			try document.mutateDeclaredNode(parentID) { parent in
+				guard parent.children[id.name] == nil else {
+					throw ValidationError("Lemma '\(newID)' already exists.")
 				}
-				parent.children[node.name] = node
+				parent.children[id.name] = node
+			}
+			try document.rewriteReferences(references, from: id, to: newID)
+		}
+	}
+
+	mutating func add(
+		_ node: Lexicon.Graph.Node,
+		named rawName: String,
+		under rawParentID: String,
+		sourceURL: URL
+	) throws {
+		let name = try Lemma.Name(validating: rawName)
+		let parentID = try Lemma.ID(parsing: rawParentID)
+		let id = parentID.appending(name)
+		try transaction(sourceURL: sourceURL) { document in
+			try document.mutateDeclaredNode(parentID) { parent in
+				guard parent.protonym == nil else {
+					throw ValidationError("Cannot add a child to synonym '\(parentID)'.")
+				}
+				guard parent.children[name] == nil else {
+					throw ValidationError("Lemma '\(id)' already exists.")
+				}
+				parent.children[name] = node
 			}
 		}
 	}
 
-	mutating func remove(_ id: String) throws {
-		let components = id.pathComponents
-		guard let rootName = components.first, roots[rootName] != nil else {
-			throw ValidationError("Could not find lemma: \(id)")
-		}
-		guard components.count > 1 else {
-			roots.removeValue(forKey: rootName)
-			return
-		}
-		let name = components.last!
-		try roots.mutate(rootName) { root in
-			try root.mutate(path: components.dropFirst().dropLast()) { parent in
-				guard parent.children.removeValue(forKey: name) != nil else {
-					throw ValidationError("Could not find lemma: \(id)")
+	mutating func remove(_ rawID: String, sourceURL: URL) throws {
+		let id = try Lemma.ID(parsing: rawID)
+		try transaction(sourceURL: sourceURL) { document in
+			guard document.roots.count > 1 || id.parent != nil else {
+				throw ValidationError("Cannot delete the document's last root.")
+			}
+			let references = try document.referenceSnapshot()
+			for (owner, snapshot) in references where !owner.isInLineage(of: id) {
+				let referenced = snapshot.type.contains { $0.isInLineage(of: id) } ||
+					snapshot.protonym?.isInLineage(of: id) == true ||
+					snapshot.defaultReference?.isInLineage(of: id) == true
+				guard !referenced else {
+					throw ValidationError(
+						"Cannot delete '\(id)' because '\(owner)' references its subtree."
+					)
 				}
 			}
+			_ = try document.takeDeclaredNode(id)
 		}
 	}
 
-	private mutating func take(_ id: String) throws -> Lexicon.Graph.Node {
-		let components = id.pathComponents
-		guard let rootName = components.first, roots[rootName] != nil else {
-			throw ValidationError("Could not find lemma: \(id)")
+	private mutating func transaction(
+		sourceURL: URL,
+		_ body: (inout Lexicon.Document) throws -> Void
+	) throws {
+		var candidate = self
+		try body(&candidate)
+		candidate.date = Date()
+		let plan = try candidate.composed(resolving: FileLexiconImportResolver(
+			baseURL: sourceURL.deletingLastPathComponent(),
+			rootURL: sourceURL
+		))
+		guard plan.conflicts.isEmpty else {
+			throw ValidationError(plan.conflicts.map(\.description).joined(separator: "\n"))
 		}
-		guard components.count > 1 else {
-			return roots.removeValue(forKey: rootName)!
+		_ = try plan.document.validated()
+		self = candidate
+	}
+}
+
+private extension Lexicon.Document {
+
+	struct CLIReferenceSnapshot {
+		var type: Set<Lemma.ID>
+		var protonym: Lemma.ID?
+		var defaultReference: Lemma.ID?
+	}
+
+	func declaredNode(_ id: Lemma.ID) throws -> Lexicon.Graph.Node {
+		guard let root = roots[id.root] else {
+			throw ValidationError("Could not find root: \(id.root)")
 		}
-		let name = components.last!
+		return try root.cliNode(path: id.components.dropFirst())
+	}
+
+	mutating func mutateDeclaredNode(
+		_ id: Lemma.ID,
+		_ body: (inout Lexicon.Graph.Node) throws -> Void
+	) throws {
+		guard var root = roots[id.root] else {
+			throw ValidationError("Could not find root: \(id.root)")
+		}
+		try root.cliMutate(path: id.components.dropFirst(), body)
+		roots[id.root] = root
+	}
+
+	mutating func takeDeclaredNode(_ id: Lemma.ID) throws -> Lexicon.Graph.Node {
+		guard let parent = id.parent else {
+			guard let root = roots.removeValue(forKey: id.root) else {
+				throw ValidationError("Could not find root: \(id)")
+			}
+			return root
+		}
 		var removed: Lexicon.Graph.Node?
-		try roots.mutate(rootName) { root in
-			try root.mutate(path: components.dropFirst().dropLast()) { parent in
-				removed = parent.children.removeValue(forKey: name)
-			}
+		try mutateDeclaredNode(parent) {
+			removed = $0.children.removeValue(forKey: id.name)
 		}
 		guard let removed else {
 			throw ValidationError("Could not find lemma: \(id)")
@@ -289,42 +308,75 @@ extension Lexicon.Document {
 		return removed
 	}
 
-	private mutating func rewriteReferences(from oldID: String, to newID: String, resolvingIn ids: Set<String>) {
-		for rootName in roots.keys {
-			roots[rootName]?.rewriteReferences(
-				path: String(rootName),
-				index: ids,
-				from: oldID,
-				to: newID
+	func referenceSnapshot() throws -> [Lemma.ID: CLIReferenceSnapshot] {
+		var result: [Lemma.ID: CLIReferenceSnapshot] = [:]
+		for (id, node) in nodeIndex() {
+			let protonym = node.protonym.flatMap { relative in
+				id.parent?.appending(relative)
+			}
+			let defaultReference: Lemma.ID?
+			if case .reference(let reference) = node.defaultValue {
+				defaultReference = reference
+			} else {
+				defaultReference = nil
+			}
+			result[id] = .init(
+				type: node.type,
+				protonym: protonym,
+				defaultReference: defaultReference
 			)
 		}
+		return result
 	}
 
-	private func rootName(for id: String) throws -> String {
-		let name = id.pathComponents.first ?? id
-		guard roots[name] != nil else {
-			throw ValidationError("Could not find root for lemma ID: \(id)")
+	mutating func rewriteReferences(
+		_ references: [Lemma.ID: CLIReferenceSnapshot],
+		from oldID: Lemma.ID,
+		to newID: Lemma.ID
+	) throws {
+		for (oldOwner, snapshot) in references {
+			let owner = oldOwner.cliReplacingPrefix(oldID, with: newID)
+			guard (try? declaredNode(owner)) != nil else {
+				continue
+			}
+			try mutateDeclaredNode(owner) { node in
+				node.type = Set(snapshot.type.map {
+					$0.cliReplacingPrefix(oldID, with: newID)
+				})
+				if let oldTarget = snapshot.protonym {
+					guard let parent = owner.parent else {
+						throw ValidationError("A root lemma cannot be a synonym.")
+					}
+					let target = oldTarget.cliReplacingPrefix(oldID, with: newID)
+					node.protonym = try target.relative(to: parent)
+				}
+				if let reference = snapshot.defaultReference {
+					node.defaultValue = .reference(
+						reference.cliReplacingPrefix(oldID, with: newID)
+					)
+				}
+			}
 		}
-		return name
 	}
 }
 
-extension Lexicon.Graph.Node {
+private extension Lexicon.Graph.Node {
 
-	func node<Path>(path: Path) throws -> Self where Path: Collection, Path.Element == String {
+	func cliNode<Path>(path: Path) throws -> Self
+	where Path: Collection, Path.Element == Lemma.Name {
 		guard let name = path.first else {
 			return self
 		}
 		guard let child = children[name] else {
 			throw ValidationError("Could not find lemma path component: \(name)")
 		}
-		return try child.node(path: path.dropFirst())
+		return try child.cliNode(path: path.dropFirst())
 	}
 
-	mutating func mutate<Path>(
+	mutating func cliMutate<Path>(
 		path: Path,
-		body: (inout Self) throws -> Void
-	) throws where Path: Collection, Path.Element == String {
+		_ body: (inout Self) throws -> Void
+	) throws where Path: Collection, Path.Element == Lemma.Name {
 		guard let name = path.first else {
 			try body(&self)
 			return
@@ -332,32 +384,28 @@ extension Lexicon.Graph.Node {
 		guard var child = children[name] else {
 			throw ValidationError("Could not find lemma path component: \(name)")
 		}
-		try child.mutate(path: path.dropFirst(), body: body)
+		try child.cliMutate(path: path.dropFirst(), body)
 		children[name] = child
 	}
+}
 
-	mutating func rewriteReferences(path: String, index: Set<String>, from oldID: String, to newID: String) {
-		type = Set(type.map { $0.rewritingReference(from: oldID, to: newID, at: path, index: index) })
-		if let reference = protonym {
-			protonym = reference
-				.rewritingReference(from: oldID, to: newID, at: path, index: index)
-				.relativeReference(fromParentOf: path)
+private extension Lemma.ID {
+	func cliReplacingPrefix(_ oldID: Self, with newID: Self) -> Self {
+		guard isInLineage(of: oldID) else {
+			return self
 		}
-		if case .reference(let reference) = defaultValue {
-			defaultValue = .reference(reference.rewritingReference(from: oldID, to: newID, at: path, index: index))
-		}
-		for name in children.keys {
-			children[name]?.rewriteReferences(path: "\(path).\(name)", index: index, from: oldID, to: newID)
-		}
+		return try! Self(
+			components: newID.components + components.dropFirst(oldID.components.count)
+		)
 	}
 }
 
 extension Lexicon.Graph.Node.DefaultValue {
-
-	static func parseAgentArgument(_ string: String) -> Self {
+	static func parseAgentArgument(_ string: String) throws -> Self {
 		let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
 		if trimmed.hasPrefix("@") {
-			return .reference(trimmed.dropFirst().trimmingCharacters(in: .whitespacesAndNewlines))
+			let rawID = trimmed.dropFirst().trimmingCharacters(in: .whitespacesAndNewlines)
+			return .reference(try Lemma.ID(parsing: rawID))
 		}
 		return .literal(.parse(trimmed))
 	}

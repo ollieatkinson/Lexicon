@@ -138,50 +138,35 @@ struct LexiconDocumentSyntax {
 		guard let reference = LexiconDocumentReferencePrefix(beforeCursor: text) else {
 			return nil
 		}
-		var prefixes = [reference.rawPrefix]
-		if let ownerPath = reference.ownerPath, let parent = parentPath(for: ownerPath) {
-			prefixes.append("\(parent).\(reference.rawPrefix)")
+		let prefixes: [String]
+		if
+			reference.kind == .protonym,
+			let ownerPath = reference.ownerPath,
+			let parent = parentPath(for: ownerPath)
+		{
+			prefixes = ["\(parent).\(reference.rawPrefix)"]
+		} else if reference.kind == .protonym {
+			prefixes = []
+		} else {
+			prefixes = [reference.rawPrefix]
 		}
 		return LexiconPrefixContext(rawPrefix: reference.rawPrefix, prefixes: prefixes)
 	}
 
 	static func references(in text: String, index: LexiconPathIndex) -> [LocatedLexiconPath] {
-		let taskPaper = TaskPaper(text)
-		guard
-			let document = try? taskPaper.decodeDocument(),
-			let sourceMap = try? taskPaper.sourceMap()
-		else {
-			return []
-		}
-		var ranges = LexiconDocumentSourceMap(sourceMap: sourceMap, text: text)
-		return LexiconDocumentReference.references(in: document, index: index).compactMap { reference in
+		let result = TaskPaper(text).parse()
+		var ranges = LexiconDocumentSourceMap(sourceMap: result.sourceMap, text: text)
+		return LexiconDocumentReference.references(in: result.document, index: index).compactMap { reference in
 			ranges.range(for: reference).map {
 				LocatedLexiconPath(path: reference.validationPath, range: $0)
 			}
 		}
 	}
 
-	static func indentationDiagnostics(in text: String) -> [LexiconDiagnostic] {
-		var diagnostics: [LexiconDiagnostic] = []
-		var utf16Offset = 0
-		for lineText in text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
-			defer { utf16Offset += lineText.utf16.count + 1 }
-			let leadingWhitespace = lineText.prefix { $0 == "\t" || $0 == " " }
-			let leadingTabs = leadingWhitespace.prefix { $0 == "\t" }
-			guard leadingTabs.count < leadingWhitespace.count else {
-				continue
-			}
-			let startOffset = utf16Offset + leadingTabs.utf16.count
-			let endOffset = utf16Offset + leadingWhitespace.utf16.count
-			diagnostics.append(LexiconDiagnostic(
-				range: LexiconTextRange(
-					start: text.position(forUTF16Offset: startOffset),
-					end: text.position(forUTF16Offset: endOffset)
-				),
-				message: "Lexicon indentation uses tabs; spaces are ignored for hierarchy."
-			))
-		}
-		return diagnostics
+	static func syntaxDiagnostics(in text: String) -> [LexiconDiagnostic] {
+		TaskPaper(text).parse().diagnostics
+			.filter { !isIncompleteReference($0, in: text) }
+			.map(LexiconDiagnostic.init)
 	}
 
 	private static func parentPath(for path: String) -> String? {
@@ -191,10 +176,40 @@ struct LexiconDocumentSyntax {
 		}
 		return components.joined(separator: ".")
 	}
+
+	private static func isIncompleteReference(
+		_ diagnostic: Lexicon.Diagnostic,
+		in text: String
+	) -> Bool {
+		guard
+			diagnostic.code == .invalidReference,
+			let range = diagnostic.sourceRange
+		else {
+			return false
+		}
+		let offsets = range.utf16Offsets
+		guard
+			offsets.lowerBound >= 0,
+			offsets.upperBound <= text.utf16.count,
+			let start = String.Index(
+				text.utf16.index(text.utf16.startIndex, offsetBy: offsets.lowerBound),
+				within: text
+			),
+			let end = String.Index(
+				text.utf16.index(text.utf16.startIndex, offsetBy: offsets.upperBound),
+				within: text
+			)
+		else {
+			return false
+		}
+		return text[start..<end]
+			.trimmingCharacters(in: .whitespacesAndNewlines)
+			.hasSuffix(".")
+	}
 }
 
 struct LexiconDocumentReferencePrefix {
-	private static let sentinel = "__lexicon_lsp_probe__"
+	private static let sentinel = "lexicon_lsp_probe"
 
 	var kind: LexiconDocumentReference.Kind
 	var rawPrefix: String
@@ -203,7 +218,7 @@ struct LexiconDocumentReferencePrefix {
 	init?(beforeCursor text: Substring) {
 		let cursorOffset = text.utf16.count
 		guard
-			let line = try? TaskPaper("\(text)\(Self.sentinel)").sourceMap().references.last(where: { line in
+			let line = TaskPaper("\(text)\(Self.sentinel)").sourceMap().references.last(where: { line in
 				line.referenceRange?.contains(cursorOffset) == true
 			}),
 			var rawPrefix = line.reference,
@@ -281,31 +296,37 @@ struct LexiconDocumentReference: Hashable {
 
 	static func references(in document: Lexicon.Document, index: LexiconPathIndex) -> [Self] {
 		var references: [Self] = []
-		for root in document.roots.values {
-			root.traverse { id, _, node in
+		for (rootName, root) in document.roots {
+			root.traverse(id: Lemma.ID(root: rootName)) { id, _, node in
+				let ownerPath = id.description
 				for type in node.type.sorted() {
+					let rawPath = type.description
 					references.append(Self(
-						ownerPath: id,
+						ownerPath: ownerPath,
 						kind: .type,
-						rawPath: type,
-						validationPath: index.resolved(type, fromParentOf: id) ?? type
+						rawPath: rawPath,
+						validationPath: rawPath
 					))
 				}
 				if let protonym = node.protonym {
+					let rawPath = protonym.description
 					references.append(Self(
-						ownerPath: id,
+						ownerPath: ownerPath,
 						kind: .protonym,
-						rawPath: protonym,
-						validationPath: index.resolvedProtonym(protonym, fromParentOf: id)
-							?? index.relativePath(protonym, fromParentOf: id)
+						rawPath: rawPath,
+						validationPath: index.resolvedProtonym(
+							rawPath,
+							fromParentOf: ownerPath
+						) ?? index.relativePath(rawPath, fromParentOf: ownerPath)
 					))
 				}
 				if case .reference(let reference) = node.defaultValue {
+					let rawPath = reference.description
 					references.append(Self(
-						ownerPath: id,
+						ownerPath: ownerPath,
 						kind: .defaultValue,
-						rawPath: reference,
-						validationPath: index.resolved(reference, fromParentOf: id) ?? reference
+						rawPath: rawPath,
+						validationPath: rawPath
 					))
 				}
 			}
@@ -376,14 +397,6 @@ extension String {
 }
 
 extension LexiconPathIndex {
-	func resolved(_ reference: String, fromParentOf path: String) -> String? {
-		if contains(reference) {
-			return reference
-		}
-		let relative = relativePath(reference, fromParentOf: path)
-		return contains(relative) ? relative : nil
-	}
-
 	func resolvedProtonym(_ reference: String, fromParentOf path: String) -> String? {
 		let relative = relativePath(reference, fromParentOf: path)
 		return contains(relative) ? relative : nil
@@ -392,5 +405,29 @@ extension LexiconPathIndex {
 	func relativePath(_ reference: String, fromParentOf path: String) -> String {
 		let parent = path.components(separatedBy: ".").dropLast().joined(separator: ".")
 		return parent.isEmpty ? reference : "\(parent).\(reference)"
+	}
+}
+
+private extension LexiconDiagnostic {
+	init(_ diagnostic: Lexicon.Diagnostic) {
+		let range: LexiconTextRange
+		if let sourceRange = diagnostic.sourceRange {
+			range = LexiconTextRange(
+				start: LexiconPosition(
+					line: sourceRange.lowerBound.line,
+					character: sourceRange.lowerBound.utf16Column
+				),
+				end: LexiconPosition(
+					line: sourceRange.upperBound.line,
+					character: sourceRange.upperBound.utf16Column
+				)
+			)
+		} else {
+			range = LexiconTextRange(
+				start: LexiconPosition(line: 0, character: 0),
+				end: LexiconPosition(line: 0, character: 0)
+			)
+		}
+		self.init(range: range, message: diagnostic.message)
 	}
 }

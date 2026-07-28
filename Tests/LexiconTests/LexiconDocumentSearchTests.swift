@@ -44,7 +44,7 @@ struct LexiconDocumentSearchTests {
 		)
 
 		#expect(results.first?.id == "root.downloads.programme.to.device")
-		#expect(results.allSatisfy { $0.id.hasPrefix("root.downloads") })
+		#expect(results.allSatisfy { $0.id.isInLineage(of: "root.downloads") })
 	}
 
 	#if canImport(NaturalLanguage)
@@ -59,7 +59,7 @@ struct LexiconDocumentSearchTests {
 		]
 		let expected = queries.map { index.search($0).map(\.id) }
 
-		await withTaskGroup(of: (Int, [String]).self) { group in
+		await withTaskGroup(of: (Int, [Lemma.ID]).self) { group in
 			for iteration in 0..<24 {
 				group.addTask {
 					let queryIndex = iteration % queries.count

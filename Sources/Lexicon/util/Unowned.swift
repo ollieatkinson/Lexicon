@@ -59,15 +59,3 @@ extension Unowned: CustomDebugStringConvertible where Object: CustomDebugStringC
 		unwrapped.debugDescription
 	}
 }
-
-extension Dictionary where Value == Unowned<Lemma> {
-	
-	subscript(key: Key) -> Lemma? {
-		get {
-			self[key]?.unwrapped
-		}
-		set {
-			self[key] = newValue.map(Unowned.init)
-		}
-	}
-}

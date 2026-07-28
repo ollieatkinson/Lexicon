@@ -12,9 +12,10 @@ import {
 import { AsyncSerialQueue } from "./restartQueue";
 
 let client: LanguageClient | undefined;
-let outputChannel: vscode.OutputChannel | undefined;
+let outputChannel: vscode.LogOutputChannel | undefined;
 let configurationWatcher: vscode.FileSystemWatcher | undefined;
 let restartTimer: NodeJS.Timeout | undefined;
+let trustedWorkspaceInitialized = false;
 const serverLifecycle = new AsyncSerialQueue();
 
 const configurationFileNames = [
@@ -25,10 +26,25 @@ const configurationFileNames = [
 ];
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-	outputChannel = vscode.window.createOutputChannel("Lexicon LSP");
+	outputChannel = vscode.window.createOutputChannel("Lexicon LSP", { log: true });
 	context.subscriptions.push(outputChannel);
 	context.subscriptions.push(vscode.commands.registerCommand("lexicon.restartLanguageServer", restartLanguageServer));
 	context.subscriptions.push(vscode.commands.registerCommand("lexicon.showOutput", () => outputChannel?.show()));
+	context.subscriptions.push(vscode.workspace.onDidGrantWorkspaceTrust(() => {
+		void initializeTrustedWorkspace(context);
+	}));
+	if (!vscode.workspace.isTrusted) {
+		outputChannel.info("Language server disabled until this workspace is trusted.");
+		return;
+	}
+	await initializeTrustedWorkspace(context);
+}
+
+async function initializeTrustedWorkspace(context: vscode.ExtensionContext): Promise<void> {
+	if (trustedWorkspaceInitialized || !vscode.workspace.isTrusted) {
+		return;
+	}
+	trustedWorkspaceInitialized = true;
 	configurationWatcher = vscode.workspace.createFileSystemWatcher(configurationGlob());
 	configurationWatcher.onDidCreate(scheduleLanguageServerRestart, undefined, context.subscriptions);
 	configurationWatcher.onDidChange(scheduleLanguageServerRestart, undefined, context.subscriptions);
@@ -48,6 +64,8 @@ export async function deactivate(): Promise<void> {
 		restartTimer = undefined;
 	}
 	await serverLifecycle.enqueue(stopLanguageServer);
+	configurationWatcher = undefined;
+	trustedWorkspaceInitialized = false;
 }
 
 function scheduleLanguageServerRestart(): void {
@@ -68,8 +86,16 @@ async function restartLanguageServer(): Promise<void> {
 }
 
 async function startLanguageServer(): Promise<void> {
+	if (!vscode.workspace.isTrusted) {
+		outputChannel?.warn("Language server launch blocked in Restricted Mode.");
+		return;
+	}
 	const binary = binaryConfiguration();
-	const command = resolveServerCommand(binary, vscode.workspace.workspaceFolders);
+	const command = resolveServerCommand(
+		binary,
+		vscode.workspace.workspaceFolders,
+		vscode.workspace.isTrusted
+	);
 	if (command === undefined) {
 		const message = "Install lexicon-lsp, build it in this workspace, or configure lexicon.lsp.binary.path.";
 		outputChannel?.appendLine(message);

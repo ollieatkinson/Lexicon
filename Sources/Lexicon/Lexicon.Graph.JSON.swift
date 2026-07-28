@@ -21,7 +21,7 @@ public extension Lexicon {
 		let classes = classes().values.map(\.json).sorted { $0.id < $1.id }
 		return Graph.JSON(
 			date: document.date,
-			name: graph.root.name,
+			name: graph.rootName,
 			classes: classes,
 			references: classes.references
 		)
@@ -30,15 +30,50 @@ public extension Lexicon {
 	func classes() -> [Lemma.ID: Graph.Node.Class] {
 
 		var classes: [Lemma.ID: Graph.Node.Class] = [:]
+		var discovered: Set<Lemma.ID> = []
+		var expanded: Set<Lemma.ID> = []
 
-		for root in roots.values {
-			root.graphTraversal(.depthFirst) { lemma in
-				let o = Graph.Node.Class(lemma: lemma)
-				classes[o.json.id] = o
+		func add(_ lemma: Lemma, includingChildren: Bool) {
+			if discovered.insert(lemma.id).inserted {
+				let klass = Graph.Node.Class(lemma: lemma)
+				classes[klass.json.id] = klass
+
+				for dependency in lemma.ownType.values {
+					addDependency(dependency)
+				}
+				if let protonym = lemma.protonym {
+					addDependency(protonym)
+				}
+				if
+					case .reference(let reference) = lemma.defaultValue,
+					let dependency = self[reference]
+				{
+					addDependency(dependency)
+				}
+			}
+
+			guard includingChildren, expanded.insert(lemma.id).inserted else {
+				return
+			}
+			for child in lemma.ownChildren.values {
+				add(child, includingChildren: true)
 			}
 		}
 
-		for klass in classes.values {
+		func addDependency(_ dependency: Lemma) {
+			let lineage = Array(dependency.lineage).reversed()
+			for lemma in lineage {
+				// A generated ancestor exposes all of its declared members. Keep
+				// that dependency root internally complete so none of those
+				// generated member references dangle.
+				add(lemma, includingChildren: true)
+			}
+		}
+
+		add(root, includingChildren: true)
+
+		let declaredClasses = classes.values.sorted { $0.json.id < $1.json.id }
+		for klass in declaredClasses {
 			klass.json.supertype = Lemma.supertype(for: klass, in: &classes)
 			klass.refreshReferences()
 		}
@@ -70,7 +105,7 @@ public extension Lemma {
 public extension Sequence where Element == Lexicon.Graph.Node.Class {
 	
 	func sortedByDependancy() -> [Element] {
-		sorted{ l, r in l.json.id.lexicographicallyPrecedes(r.json.id) }.sorted{ l, r in
+		sorted { l, r in l.json.id < r.json.id }.sorted { l, r in
 			r.is(l)
 		}
 	}
@@ -81,7 +116,7 @@ private extension Sequence where Element == Lemma {
 	@LexiconActor func sortedByChildCount() -> [Element] {
 		sorted{ l, r in
 			guard l.ownChildren.count != r.ownChildren.count else {
-				return l.id.lexicographicallyPrecedes(r.id)
+				return l.id < r.id
 			}
 			return l.ownChildren.count > r.ownChildren.count
 		}
@@ -99,29 +134,59 @@ fileprivate extension Lemma {
 		guard type.count > 1 else {
 			return first
 		}
-		return mixin(forOrderedType: klass.orderedType, in: &classes).json.id
+		return mixin(forOrderedType: klass.orderedType, in: &classes)?.json.id
 	}
 
-	static func mixin(forOrderedType type: [ID], in classes: inout [ID: Class]) -> Class {
+	static func mixin(
+		forOrderedType type: [ID],
+		in classes: inout [ID: Class]
+	) -> Class? {
 		guard type.count > 1, let first = type.first, let last = type.last else {
-			fatalError()
+			return nil
 		}
-		let id = type.joined(separator: "_&_")
-		if let o = classes[id] {
-			return o
+
+		let baseName = "mixin_" + type
+			.map { id in
+				id.description.utf8.map { byte in
+					let hex = String(byte, radix: 16)
+					return byte < 16 ? "0\(hex)" : hex
+				}.joined()
+			}
+			.joined(separator: "_and_")
+		var collision = 0
+		let id: ID
+		while true {
+			let rawName = collision == 0 ? baseName : "\(baseName)_\(collision)"
+			guard let name = try? Lemma.Name(validating: rawName) else {
+				return nil
+			}
+			let candidate = Lemma.ID(root: name)
+			if let existing = classes[candidate] {
+				if existing.synthesizedMixinTypes == type {
+					return existing
+				}
+				collision += 1
+				continue
+			}
+			id = candidate
+			break
 		}
-		let supertype: Class
+
+		let supertype: Class?
 		if type.count > 2 {
 			supertype = mixin(forOrderedType: Array(type.dropLast()), in: &classes)
 		} else {
-			supertype = classes[first]!
+			supertype = classes[first]
 		}
-		let mixin = classes[last]!
+		guard let supertype, let mixin = classes[last] else {
+			return nil
+		}
 		let klass = Class(
 			id: id,
 			supertype: supertype.json.id,
 			mixin: mixin,
-			kind: supertype.kind.union(mixin.kind)
+			kind: supertype.kind.union(mixin.kind),
+			synthesizedMixinTypes: type
 		)
 		classes[klass.json.id] = klass
 		return klass
@@ -137,6 +202,7 @@ public extension Lexicon.Graph.Node {
 		let inheritedChildren: OrderedJSONDictionary<Lemma.ID>?
 		public let orderedType: [Lemma.ID]
 		public var kind: Set<Lemma.ID>
+		fileprivate let synthesizedMixinTypes: [Lemma.ID]?
 
 		@LexiconActor init(lemma: Lemma) {
 			let type = lemma.ownType
@@ -144,20 +210,22 @@ public extension Lexicon.Graph.Node {
 				.unlessEmpty
 			let children = lemma.ownChildren
 				.filter(\.value.protonym.isNil)
-				.map { (name, lemma) in (name, lemma.id) }
+				.map { (name, lemma) in (name.rawValue, lemma.id) }
 				.sorted { $0.0 < $1.0 }
 				.unlessEmpty
 				.map(OrderedJSONDictionary.init(uniqueKeysWithValues:))
 			let inheritedChildren = lemma.node.protonym.isNil
 				? lemma.children
 					.filter(\.value.protonym.isNil)
-					.map { (name, lemma) in (name, lemma.id) }
+					.map { (name, lemma) in (name.rawValue, lemma.id) }
 					.sorted { $0.0 < $1.0 }
 					.unlessEmpty
 					.map(OrderedJSONDictionary.init(uniqueKeysWithValues:))
 				: nil
 			let synonyms = lemma.ownChildren
-				.compactMap { (name, lemma) in lemma.node.protonym.map { protonym in (name, protonym) } }
+				.compactMap { (name, lemma) in
+					lemma.node.protonym.map { protonym in (name.rawValue, protonym) }
+				}
 				.sorted { $0.0 < $1.0 }
 				.unlessEmpty
 				.map(OrderedJSONDictionary.init(uniqueKeysWithValues:))
@@ -166,7 +234,9 @@ public extension Lexicon.Graph.Node {
 				id: lemma.id,
 				protonym: lemma.protonym?.id,
 				type: type,
-				children: children.map { OrderedSet($0.values.keys) },
+				children: children.map {
+					OrderedSet($0.values.keys.map { try! Lemma.Name(validating: $0) })
+				},
 				synonyms: synonyms,
 				defaultValue: lemma.jsonDefaultValue.map(Lexicon.Graph.Node.DefaultValue.JSON.init),
 				notes: lemma.node.notes.unlessEmpty
@@ -175,14 +245,20 @@ public extension Lexicon.Graph.Node {
 			self.children = children
 			self.inheritedChildren = inheritedChildren
 			self.orderedType = lemma.ownType.values
-				.map(\.unwrapped)
 				.sortedByChildCount()
 				.map(\.id)
 			self.kind = Set(lemma.type.keys)
+			self.synthesizedMixinTypes = nil
 			refreshReferences()
 		}
 
-		init(id: Lemma.ID, supertype: Lemma.ID, mixin: Lexicon.Graph.Node.Class, kind: Set<Lemma.ID>) {
+		init(
+			id: Lemma.ID,
+			supertype: Lemma.ID,
+			mixin: Lexicon.Graph.Node.Class,
+			kind: Set<Lemma.ID>,
+			synthesizedMixinTypes: [Lemma.ID]
+		) {
 
 			self.json = JSON(
 				id: id,
@@ -195,8 +271,9 @@ public extension Lexicon.Graph.Node {
 
 			self.children = nil
 			self.inheritedChildren = nil
-			self.orderedType = []
+			self.orderedType = synthesizedMixinTypes
 			self.kind = kind
+			self.synthesizedMixinTypes = synthesizedMixinTypes
 			refreshReferences()
 		}
 
@@ -265,10 +342,10 @@ public extension Lexicon.Graph.Node.Class.JSON {
 			references.append(type)
 		}
 		for child in children ?? [] {
-			references.append("\(id).\(child)")
+			references.append(id.appending(child))
 		}
 		for (_, protonym) in synonyms ?? [:] {
-			references.append("\(id).\(protonym)")
+			references.append(id.appending(protonym))
 		}
 		if let reference = defaultValue?.reference {
 			references.append(reference)
@@ -326,7 +403,8 @@ private extension JSONValue {
 			case .object(let object) where fields.isNotEmpty:
 				let values = object.reduce(into: [String: JSONValue]()) { values, field in
 					guard
-						let lemma = fields[field.key],
+						let name = try? Lemma.Name(validating: field.key),
+						let lemma = fields[name],
 						let value = field.value.filtered(matching: lemma)
 					else {
 						return

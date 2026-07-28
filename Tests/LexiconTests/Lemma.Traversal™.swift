@@ -19,7 +19,7 @@ struct Lemma_Traversal™ {
 			a b c d
 			"""
 		
-		let lemma = await Lexicon.from(.from(sentences: sentences)).root
+		let lemma = try await traversalRoot(sentences)
 		
 		var hierarchy: [Lemma] = []
 		
@@ -52,7 +52,7 @@ struct Lemma_Traversal™ {
 			a b c d
 			"""
 		
-		let lemma = await Lexicon.from(.from(sentences: sentences)).root
+		let lemma = try await traversalRoot(sentences)
 		
 		var hierarchy: [Lemma] = []
 		
@@ -76,4 +76,9 @@ struct Lemma_Traversal™ {
 			"a.word.number",
 		])
 	}
+}
+
+@LexiconActor
+private func traversalRoot(_ sentences: String) throws -> Lemma {
+	try Lexicon(graph: .from(sentences: sentences)).root
 }

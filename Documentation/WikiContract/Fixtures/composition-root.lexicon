@@ -1,0 +1,6 @@
+@ ./composition-base.lexicon
+@ ./composition-overlay.lexicon
+
+commerce:
+	status:
+		? "local"

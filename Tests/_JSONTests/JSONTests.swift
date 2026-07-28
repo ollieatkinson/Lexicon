@@ -82,13 +82,31 @@ struct JSONTests {
 	}
 
 	@Test
-	func test_path_mutation_extends_arrays_and_supports_negative_indices() throws {
+	func test_numeric_equality_and_hash_survive_integral_double_round_trip() throws {
+		let value = JSON.double(1.0)
+		let decoded = try JSONDecoder().decode(JSON.self, from: JSONEncoder().encode(value))
+
+		#expect(decoded == value)
+		#expect(Set([decoded, value]).count == 1)
+		#expect(decoded.int == 1)
+	}
+
+	@Test
+	func test_throwing_path_mutation_replaces_or_appends_without_sparse_allocation() throws {
 		var value: JSON = [:]
 
-		value["items", 2] = "third"
+		try value.set("first", at: ["items", 0] as JSONPath)
+		try value.set("second", at: ["items", 1] as JSONPath)
+		try value.set("updated", at: ["items", -1] as JSONPath)
 
-		#expect(value["items"].array?.count == 3)
-		#expect(value["items", 0].isNull)
-		#expect(try value[["items", -1] as JSONPath, as: String.self] == "third")
+		#expect(value["items"].array?.count == 2)
+		#expect(try value[["items", 0] as JSONPath, as: String.self] == "first")
+		#expect(try value[["items", -1] as JSONPath, as: String.self] == "updated")
+
+		let unchanged = value
+		#expect(throws: JSONMutationError.arrayIndexOutOfBounds(index: 3, count: 2)) {
+			try value.set("sparse", at: ["items", 3] as JSONPath)
+		}
+		#expect(value == unchanged)
 	}
 }

@@ -4,6 +4,7 @@
 
 import ArgumentParser
 import Foundation
+import Lexicon
 
 @main
 struct LexiconLSPCommand: ParsableCommand {
@@ -11,7 +12,7 @@ struct LexiconLSPCommand: ParsableCommand {
 	static let configuration = CommandConfiguration(
 		commandName: "lexicon-lsp",
 		abstract: "A language server for Lexicon path completions and diagnostics.",
-		version: "1.0.0"
+		version: Lexicon.version
 	)
 
 	@Option(help: "Root lexicon path. Workspace config is used when omitted.")

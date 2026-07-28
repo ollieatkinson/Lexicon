@@ -9,7 +9,7 @@ struct CodeGeneratorCommand: AsyncParsableCommand {
 	static let configuration = CommandConfiguration(
 		commandName: "lexicon-generate",
 		abstract: "A utility for generating code from lexicon documents.",
-		version: "1.0.0"
+		version: Lexicon.version
 	)
 
 	@Argument(help: "File path or URL to the lexicon")
@@ -20,6 +20,9 @@ struct CodeGeneratorCommand: AsyncParsableCommand {
 		help: "Output path excluding extension, if not specified the same directory and name of the lexicon will be used"
 	)
 	var output: URL?
+
+	@Option(help: "Root lemma to generate. Required when the composed document declares multiple roots.")
+	var root: String?
 
 	@Option(
 		name: .shortAndLong,
@@ -54,24 +57,47 @@ struct CodeGeneratorCommand: AsyncParsableCommand {
 	}
 
 	mutating func run() async throws {
-		let name = String(input.lastPathComponent.split(separator: ".")[0])
+		let name = input.deletingPathExtension().lastPathComponent
 		if isLogging {
 			print("\(name) lexicon")
 		}
-		let plan = try TaskPaper(Data(contentsOf: input))
-			.decodeDocument()
-			.composed(resolving: FileLexiconImportResolver(baseURL: input.deletingLastPathComponent()))
+			let plan = try TaskPaper(Data(contentsOf: input))
+				.decodeDocument()
+				.composed(resolving: FileLexiconImportResolver(
+					baseURL: input.deletingLastPathComponent(),
+					rootURL: input
+				))
 		guard plan.conflicts.isEmpty else {
 			throw LexiconError(plan.conflicts.map(\.description).joined(separator: "\n"))
 		}
-		let lexicon = try await Lexicon.from(plan.document)
+		let selectedRoot: Lemma.Name
+		if let root {
+			selectedRoot = try Lemma.Name(validating: root)
+			guard plan.document.roots[selectedRoot] != nil else {
+				throw ValidationError("The composed document does not declare root '\(selectedRoot)'.")
+			}
+		} else {
+			guard plan.document.roots.count == 1, let onlyRoot = plan.document.roots.keys.first else {
+				throw ValidationError(
+					plan.document.roots.isEmpty
+						? "The composed document does not declare a root lemma."
+						: "The composed document declares multiple roots; provide --root."
+				)
+			}
+			selectedRoot = onlyRoot
+		}
+		let lexicon = try await Lexicon(document: plan.document, selectedRoot: selectedRoot)
 		let json = await lexicon.json()
 		let code = try type.map { command -> (URL, Data) in
 			guard let generator = LexiconSourceGenerators.all.find(command) else {
-				fatalError("Unable to find a generator for \(command)")
+				throw ValidationError(
+					"Unknown generator '\(command)'. Expected one of: \(LexiconSourceGenerators.all.commandHelp)."
+				)
 			}
 			guard let `extension` = generator.utType.preferredFilenameExtension else {
-				fatalError("\(command) does not have a valid uniform type identifier: \(generator.utType)")
+				throw ValidationError(
+					"Generator '\(command)' does not declare a preferred filename extension."
+				)
 			}
 			let data: Data
 			switch command {
@@ -96,9 +122,18 @@ struct CodeGeneratorCommand: AsyncParsableCommand {
 				data: data
 			)
 		}
+		let duplicateOutputs = Dictionary(grouping: code) { $0.0.standardizedFileURL }
+			.filter { $0.value.count > 1 }
+			.keys
+			.sorted { $0.path < $1.path }
+		guard duplicateOutputs.isEmpty else {
+			throw ValidationError(
+				"Multiple generators target the same output: \(duplicateOutputs.map(\.path).joined(separator: ", "))."
+			)
+		}
 		for (file, data) in code {
 			if isLogging { print(file.path) }
-			try data.write(to: file)
+			try data.write(to: file, options: .atomic)
 		}
 	}
 }

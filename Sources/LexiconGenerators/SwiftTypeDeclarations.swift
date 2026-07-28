@@ -6,7 +6,10 @@ import Lexicon
 
 extension Lexicon.Graph.Node.Class.JSON {
 
-	func swiftTypeDeclarations(prefixes: StandAloneTypePrefixes) throws -> [String] {
+	func swiftTypeDeclarations(
+		prefixes: StandAloneTypePrefixes,
+		classes: [Lexicon.Graph.Node.Class.JSON]
+	) throws -> [String] {
 		guard mixin == nil else {
 			return []
 		}
@@ -14,13 +17,17 @@ extension Lexicon.Graph.Node.Class.JSON {
 		let names = StandAloneTypeNames(id: id, prefixes: prefixes)
 
 		if let protonym = protonym {
+			let canonicalID = try classes.standAloneCanonicalID(
+				for: protonym,
+				referencedBy: id
+			)
 			return [
 				try SourceTemplate(
 					"public typealias %%className%% = %%baseClass%%",
 					delimiters: .percentSigns
 				).render([
 					"className": names.className,
-					"baseClass": names.className(for: protonym),
+					"baseClass": names.className(for: canonicalID),
 				])
 			]
 		}
@@ -37,18 +44,18 @@ extension Lexicon.Graph.Node.Class.JSON {
 				"className": names.className,
 				"baseClass": names.baseClassName,
 				"protocolName": names.protocolName,
-				"localized": id,
+				"localized": id.description,
 			]),
 			try SourceTemplate(
 				"public protocol %%protocolName%%: %%protocolBase%% {}",
 				delimiters: .percentSigns
 			).render([
 				"protocolName": names.protocolName,
-				"protocolBase": names.protocolBase(supertype: supertype),
+				"protocolBase": try names.protocolBase(supertype: supertype, classes: classes),
 			])
 		]
 
-		let properties = try swiftProperties(prefixes: prefixes)
+		let properties = try swiftProperties(prefixes: prefixes, classes: classes)
 		if !properties.isEmpty {
 			lines.append(
 				try SourceTemplate(

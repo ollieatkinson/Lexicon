@@ -25,7 +25,14 @@ public enum KotlinStandAloneGenerator: SourceCodeGenerator {
 private extension Lexicon.Graph.JSON {
 
 	func kotlin(prefixes: StandAloneTypePrefixes) throws -> String {
-		let names = StandAloneTypeNames(id: name, prefixes: prefixes)
+		try validateStandAloneSymbols(prefixes: prefixes)
+		try validateStandAloneMembers(
+			language: "Kotlin",
+			reserved: ["debugDescription", "identifier", "localized"]
+		)
+		let rootID = Lemma.ID(root: name)
+		let root = rootID.description
+		let names = StandAloneTypeNames(id: rootID, prefixes: prefixes)
 		return try SourceTemplate(
 			"""
 			interface I: TypeLocalized, SourceCodeIdentifiable
@@ -44,22 +51,28 @@ private extension Lexicon.Graph.JSON {
 
 			// MARK: generated types
 
-			val {{root}} = {{rootClassName}}("{{root}}")
+			val {{rootIdentifier}} = {{rootClassName}}("{{root}}")
 
 			{{types}}
 
 			"""
 		).render([
-			"root": name,
+			"root": root,
+			"rootIdentifier": root.kotlinDeclarationIdentifier,
 			"rootClassName": names.className,
-			"types": try classes.flatMap { try $0.kotlin(prefixes: prefixes) }.joined(separator: "\n"),
+			"types": try classes.flatMap {
+				try $0.kotlin(prefixes: prefixes, classes: classes)
+			}.joined(separator: "\n"),
 		])
 	}
 }
 
 private extension Lexicon.Graph.Node.Class.JSON {
 
-	func kotlin(prefixes: StandAloneTypePrefixes) throws -> [String] {
+	func kotlin(
+		prefixes: StandAloneTypePrefixes,
+		classes: [Lexicon.Graph.Node.Class.JSON]
+	) throws -> [String] {
 
 		guard mixin == nil else {
 			return []
@@ -68,10 +81,14 @@ private extension Lexicon.Graph.Node.Class.JSON {
 		let names = StandAloneTypeNames(id: id, prefixes: prefixes)
 		
 		if let protonym = protonym {
+			let canonicalID = try classes.standAloneCanonicalID(
+				for: protonym,
+				referencedBy: id
+			)
 			return [
 				try SourceTemplate("typealias {{className}} = {{baseClass}}").render([
 					"className": names.className,
-					"baseClass": names.className(for: protonym),
+					"baseClass": names.className(for: canonicalID),
 				])
 			]
 		}
@@ -86,11 +103,11 @@ private extension Lexicon.Graph.Node.Class.JSON {
 				"className": names.className,
 				"baseClass": names.baseClassName,
 				"protocolName": names.protocolName,
-				"protocolBase": names.protocolBase(supertype: supertype),
+				"protocolBase": try names.protocolBase(supertype: supertype, classes: classes),
 			])
 		]
 
-		for accessor in standAloneAccessors() {
+		for accessor in try standAloneAccessors(classes: classes) {
 			let template = accessor.isSynonym
 				? "val {{protocolName}}.`{{name}}`: {{className}} get() = {{protonym}}"
 				: "val {{protocolName}}.`{{name}}`: {{className}} get() = {{className}}(\"${identifier}.{{name}}\")"
@@ -98,9 +115,9 @@ private extension Lexicon.Graph.Node.Class.JSON {
 				try SourceTemplate(template)
 					.render([
 						"protocolName": names.protocolName,
-						"name": accessor.name,
+						"name": accessor.name.rawValue,
 						"className": names.className(for: accessor.sourceID),
-						"protonym": accessor.pathSuffix,
+						"protonym": accessor.pathSuffix.kotlinMemberPath,
 					])
 			)
 		}

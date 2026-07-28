@@ -1,0 +1,2 @@
+This file deliberately has a suffix that merely ends in "lexicon".
+The build plugin must not treat it as a Lexicon input.

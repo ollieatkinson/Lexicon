@@ -34,15 +34,22 @@ struct JSONClasses™ {
 			"root.a.b.b.b.b.b",
 		])
 		#expect(alias.protonym == "root.a.b.b.b.b.b")
-		#expect(alias.references.map(Array.init) == ["root.a.b.b.b.b.b"])
+		#expect(alias.references.map(Array.init) == [
+			"root.a.b.b.b.b.b",
+			"root.a",
+		])
 		#expect(combined.references.map(Array.init) == [
 			"root.a",
 			"root.bad",
 			"root.first",
 			"root.good",
-			"root.a_&_root.bad_&_root.first_&_root.good",
+			"mixin_726f6f742e61_and_726f6f742e626164_and_726f6f742e6669727374_and_726f6f742e676f6f64",
 		])
-		#expect(decoded.references?.contains("root.a_&_root.bad_&_root.first_&_root.good") == true)
+		#expect(
+			decoded.references?.contains(
+				"mixin_726f6f742e61_and_726f6f742e626164_and_726f6f742e6669727374_and_726f6f742e676f6f64"
+			) == true
+		)
 		#expect(output.contains(
 			#"""
 			      "synonyms" : {
@@ -68,7 +75,11 @@ struct JSONClasses™ {
 			+ root.second
 		""".lexicon().json()
 
-		let mixin = try #require(json.classes.first { $0.id == "root.first_&_root.second" }?.mixin)
+		let mixin = try #require(
+			json.classes.first {
+				$0.id == "mixin_726f6f742e6669727374_and_726f6f742e7365636f6e64"
+			}?.mixin
+		)
 		let children = try #require(mixin.children)
 
 		#expect(mixin.type == "root.second")

@@ -28,7 +28,7 @@ struct RustGeneratorTests {
 			fn:
 			struct:
 		"""
-		var json = try await Lexicon.from(TaskPaper(source).decode()).json()
+		var json = try await TaskPaper(source).lexicon().json()
 		json.date = Date(timeIntervalSinceReferenceDate: 0)
 
 		let code = try RustStandAloneGenerator.generate(json).string()
@@ -60,7 +60,7 @@ struct RustGeneratorTests {
 			foo:
 				bar:
 		"""
-		var json = try await Lexicon.from(TaskPaper(source).decode()).json()
+		var json = try await TaskPaper(source).lexicon().json()
 		json.date = Date(timeIntervalSinceReferenceDate: 0)
 
 		let code = try RustStandAloneGenerator.generate(json).string()
@@ -75,7 +75,7 @@ struct RustGeneratorTests {
 		test:
 			self:
 		"""
-		var json = try await Lexicon.from(TaskPaper(source).decode()).json()
+		var json = try await TaskPaper(source).lexicon().json()
 		json.date = Date(timeIntervalSinceReferenceDate: 0)
 
 		do {
@@ -86,6 +86,70 @@ struct RustGeneratorTests {
 			#expect(description.contains("Rust cannot generate exact member syntax for 'self'"))
 			#expect(!description.contains("self_"))
 		}
+	}
+
+	@Test
+	func test_generated_source_rejects_runtime_member_collisions() async throws {
+		for source in [
+			"l:",
+			"new:",
+			"root:\n\tid:",
+			"root:\n\tl:",
+			"root:\n\tlocalized:",
+			"root:\n\tnew:",
+		] {
+			let json = try await source.lexicon().json()
+			do {
+				_ = try RustStandAloneGenerator.generateSource(json)
+				Issue.record("Expected Rust runtime member collision to throw.")
+			} catch {
+				#expect(String(describing: error).contains("Rust"))
+				#expect(String(describing: error).contains("conflict") ||
+					String(describing: error).contains("reserves member"))
+			}
+		}
+	}
+
+	@Test
+	func test_protonym_chain_compiles_and_resolves_to_canonical_id() async throws {
+		guard Self.hasCommand("rustc"), Self.hasCommand("rustfmt") else {
+			return
+		}
+		let json = try await """
+		root:
+			target:
+			alias1:
+			= target
+			alias2:
+			= alias1
+		""".lexicon().json()
+		let code = try RustStandAloneGenerator.generate(json)
+		let source = try code.string()
+
+		#expect(source.contains("pub type L_root_alias1 = L_root_target;"))
+		#expect(source.contains("pub type L_root_alias2 = L_root_target;"))
+		#expect(source.contains(
+			#"alias2: L_root_target::new(format!("{}.target", id))"#
+		))
+
+		let directory = FileManager.default.temporaryDirectory
+			.appendingPathComponent("LexiconRustProtonymTests-\(UUID().uuidString)")
+		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+		defer { try? FileManager.default.removeItem(at: directory) }
+
+		try code.write(to: directory.appendingPathComponent("lexicon.rs"))
+		try Data("""
+		mod lexicon;
+
+		use lexicon::{l, I};
+
+		fn main() {
+			assert_eq!(l().root.alias2.id(), "root.target");
+		}
+		""".utf8).write(to: directory.appendingPathComponent("main.rs"))
+
+		try Self.run("rustfmt lexicon.rs main.rs", in: directory)
+		try Self.run("rustc --edition=2021 main.rs && ./main", in: directory)
 	}
 
 	@Test

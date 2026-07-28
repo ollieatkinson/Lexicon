@@ -4,12 +4,68 @@
 
 import Foundation
 import Lexicon
+import _JSON
 
 public extension I where Self: L {
 
-	subscript<Value>(value: Value) -> K<Self> where Value: Sendable, Value: Hashable, Value: Codable {
-		K(self, [self: eventValue(value)])
+	/// Attaches a directly representable event value to this lemma.
+	subscript<Value>(value: Value) -> K<Self> where Value: EventValueConvertible {
+		K(self, [self: value.eventValue])
 	}
+
+	/// Validates and attaches an arbitrary JSON event value to this lemma.
+	subscript(value: Event.Value) -> K<Self> {
+		get throws {
+			try K(self, [self: Event.Value.encoded(value)])
+		}
+	}
+
+	/// Encodes a custom value as JSON and attaches it to this lemma.
+	func encoding<Value>(_ value: Value) throws -> K<Self>
+	where Value: Sendable, Value: Hashable, Value: Encodable {
+		try K(self, [self: Event.Value.encoded(value)])
+	}
+}
+
+/// A value that can be attached to an event without a fallible encoding step.
+public protocol EventValueConvertible: Sendable, Hashable {
+	var eventValue: Event.Value { get }
+}
+
+extension String: EventValueConvertible {
+	public var eventValue: Event.Value { .string(self) }
+}
+
+extension Bool: EventValueConvertible {
+	public var eventValue: Event.Value { .bool(self) }
+}
+
+extension Int: EventValueConvertible {
+	public var eventValue: Event.Value { .int(self) }
+}
+
+extension Int8: EventValueConvertible {
+	public var eventValue: Event.Value { .int(Int(self)) }
+}
+
+extension Int16: EventValueConvertible {
+	public var eventValue: Event.Value { .int(Int(self)) }
+}
+
+extension Int32: EventValueConvertible {
+	public var eventValue: Event.Value { .int(Int(self)) }
+}
+
+extension UInt8: EventValueConvertible {
+	public var eventValue: Event.Value { .int(Int(self)) }
+}
+
+extension UInt16: EventValueConvertible {
+	public var eventValue: Event.Value { .int(Int(self)) }
+}
+
+extension UInt32: EventValueConvertible {
+	public var eventValue: Event.Value { .int(Int(self)) }
 }
 
 @dynamicMemberLookup public struct K<A: L>: Hashable, KProtocol, CustomStringConvertible {
@@ -179,8 +235,31 @@ public extension K {
 		K<B>(___[keyPath: keyPath], ____)
 	}
 
-	subscript<Value>(value: Value) -> K<A> where Value: Sendable, Value: Hashable, Value: Codable {
-		K(___, ____.merging([___: eventValue(value)], uniquingKeysWith: { _, last in last }))
+	/// Attaches a directly representable event value to the current lemma in the path.
+	subscript<Value>(value: Value) -> K<A> where Value: EventValueConvertible {
+		K(___, ____.merging([___: value.eventValue], uniquingKeysWith: { _, last in last }))
+	}
+
+	/// Validates and attaches an arbitrary JSON event value to the current lemma in the path.
+	subscript(value: Event.Value) -> K<A> {
+		get throws {
+			try K(
+				___,
+				____.merging(
+					[___: Event.Value.encoded(value)],
+					uniquingKeysWith: { _, last in last }
+				)
+			)
+		}
+	}
+
+	/// Encodes a custom value as JSON and attaches it to the current lemma in the path.
+	func encoding<Value>(_ value: Value) throws -> K<A>
+	where Value: Sendable, Value: Hashable, Value: Encodable {
+		try K(
+			___,
+			____.merging([___: Event.Value.encoded(value)], uniquingKeysWith: { _, last in last })
+		)
 	}
 }
 
@@ -228,14 +307,6 @@ public enum CallAsFunctionKExtensions {}
 public extension CallAsFunctionKExtensions {
 	var L: GetL { .init() }
 	struct GetL {}
-}
-
-private func eventValue<Value>(_ value: Value) -> Event.Value where Value: Encodable {
-	do {
-		return try Event.Value.encoded(value)
-	} catch {
-		preconditionFailure("Could not encode \(Value.self) as an event JSON value: \(error)")
-	}
 }
 
 private extension Event.Value {

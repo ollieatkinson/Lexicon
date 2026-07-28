@@ -7,6 +7,10 @@
     "lib": [
       "ES2022"
     ],
+    "types": [
+      "node",
+      "vscode"
+    ],
     "sourceMap": true,
     "strict": true,
     "moduleResolution": "node16",

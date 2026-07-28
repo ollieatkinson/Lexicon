@@ -35,14 +35,17 @@ struct READMEExampleTests {
 		#expect(supportStatus.type == ["commerce.db.type.string"])
 		#expect(supportStatus.defaultValue == .literal(.string("open")))
 
-		let plan = try document.composed(resolving: FileLexiconImportResolver(baseURL: baseURL))
+		let plan = try document.composed(resolving: FileLexiconImportResolver(
+			baseURL: baseURL,
+			rootURL: source
+		))
 
 		#expect(plan.conflicts == [])
-		#expect(Array(plan.document.roots.keys) == ["commerce"])
+		#expect(Array(plan.document.roots.keys) == ["commerce", "support"])
 
 		let commerce = try plan.document.roots["commerce"].try()
 		#expect(commerce.notes == ["Terms under this root are composed into generated platform code."])
-		#expect(Array(commerce.children.keys) == ["api", "db", "session", "support", "ui", "ux"])
+		#expect(Array(commerce.children.keys) == ["api", "db", "session", "ui", "ux"])
 
 		let product = try commerce.child("api.storefront.products.product")
 		#expect(product.type == ["commerce.db.collection"])
@@ -72,11 +75,15 @@ struct READMEExampleTests {
 		let active = try commerce.child("ui.product.card.buy.active")
 		#expect(active.protonym == "enabled")
 
-		let composedSupportStatus = try commerce.child("support.case.status")
+		let support = try plan.document.roots["support"].try()
+		let composedSupportStatus = try support.child("case.status")
 		#expect(composedSupportStatus.type == ["commerce.db.type.string"])
 		#expect(composedSupportStatus.defaultValue == .literal(.string("open")))
 
-		let lexicon = try await Lexicon.from(plan.document, root: "commerce")
+		let lexicon = try await Lexicon(
+			document: plan.document,
+			selectedRoot: "commerce"
+		)
 		let enabledLemma = try #require(await lexicon["commerce.ui.product.card.buy.enabled"])
 		let submitLemma = try #require(await lexicon["commerce.api.storefront.order.create.can.submit"])
 		let enabledDefault = await enabledLemma.defaultValue
@@ -156,7 +163,8 @@ private extension Lexicon.Graph.Node {
 
 	func child(_ path: String) throws -> Self {
 		try path.split(separator: ".").reduce(self) { node, component in
-			try node.children[String(component)].try()
+			let name = try Lemma.Name(validating: String(component))
+			return try node.children[name].try()
 		}
 	}
 }

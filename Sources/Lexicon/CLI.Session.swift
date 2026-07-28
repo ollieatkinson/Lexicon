@@ -87,7 +87,7 @@ public extension CLI {
 	
 	@LexiconActor func record() -> Session.Record {
 		.init(
-			taskpaper: TaskPaper.encode(lemma.lexicon.graph),
+			taskpaper: TaskPaper.encode(lemma.document),
 			root: root.id,
 			lemma: lemma.id,
 			breadcrumbs: breadcrumbs.map(\.id),
@@ -103,8 +103,11 @@ public extension CLI.Session.Event {
 	
 	@LexiconActor func cli() async throws -> CLI {
 		
-		let graph = try TaskPaper(record.taskpaper).decode()
-		let lexicon = Lexicon.from(graph)
+		let document = try TaskPaper(record.taskpaper).decodeDocument()
+		let lexicon = try Lexicon(
+			document: document,
+			selectedRoot: record.root.root
+		)
 		
 		var breadcrumbs: [Lemma] = []
 		for breadcrumb in record.breadcrumbs {
@@ -117,7 +120,7 @@ public extension CLI.Session.Event {
 		}
 		
 		return CLI(
-			date: graph.date,
+			date: document.date,
 			root: try lexicon[record.root].try(),
 			breadcrumbs: breadcrumbs,
 			error: record.error,

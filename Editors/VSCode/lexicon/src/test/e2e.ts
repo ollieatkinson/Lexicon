@@ -11,7 +11,9 @@ export async function run(): Promise<void> {
 
 async function assertExtensionActivatedByWorkspaceConfiguration(): Promise<void> {
 	const extension = vscode.extensions.getExtension("ollieatkinson.lexicon");
-	assert.ok(extension, "Lexicon extension is registered");
+	if (extension === undefined) {
+		assert.fail("Lexicon extension is registered");
+	}
 	for (let attempt = 0; attempt < 40; attempt += 1) {
 		if (extension.isActive) {
 			return;
@@ -29,7 +31,9 @@ async function assertCompletions(
 	languageId?: string
 ): Promise<void> {
 	const workspace = vscode.workspace.workspaceFolders?.[0];
-	assert.ok(workspace, "workspace folder is available");
+	if (workspace === undefined) {
+		assert.fail("workspace folder is available");
+	}
 	const uri = vscode.Uri.joinPath(workspace.uri, fileName);
 	let document = await vscode.workspace.openTextDocument(uri);
 	if (languageId !== undefined && document.languageId !== languageId) {
@@ -77,11 +81,16 @@ async function pollCompletionLabels(
 
 async function replaceWorkspaceConfiguration(): Promise<void> {
 	const workspace = vscode.workspace.workspaceFolders?.[0];
-	assert.ok(workspace, "workspace folder is available");
+	if (workspace === undefined) {
+		assert.fail("workspace folder is available");
+	}
 	await vscode.workspace.fs.writeFile(
 		vscode.Uri.joinPath(workspace.uri, "app", ".lexicon.conf"),
 		new TextEncoder().encode(JSON.stringify({ lexicon: "replacement.lexicon" }, null, 2))
 	);
+	// Allow the extension's debounced file watcher to restart the server before
+	// requesting completions from the same document and cursor position.
+	await delay(1_000);
 }
 
 function delay(milliseconds: number): Promise<void> {

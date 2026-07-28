@@ -8,7 +8,7 @@ It is for teams whose shared language is scattered across API paths, UI copy, an
 
 ## Documentation
 
-The README is the short overview. The detailed guides now live in the wiki:
+The README is the short package overview. The GitHub wiki is the canonical home for narrative documentation: tutorials, workflows, examples, editor setup and troubleshooting.
 
 - [Quick Start](https://github.com/ollieatkinson/Lexicon/wiki/Quick-Start)
 - [Core Concepts](https://github.com/ollieatkinson/Lexicon/wiki/Core-Concepts)
@@ -36,6 +36,15 @@ Editor setup guides:
 - [VS Code](https://github.com/ollieatkinson/Lexicon/wiki/Editor-VS-Code)
 - [GoLand and JetBrains](https://github.com/ollieatkinson/Lexicon/wiki/Editor-GoLand-and-JetBrains)
 - [Generic LSP Clients](https://github.com/ollieatkinson/Lexicon/wiki/Editor-Generic-LSP-Clients)
+
+Versioned API guarantees and contributor policy stay with the source:
+
+- [Lexicon 0.3 API contract](Documentation/Lexicon.docc/API-Contract-0.3.md)
+- [Migrating from 0.2 to 0.3](Documentation/Lexicon.docc/Migration-0.3.md)
+- [Package products and traits](Documentation/Lexicon.docc/Package-Traits.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [Release process](RELEASING.md)
 
 ## Why
 
@@ -105,6 +114,9 @@ See the [Commerce Example](https://github.com/ollieatkinson/Lexicon/wiki/Example
 swift run lexicon-generate commerce.lexicon \
 	--type swift,kotlin,go,rust,ts,json,json-ld
 ```
+
+If the composed document contains more than one root, select the generated root
+explicitly with `--root <name>`.
 
 Available generator commands:
 
@@ -180,13 +192,32 @@ See [CLI Reference](https://github.com/ollieatkinson/Lexicon/wiki/CLI-Reference)
 | `Lexicon` | Core document, graph, parser, composition, branch and CRDT model. |
 | `SwiftLexicon` | Runtime support for generated Swift lexicons and event streams. |
 | `LexiconGenerators` | Code generators and generator registry. |
-| `_JSON` | JSON value and decoder-backed typed access. |
-| `_Collections` | Internal collection utilities, including sorted dictionary support. |
+| `LexiconSearchMLX` | MLX-backed embedding provider when the `MLXSearch` trait is enabled. |
+| `_JSON` | JSON support used by package and generated runtime code; no independent compatibility promise. |
+| `_Collections` | Collection support used by package implementation; no independent compatibility promise. |
 | `lexicon` | CLI for validating, inspecting, formatting, diffing and editing lexicons. |
 | `lexicon-generate` | CLI for generating source artefacts. |
 | `lexicon-lsp` | Sidecar language server for Lexicon path completions and diagnostics. |
 | `SwiftLibraryGeneratorPlugin` | SwiftPM plugin for generated Swift that depends on `SwiftLexicon`. |
 | `SwiftStandAloneGeneratorPlugin` | SwiftPM plugin for stand-alone generated Swift. |
+
+## Package Traits
+
+Traits are opt-in and have no defaults:
+
+| Trait | Effect |
+| --- | --- |
+| `Editor` | Enables incremental graph-editing APIs in `Lexicon`; read-only clients do not compile the editor-only surface. |
+| `MLXSearch` | Links the MLX/tokenizer stack and enables MLX-backed semantic search in `LexiconSearchMLX` and `lexicon`. |
+
+Test or build the surface you adopt:
+
+```sh
+swift test --traits Editor
+swift build --traits MLXSearch --product lexicon
+```
+
+See [Package products and traits](Documentation/Lexicon.docc/Package-Traits.md) for compatibility and availability boundaries.
 
 ## Installation
 
@@ -203,15 +234,23 @@ Then depend on the products you need:
 .product(name: "Lexicon", package: "Lexicon")
 .product(name: "SwiftLexicon", package: "Lexicon")
 .product(name: "LexiconGenerators", package: "Lexicon")
+.product(name: "LexiconSearchMLX", package: "Lexicon")
 ```
 
 The package currently declares Swift 6.3, Swift language mode 6, macOS 15 and iOS 18.
 
 ## Platform Support
 
-CI runs SwiftPM tests on macOS and Linux. It also runs tests on an Android emulator and cross-builds Android ARM64.
+Package declarations and verification evidence are deliberately separate:
 
-On Apple platforms, sentence graph generation can use NaturalLanguage. On Linux and Android, Lexicon uses a deterministic fallback so the API remains available.
+| Platform | Status | Evidence |
+| --- | --- | --- |
+| macOS 15+ | Supported | Built and tested in CI. |
+| iOS 18+ | Declared | Package deployment target; no dedicated iOS CI job. |
+| Linux | Supported | Built and tested in CI. |
+| Android | Experimental | Not currently verified by emulator or ARM64 cross-build CI. |
+
+On Apple platforms, sentence graph generation can use NaturalLanguage. Deterministic fallbacks keep the core API available when NaturalLanguage is unavailable. MLX-backed search has narrower host support and remains opt-in.
 
 See [Platform Support](https://github.com/ollieatkinson/Lexicon/wiki/Platform-Support).
 
@@ -219,11 +258,15 @@ See [Platform Support](https://github.com/ollieatkinson/Lexicon/wiki/Platform-Su
 
 ```sh
 swift test -Xswiftc -warnings-as-errors
+swift test --traits Editor -Xswiftc -warnings-as-errors
 swift test -Xswiftc -strict-concurrency=complete -Xswiftc -warnings-as-errors
+python3 Scripts/verify_wiki_contract.py
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete change and documentation workflow.
 
 ## Status
 
 Lexicon is usable as a Swift package and command-line toolkit. The active branch is `trunk`; pin a commit if you need grammar or source compatibility.
 
-The formal document specification is still evolving. Near-term work is focused on clearer examples, richer search and discovery APIs, and more editor-oriented composition workflows.
+The formal document specification is still evolving. The [0.3 API contract](Documentation/Lexicon.docc/API-Contract-0.3.md) and [migration guide](Documentation/Lexicon.docc/Migration-0.3.md) record the next compatibility boundary.

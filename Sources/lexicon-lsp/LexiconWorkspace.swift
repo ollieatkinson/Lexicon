@@ -263,6 +263,7 @@ private struct LexiconWorkspaceIndex {
 		do {
 			let resolver = OpenDocumentLexiconImportResolver(
 				baseURL: lexiconURL.deletingLastPathComponent(),
+				rootURL: lexiconURL,
 				openDocuments: openDocuments
 			)
 			let text = try Self.lexiconText(at: lexiconURL, openDocuments: openDocuments)
@@ -305,24 +306,48 @@ private struct LexiconIndexMapping {
 	}
 }
 
-private struct OpenDocumentLexiconImportResolver: LexiconImportResolving {
+private struct OpenDocumentLexiconImportResolver: ContextualLexiconImportResolving {
 	var baseURL: URL
+	var rootURL: URL
 	var openDocuments: [URL: String]
-	var allowRemote = true
 
-	func resolve(_ import: Lexicon.Import) throws -> Lexicon.Document? {
-		if `import`.location == .local, let url = localURL(for: `import`.reference), let text = openDocuments[url.lspCanonicalFileURL] {
-			return try TaskPaper(text).decodeDocument()
-		}
-		return try FileLexiconImportResolver(
-			baseURL: baseURL,
-			allowRemote: allowRemote
-		).resolve(`import`)
+	var rootIdentity: String? {
+		rootURL.standardizedFileURL.resolvingSymlinksInPath().absoluteString
 	}
 
-	private func localURL(for reference: String) -> URL? {
+	func resolve(_ import: Lexicon.Import) throws -> Lexicon.Document? {
+		try resolve(`import`, relativeTo: nil)?.document
+	}
+
+	func resolve(
+		_ import: Lexicon.Import,
+		relativeTo origin: URL?
+	) throws -> ResolvedLexiconImport? {
+		if
+			`import`.location == .local,
+			let url = localURL(for: `import`.reference, relativeTo: origin),
+			let text = openDocuments[url.lspCanonicalFileURL]
+		{
+			return .init(
+				document: TaskPaper(text).parse().document,
+				origin: url,
+				identity: url.standardizedFileURL.resolvingSymlinksInPath().absoluteString
+			)
+		}
+		return try FileLexiconImportResolver(
+			baseURL: baseURL
+		).resolve(`import`, relativeTo: origin)
+	}
+
+	private func localURL(for reference: String, relativeTo origin: URL?) -> URL? {
 		let base = baseURL.lspCanonicalFileURL
-		let candidate = URL(fileURLWithPath: reference, relativeTo: base).lspCanonicalFileURL
+		let parent = origin?.isFileURL == true
+			? origin!.deletingLastPathComponent()
+			: base
+		let candidate = URL(
+			fileURLWithPath: reference,
+			relativeTo: parent
+		).lspCanonicalFileURL
 		guard candidate.isFileURL else {
 			return nil
 		}

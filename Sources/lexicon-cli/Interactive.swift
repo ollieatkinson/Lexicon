@@ -57,12 +57,15 @@ struct InteractiveSession {
 				case "quit", "exit":
 					try emit(InteractiveMessage(event: "bye", message: "session closed"))
 					return false
-				case "help":
-					try emit(InteractiveHelp())
-				case "validate":
-					try emit(ValidationOutput(document, strict: rest.contains("--strict")))
-				case "lint":
-					try emit(ValidationOutput(document, strict: true))
+					case "help":
+						try emit(InteractiveHelp())
+					case "validate":
+						try emit(ValidationOutput(
+							try composedDocument(),
+							strict: rest.contains("--strict")
+						))
+					case "lint":
+						try emit(ValidationOutput(try composedDocument(), strict: true))
 				case "inspect":
 					let resolved = try composedDocument()
 					if let id = rest.first {
@@ -90,32 +93,52 @@ struct InteractiveSession {
 				case "add":
 					let parent = try rest.required(0, named: "parent")
 					let name = try rest.required(1, named: "name")
-					try document.add(.init(name: name), under: parent)
+					try document.add(
+						.init(),
+						named: name,
+						under: parent,
+						sourceURL: input
+					)
 					try emit(InteractiveMessage(event: "changed", message: "added \(parent).\(name)"))
 				case "remove":
 					let id = try rest.required(0, named: "id")
-					try document.remove(id)
+					try document.remove(id, sourceURL: input)
 					try emit(InteractiveMessage(event: "changed", message: "removed \(id)"))
 				case "rename":
 					let id = try rest.required(0, named: "id")
 					let name = try rest.required(1, named: "name")
-					try document.rename(id, to: name)
+					try document.rename(
+						id,
+						to: name,
+						sourceURL: input
+					)
 					try emit(InteractiveMessage(event: "changed", message: "renamed \(id)"))
 				case "move":
 					let id = try rest.required(0, named: "id")
 					let parent = try rest.required(1, named: "parent")
-					try document.move(id, under: parent)
+					try document.move(
+						id,
+						under: parent,
+						sourceURL: input
+					)
 					try emit(InteractiveMessage(event: "changed", message: "moved \(id)"))
 				case "set-type":
 					let id = try rest.required(0, named: "id")
 					let type = try rest.required(1, named: "type")
-					try document.updateNode(id) { $0.type.insert(type) }
+					let typeID = try Lemma.ID(parsing: type)
+					try document.updateNode(
+						id,
+						sourceURL: input
+					) {
+						$0.type.insert(typeID)
+					}
 					try emit(InteractiveMessage(event: "changed", message: "set type \(type) on \(id)"))
 				case "unset-type":
 					let id = try rest.required(0, named: "id")
 					let type = try rest.required(1, named: "type")
-					try document.updateNode(id) { node in
-						guard node.type.remove(type) != nil else {
+					let typeID = try Lemma.ID(parsing: type)
+					try document.updateNode(id, sourceURL: input) { node in
+						guard node.type.remove(typeID) != nil else {
 							throw ValidationError("Node '\(id)' does not declare type '\(type)'.")
 						}
 					}
@@ -123,7 +146,12 @@ struct InteractiveSession {
 				case "set-protonym":
 					let id = try rest.required(0, named: "id")
 					let protonym = try rest.required(1, named: "protonym reference or --clear")
-					try document.updateNode(id) { $0.protonym = protonym == "--clear" ? nil : protonym }
+					let reference: Lemma.RelativeID? = try protonym == "--clear"
+						? nil
+						: Lemma.RelativeID(parsing: protonym)
+					try document.updateNode(id, sourceURL: input) {
+						$0.protonym = reference
+					}
 					try emit(InteractiveMessage(event: "changed", message: "updated protonym on \(id)"))
 				case "set-default":
 					let id = try rest.required(0, named: "id")
@@ -131,8 +159,11 @@ struct InteractiveSession {
 					guard !value.isEmpty else {
 						throw ValidationError("Provide a default value or --clear.")
 					}
-					try document.updateNode(id) { node in
-						node.defaultValue = value == "--clear" ? nil : .parseAgentArgument(value)
+					let defaultValue: Lexicon.Graph.Node.DefaultValue? = try value == "--clear"
+						? nil
+						: Lexicon.Graph.Node.DefaultValue.parseAgentArgument(value)
+					try document.updateNode(id, sourceURL: input) { node in
+						node.defaultValue = defaultValue
 					}
 					try emit(InteractiveMessage(event: "changed", message: "updated default on \(id)"))
 				case "note":
@@ -143,7 +174,7 @@ struct InteractiveSession {
 					try emit(TaskPaperOutput(taskpaper: TaskPaper.encode(document)))
 				case "save":
 					let destination = rest.first.map(URL.init(fileURLWithPath:)) ?? output
-					try Data(TaskPaper.encode(document).utf8).write(to: destination)
+					try Data(TaskPaper.encode(document).utf8).write(to: destination, options: .atomic)
 					try emit(WriteOutput(written: true, output: destination.path))
 				default:
 					throw ValidationError("Unknown interactive command: \(command)")
@@ -157,7 +188,7 @@ struct InteractiveSession {
 
 	private mutating func handleSearch(_ arguments: [String]) async throws {
 		var limit = 20
-		var root: String?
+		var root: Lemma.ID?
 		var mode = Lexicon.Search.Mode.hybrid
 		var scope = Lexicon.Search.Scope.own
 		var semanticThreshold = 0.42
@@ -175,7 +206,7 @@ struct InteractiveSession {
 					}
 					limit = parsed
 				case "--root":
-					root = try iterator.next().try()
+					root = try Lemma.ID(parsing: iterator.next().try())
 				case "--mode":
 					mode = try Lexicon.Search.Mode(agentArgument: iterator.next().try())
 				case "--scope":
@@ -213,7 +244,7 @@ struct InteractiveSession {
 		}
 		let resolved = try composedDocument()
 		if let root {
-			_ = try resolved.node(root)
+			_ = try resolved.node(root.description)
 		}
 		let options = Lexicon.Search.Options(
 			limit: limit,
@@ -278,7 +309,7 @@ struct InteractiveSession {
 		let action = try arguments.required(0, named: "action")
 		let id = try arguments.required(1, named: "id")
 		let text = arguments.dropFirst(2).joined(separator: " ")
-		try document.updateNode(id) { node in
+		try document.updateNode(id, sourceURL: input) { node in
 			switch action {
 				case "add":
 					guard !text.isEmpty else {
@@ -303,9 +334,10 @@ struct InteractiveSession {
 	}
 
 	func composedDocument() throws -> Lexicon.Document {
-		let plan = try document.composed(resolving: FileLexiconImportResolver(
-			baseURL: input.deletingLastPathComponent()
-		))
+			let plan = try document.composed(resolving: FileLexiconImportResolver(
+				baseURL: input.deletingLastPathComponent(),
+				rootURL: input
+			))
 		guard plan.conflicts.isEmpty else {
 			throw ValidationError(plan.conflicts.map(\.description).joined(separator: "\n"))
 		}

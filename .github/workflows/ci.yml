@@ -6,32 +6,229 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SWIFT_VERSION: "6.3.2"
+  NODE_VERSION: "22.20.0"
+  RUST_VERSION: "1.94.0"
+
 jobs:
-  macos:
-    name: SwiftPM macOS
+  swift-macos:
+    name: Swift / macOS
     runs-on: macos-26
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - name: Select Xcode
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Select Xcode 26.5
         run: sudo xcode-select -s /Applications/Xcode_26.5.app/Contents/Developer
-      - name: Swift version
+
+      - name: Verify Swift version
+        run: |
+          swift --version
+          swift --version | grep "Swift version $SWIFT_VERSION"
+
+      - name: Build command-line product
+        run: swift build --product lexicon -Xswiftc -warnings-as-errors
+
+      - name: Test default traits
+        run: swift test -Xswiftc -warnings-as-errors
+
+      - name: Test Editor trait
+        run: swift test --traits Editor -Xswiftc -warnings-as-errors
+
+      - name: Test complete strict concurrency
+        run: swift test -Xswiftc -strict-concurrency=complete -Xswiftc -warnings-as-errors
+
+      - name: Verify root dependency lock
+        run: git diff --exit-code -- Package.resolved
+
+  swift-linux:
+    name: Swift / Linux
+    runs-on: ubuntu-24.04
+    container: swift:6.3.2-noble
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Verify Swift version
+        run: |
+          swift --version
+          swift --version | grep "Swift version $SWIFT_VERSION"
+
+      - name: Preserve root dependency lock
+        run: cp Package.resolved /tmp/Lexicon-Package.resolved
+
+      - name: Build command-line product
+        run: swift build --product lexicon -Xswiftc -warnings-as-errors
+
+      - name: Test default traits
+        run: swift test -Xswiftc -warnings-as-errors
+
+      - name: Test Editor trait
+        run: swift test --traits Editor -Xswiftc -warnings-as-errors
+
+      - name: Test complete strict concurrency
+        run: swift test -Xswiftc -strict-concurrency=complete -Xswiftc -warnings-as-errors
+
+      - name: Verify root dependency lock
+        run: cmp /tmp/Lexicon-Package.resolved Package.resolved
+
+  apple-integrations:
+    name: Apple integrations
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Select Xcode 26.5
+        run: sudo xcode-select -s /Applications/Xcode_26.5.app/Contents/Developer
+
+      - name: Verify Swift version
         run: |
           xcodebuild -version
           swift --version
-      - name: Build Lexicon CLI
-        run: swift build --product lexicon -Xswiftc -warnings-as-errors
-      - name: Test
-        run: swift test -Xswiftc -warnings-as-errors
+          swift --version | grep "Swift version $SWIFT_VERSION"
 
-  linux:
-    name: SwiftPM Linux
-    runs-on: ubuntu-latest
-    container: swift:6.3.2-noble
+      - name: Test MLX and build-plugin integration package
+        run: swift test --package-path IntegrationTests/MLX
+
+      - name: Build benchmarks
+        env:
+          BENCHMARK_DISABLE_JEMALLOC: "1"
+        run: swift build --package-path Benchmarks --configuration release
+
+      - name: Install Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: Editors/VSCode/lexicon/package-lock.json
+
+      - name: Install VS Code extension dependencies
+        working-directory: Editors/VSCode/lexicon
+        run: npm ci --no-audit
+
+      - name: Test VS Code extension against its minimum version
+        working-directory: Editors/VSCode/lexicon
+        run: npm run test:extension
+
+      - name: Verify integration dependency locks
+        run: |
+          git diff --exit-code -- Package.resolved
+          git diff --exit-code -- IntegrationTests/MLX/Package.resolved
+          git diff --exit-code -- Benchmarks/Package.resolved
+
+  tooling:
+    name: Tooling
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - name: Swift version
-        run: swift --version
-      - name: Build Lexicon CLI
-        run: swift build --product lexicon -Xswiftc -warnings-as-errors
-      - name: Test
-        run: swift test -Xswiftc -warnings-as-errors
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Install Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: Editors/VSCode/lexicon/package-lock.json
+
+      - name: Install Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: "1.24.6"
+          cache: false
+
+      - name: Install Java
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Kotlin
+        uses: fwilhe2/setup-kotlin@ee9692514da313706b193d808526812102a344e4 # v2.0
+        with:
+          version: "2.3.10"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: wasm32-wasip1
+
+      - name: Verify toolchain versions
+        run: |
+          node --version
+          go version
+          kotlinc -version
+          rustc --version
+
+      - name: Install VS Code extension dependencies
+        working-directory: Editors/VSCode/lexicon
+        run: npm ci --no-audit
+
+      - name: Test and package VS Code extension
+        working-directory: Editors/VSCode/lexicon
+        run: |
+          npm run test:unit
+          npm run package
+          npm run audit
+
+      - name: Build Zed extension as locked WASI module
+        run: cargo build --manifest-path Editors/Zed/lexicon/Cargo.toml --release --target wasm32-wasip1 --locked
+
+      - name: Verify Zed grammar registration
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import tomllib
+
+          root = pathlib.Path("Editors/Zed/lexicon")
+          extension = tomllib.loads((root / "extension.toml").read_text())
+          language = tomllib.loads((root / "languages/lexicon/config.toml").read_text())
+          grammar = extension["grammars"]["gitignore"]
+          assert language["grammar"] == "gitignore"
+          assert grammar["repository"] == "https://github.com/shunsambongi/tree-sitter-gitignore"
+          assert grammar["rev"] == "f4685bf11ac466dd278449bcfe5fd014e94aa504"
+          PY
+
+      - name: Compile generated language fixtures
+        run: |
+          mkdir -p "$RUNNER_TEMP/lexicon-go"
+          cp Tests/LexiconGeneratorsTests/Resources/test.go "$RUNNER_TEMP/lexicon-go/lexicon.go"
+          (
+            cd "$RUNNER_TEMP/lexicon-go"
+            go mod init lexicon.test
+            go test ./...
+          )
+          rustc --edition=2021 --crate-type=lib Tests/LexiconGeneratorsTests/Resources/test.rs \
+            -o "$RUNNER_TEMP/liblexicon.rlib"
+          kotlinc Tests/LexiconGeneratorsTests/Resources/test.kt \
+            -d "$RUNNER_TEMP/lexicon-kotlin.jar"
+          Editors/VSCode/lexicon/node_modules/.bin/tsc \
+            --strict \
+            --target ES2022 \
+            --module Node16 \
+            --moduleResolution Node16 \
+            --skipLibCheck \
+            --noEmit \
+            Tests/LexiconGeneratorsTests/Resources/test.ts
+
+      - name: Verify documentation contract
+        run: python3 Scripts/verify_wiki_contract.py
+
+      - name: Verify tooling dependency locks
+        run: |
+          git diff --exit-code -- Package.resolved
+          git diff --exit-code -- Editors/VSCode/lexicon/package-lock.json
+          git diff --exit-code -- Editors/Zed/lexicon/Cargo.lock

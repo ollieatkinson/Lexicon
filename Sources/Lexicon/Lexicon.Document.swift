@@ -8,8 +8,10 @@ import _Collections
 
 public extension Lexicon {
 
-	struct Document: Sendable {
-		public typealias Roots = _Collections.SortedDictionary<Graph.Node.Name, Graph.Node>
+	struct Document: Sendable, Equatable {
+		public typealias Roots = _Collections.SortedDictionary<Lemma.Name, Graph.Node>
+
+		public static let unspecifiedDate = Date(timeIntervalSinceReferenceDate: 0)
 
 		public var date: Date
 		public var roots: Roots
@@ -18,8 +20,8 @@ public extension Lexicon {
 		public var comments: [String]
 
 		public init(
-			date: Date = .init(),
-			roots: [Graph.Node.Name: Graph.Node] = [:],
+			date: Date = Self.unspecifiedDate,
+			roots: [Lemma.Name: Graph.Node] = [:],
 			imports: [Import] = [],
 			notes: [String] = [],
 			comments: [String] = []
@@ -34,25 +36,15 @@ public extension Lexicon {
 		public init(_ graph: Graph) {
 			self.init(
 				date: graph.date,
-				roots: [graph.root.name: graph.root]
+				roots: [graph.rootName: graph.root]
 			)
 		}
 
-		public var root: Graph.Node? {
-			roots.values.first
-		}
-
-		public func graph(root name: Graph.Node.Name? = nil) throws -> Graph {
-			let node: Graph.Node?
-			if let name = name {
-				node = roots[name]
-			} else {
-				node = root
+		public func graph(root name: Lemma.Name) throws -> Graph {
+			guard let root = roots[name] else {
+				throw LexiconError("The document does not declare root lemma '\(name)'")
 			}
-			guard let root = node else {
-				throw LexiconError("The document does not declare a root lemma")
-			}
-			return Graph(root: root, date: date)
+			return Graph(rootName: name, root: root, date: date)
 		}
 	}
 
@@ -67,7 +59,15 @@ public extension Lexicon {
 
 		public init(_ reference: String) {
 			self.reference = reference
-			self.location = reference.lowercased().hasPrefix("http") ? .remote : .local
+			if
+				let url = URL(string: reference),
+				["http", "https"].contains(url.scheme?.lowercased()),
+				url.host != nil
+			{
+				self.location = .remote
+			} else {
+				self.location = .local
+			}
 		}
 
 		public init(reference: String, location: Location) {
@@ -83,7 +83,7 @@ public extension Lexicon {
 
 public extension Lexicon.Document {
 
-	struct JSON: Codable {
+	struct JSON: Codable, Sendable {
 		public var date: Date
 		public var roots: [Lexicon.Graph.Node.JSON]?
 		public var imports: [Lexicon.Import]?
@@ -92,12 +92,10 @@ public extension Lexicon.Document {
 
 		public init(_ document: Lexicon.Document) {
 			self.date = document.date
-			self.roots = document.roots.values
-				.map(Lexicon.Graph.Node.JSON.init)
+			self.roots = document.roots
+				.map { Lexicon.Graph.Node.JSON(name: $0.key, node: $0.value) }
 				.unlessEmpty
-			self.imports = document.imports
-				.sorted { $0.reference < $1.reference }
-				.unlessEmpty
+			self.imports = document.imports.unlessEmpty
 			self.notes = document.notes.unlessEmpty
 			self.comments = document.comments.unlessEmpty
 		}
@@ -107,13 +105,17 @@ public extension Lexicon.Document {
 		JSON(self)
 	}
 
-	init(_ json: JSON) {
+	init(_ json: JSON) throws {
+		var roots: [Lemma.Name: Lexicon.Graph.Node] = [:]
+		for rootJSON in json.roots ?? [] {
+			guard roots[rootJSON.name] == nil else {
+				throw LexiconError("Duplicate root lemma '\(rootJSON.name)' in JSON document")
+			}
+			roots[rootJSON.name] = try Lexicon.Graph.Node(rootJSON)
+		}
 		self.init(
 			date: json.date,
-			roots: Dictionary(
-				(json.roots ?? []).map { ($0.name, Lexicon.Graph.Node($0)) },
-				uniquingKeysWith: { _, last in last }
-			),
+			roots: roots,
 			imports: json.imports ?? [],
 			notes: json.notes ?? [],
 			comments: json.comments ?? []
@@ -123,7 +125,7 @@ public extension Lexicon.Document {
 
 public extension Lexicon.Graph.Node {
 
-	struct JSON: Codable {
+	struct JSON: Codable, Sendable {
 		public var name: Name
 		public var type: OrderedSet<ID>?
 		public var protonym: Protonym?
@@ -133,33 +135,35 @@ public extension Lexicon.Graph.Node {
 		public var comments: [String]?
 		public var children: [Self]?
 
-		public init(_ node: Lexicon.Graph.Node) {
-			self.name = node.name
+		public init(name: Name, node: Lexicon.Graph.Node) {
+			self.name = name
 			self.type = node.type
 				.sorted()
 				.unlessEmpty
 				.map(OrderedSet.init)
 			self.protonym = node.protonym
 			self.defaultValue = node.defaultValue.map(DefaultValue.JSON.init)
-			self.connections = node.connections
-				.sorted { $0.reference < $1.reference }
-				.unlessEmpty
+			self.connections = node.connections.unlessEmpty
 			self.notes = node.notes.unlessEmpty
 			self.comments = node.comments.unlessEmpty
-			self.children = node.children.values
-				.map(Self.init)
+			self.children = node.children
+				.map { Self(name: $0.key, node: $0.value) }
 				.unlessEmpty
 		}
 	}
 
-	init(_ json: JSON) {
+	init(_ json: JSON) throws {
+		var children: [Name: Self] = [:]
+		for childJSON in json.children ?? [] {
+			guard children[childJSON.name] == nil else {
+				throw LexiconError("Duplicate child lemma '\(childJSON.name)' in JSON node")
+			}
+			children[childJSON.name] = try Self(childJSON)
+		}
 		self.init(
-			name: json.name,
-			children: Dictionary(
-				(json.children ?? []).map { ($0.name, Self($0)) },
-				uniquingKeysWith: { _, last in last }
-			),
+			children: children,
 			type: Set(json.type ?? []),
+			protonym: json.protonym,
 			defaultValue: json.defaultValue.map(DefaultValue.init),
 			connections: json.connections ?? [],
 			notes: json.notes ?? [],

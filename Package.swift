@@ -32,6 +32,7 @@ let package = Package(
 		.package(url: "https://github.com/apple/swift-async-algorithms", from: "1.1.3"),
 		.package(url: "https://github.com/ml-explore/mlx-swift", .upToNextMinor(from: "0.31.3")),
 		.package(url: "https://github.com/ml-explore/mlx-swift-lm", .upToNextMajor(from: "3.31.3")),
+		.package(url: "https://github.com/DePasqualeOrg/swift-hf-api", exact: "0.3.2"),
 		.package(url: "https://github.com/DePasqualeOrg/swift-hf-api-mlx", exact: "0.2.0"),
 		.package(url: "https://github.com/DePasqualeOrg/swift-tokenizers", from: "0.6.3"),
 	],
@@ -143,6 +144,7 @@ let package = Package(
 				.product(name: "MLX", package: "mlx-swift", condition: .when(traits: ["MLXSearch"])),
 				.product(name: "MLXEmbedders", package: "mlx-swift-lm", condition: .when(traits: ["MLXSearch"])),
 				.product(name: "MLXLMCommon", package: "mlx-swift-lm", condition: .when(traits: ["MLXSearch"])),
+				.product(name: "HFAPI", package: "swift-hf-api", condition: .when(traits: ["MLXSearch"])),
 				.product(name: "MLXEmbeddersHFAPI", package: "swift-hf-api-mlx", condition: .when(traits: ["MLXSearch"])),
 				.product(name: "Tokenizers", package: "swift-tokenizers", condition: .when(traits: ["MLXSearch"])),
 			]

@@ -9,10 +9,12 @@ struct TaskPaper™ {
 	@Test
 	func test_root_only_taskpaper() async throws {
 
-		let graph = try TaskPaper(taskpaper_example).decode()
+		let result = TaskPaper(taskpaper_example).parse()
+		let graph = try result.document.graph(root: "a")
 
 		let taskpaper = TaskPaper.encode(graph)
 
+		#expect(result.diagnostics.filter { $0.code == .unknownLine }.count == 3)
 		#expect(taskpaper == taskpaper_example_clean)
 	}
 
@@ -26,7 +28,7 @@ struct TaskPaper™ {
 			? @ test.default
 		"""
 
-		let sourceMap = try TaskPaper(text).sourceMap()
+		let sourceMap = TaskPaper(text).sourceMap()
 
 		#expect(sourceMap.lines.map(\.nodePath) == [
 			"test",
@@ -52,11 +54,10 @@ struct TaskPaper™ {
 	@Test
 	func test_encode_sorts_type_references_lexicographically() {
 		let graph = Lexicon.Graph(
+			rootName: "root",
 			root: .init(
-				name: "root",
 				children: [
 					"item": .init(
-						name: "item",
 						type: ["root.z", "root.a", "root.m"]
 					)
 				]
@@ -74,13 +75,15 @@ struct TaskPaper™ {
 	}
 
 	@Test
-	func lexicon_syntax_requires_colons_for_lemmas() throws {
-		let graph = try TaskPaper("""
+	func lexicon_syntax_reports_lines_without_colons() throws {
+		let result = TaskPaper("""
 		root:
 			ignored
 			actual:
-		""").decode()
+		""").parse()
+		let graph = try result.document.graph(root: "root")
 
+		#expect(result.diagnostics.map(\.code) == [.unknownLine])
 		#expect(graph.root.children.keys == ["actual"])
 	}
 
@@ -89,7 +92,7 @@ struct TaskPaper™ {
 		let graph = try TaskPaper("""
 		root
 			child
-		""", options: .plainTextOutline).decode()
+		""", options: .plainTextOutline).decodeGraph(root: "root")
 
 		#expect(TaskPaper.encode(graph) == """
 		root:
@@ -98,10 +101,10 @@ struct TaskPaper™ {
 	}
 
 	@Test
-	func source_map_uses_selected_lemma_syntax() throws {
-		#expect(try TaskPaper("root").sourceMap().lines.isEmpty)
+	func source_map_uses_selected_lemma_syntax() {
+		#expect(TaskPaper("root").sourceMap().lines.isEmpty)
 		#expect(
-			try TaskPaper("root", options: .plainTextOutline)
+			TaskPaper("root", options: .plainTextOutline)
 				.sourceMap()
 				.lines
 				.map(\.content) == [.lemma(name: "root")]

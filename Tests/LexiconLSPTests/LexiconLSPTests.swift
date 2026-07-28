@@ -54,9 +54,9 @@ struct LexiconLSPTests {
 	@Test
 	func test_completes_lexicon_document_references() throws {
 		let service = try Self.service()
-		let text = "consumer:\n\t+ test.type."
+		let text = "consumer:\n+ test.type."
 
-		let result = try #require(service.completion(in: text, line: 1, character: "\t+ test.type.".utf16.count))
+		let result = try #require(service.completion(in: text, line: 1, character: "+ test.type.".utf16.count))
 
 		#expect(result.items.map(\.label) == ["even", "odd"])
 	}
@@ -75,20 +75,20 @@ struct LexiconLSPTests {
 				odd:
 				+ test.type.even
 		consumer:
-			+ test.type.odd.
-			+ test.type.odd.no.
+		+ test.type.odd.
+		+ test.type.odd.no.
 		"""
 		let service = try LexiconLSPService(index: LexiconPathIndex(lexiconText: text))
 
 		let inherited = try #require(service.completion(
 			in: text,
 			line: 11,
-			character: "\t+ test.type.odd.".utf16.count
+			character: "+ test.type.odd.".utf16.count
 		))
 		let nestedInherited = try #require(service.completion(
 			in: text,
 			line: 12,
-			character: "\t+ test.type.odd.no.".utf16.count
+			character: "+ test.type.odd.no.".utf16.count
 		))
 
 		#expect(inherited.items.map(\.label) == ["bad", "no"])
@@ -102,33 +102,79 @@ struct LexiconLSPTests {
 			type:
 				even:
 					bad:
-						= no.
+					= no.
 					no:
 						good:
 		"""
 		let service = try LexiconLSPService(index: LexiconPathIndex(lexiconText: text))
 
-		let result = try #require(service.completion(in: text, line: 4, character: "\t\t\t\t= no.".utf16.count))
+		let result = try #require(service.completion(in: text, line: 4, character: "\t\t\t= no.".utf16.count))
 
 		#expect(result.items.map(\.label) == ["good"])
 	}
 
 	@Test
-	func test_completes_relative_lexicon_default_references() throws {
+	func test_does_not_resolve_relative_protonyms_from_another_root() throws {
+		let text = """
+		container:
+			alias:
+			= other.
+		other:
+			inherited:
+		"""
+		let service = try LexiconLSPService(index: LexiconPathIndex(lexiconText: text))
+
+		let result = try #require(service.completion(
+			in: text,
+			line: 2,
+			character: "\t= other.".utf16.count
+		))
+
+		#expect(result.items.isEmpty)
+	}
+
+	@Test
+	func test_completes_absolute_lexicon_default_references() throws {
 		let text = """
 		test:
 			type:
 				even:
 					bad:
-						? @ no.
+					? @ test.type.even.no.
 					no:
 						good:
 		"""
 		let service = try LexiconLSPService(index: LexiconPathIndex(lexiconText: text))
 
-		let result = try #require(service.completion(in: text, line: 4, character: "\t\t\t\t? @ no.".utf16.count))
+		let result = try #require(service.completion(
+			in: text,
+			line: 4,
+			character: "\t\t\t? @ test.type.even.no.".utf16.count
+		))
 
 		#expect(result.items.map(\.label) == ["good"])
+	}
+
+	@Test
+	func test_does_not_complete_default_references_relative_to_the_owner() throws {
+		let text = """
+		test:
+			type:
+				even:
+					bad:
+					? @ no.
+					no:
+						good:
+		"""
+		let service = try LexiconLSPService(index: LexiconPathIndex(lexiconText: text))
+
+		let result = try #require(service.completion(
+			in: text,
+			line: 4,
+			character: "\t\t\t? @ no.".utf16.count
+		))
+
+		#expect(result.items.isEmpty)
 	}
 
 	@Test
@@ -186,16 +232,17 @@ struct LexiconLSPTests {
 	@Test
 	func test_does_not_diagnose_incomplete_prefixes() throws {
 		let service = try Self.service()
-		let text = #"""
+		let code = #"""
 		let go = l("test.type.")
 		let rust = l!(test.type.)
-		consumer:
-			+ test.type.
 		"""#
+		let lexicon = """
+		consumer:
+		+ test.type.
+		"""
 
-		let diagnostics = service.diagnostics(in: text, lexiconDocument: true)
-
-		#expect(diagnostics.isEmpty)
+		#expect(service.diagnostics(in: code).isEmpty)
+		#expect(service.diagnostics(in: lexicon, lexiconDocument: true).isEmpty)
 	}
 
 	@Test
@@ -206,8 +253,9 @@ struct LexiconLSPTests {
 		let diagnostics = service.diagnostics(in: text, lexiconDocument: true)
 
 		#expect(diagnostics.map(\.message) == [
-			"Lexicon indentation uses tabs; spaces are ignored for hierarchy."
+			"Indentation must use tabs only"
 		])
+		#expect(diagnostics.first?.range.start == LexiconPosition(line: 1, character: 1))
 		#expect(service.diagnostics(in: text).isEmpty)
 	}
 
@@ -218,11 +266,11 @@ struct LexiconLSPTests {
 			type:
 				even:
 					bad:
-						= no.good
-						? @ no.good
+					= no.good
+					? @ test.type.even.no.good
 					wrong:
-						= missing
-						? @ missing
+					= missing
+					? @ missing
 					no:
 						good:
 		"""
@@ -324,7 +372,7 @@ struct LexiconLSPTests {
 			type:
 				even:
 					bad:
-						= no.good
+					= no.good
 					no:
 						good:
 				odd:

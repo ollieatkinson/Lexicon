@@ -1,0 +1,19 @@
+{
+  "commands": {
+    "validate": {
+      "input": "composed document",
+      "successExitStatus": 0,
+      "invalidExitStatus": 1,
+      "standardOutput": "JSON result and document diagnostics",
+      "standardError": "usage and command execution errors"
+    },
+    "lint": {
+      "input": "composed document",
+      "successExitStatus": 0,
+      "invalidExitStatus": 1,
+      "standardOutput": "JSON result and document diagnostics",
+      "standardError": "usage and command execution errors"
+    }
+  },
+  "sourceOnlyOption": "--source-only"
+}

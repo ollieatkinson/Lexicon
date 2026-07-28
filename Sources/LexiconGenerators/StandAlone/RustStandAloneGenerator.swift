@@ -21,7 +21,17 @@ public enum RustStandAloneGenerator: SourceCodeGenerator {
 private extension Lexicon.Graph.JSON {
 
 	func rust() throws -> String {
-		try SourceTemplate(
+		try validateStandAloneSymbols(prefixes: .default)
+		guard !["l", "new"].contains(name.rawValue) else {
+			throw RustGenerationError.reservedRoot(name)
+		}
+		for type in classes where type.mixin == nil {
+			for accessor in try type.standAloneGeneratedAccessors(classes: classes)
+			where ["id", "l", "localized", "new"].contains(accessor.name.rawValue) {
+				throw RustGenerationError.reservedMember(owner: type.id, name: accessor.name)
+			}
+		}
+		return try SourceTemplate(
 			"""
 			#![allow(non_camel_case_types)]
 			#![allow(non_snake_case)]
@@ -114,7 +124,7 @@ private extension Lexicon.Graph.JSON {
 			"rootType": name.rustTypeName,
 			"rootID": name.rustStringLiteralContent,
 			"macroRootKeywordArms": rustMacroRootKeywordArms(),
-			"macroTailKeywordArms": rustMacroTailKeywordArms(),
+			"macroTailKeywordArms": try rustMacroTailKeywordArms(),
 			"types": try classes.flatMap { try $0.rust(classes: classes) }.joined(separator: "\n\n"),
 		])
 	}
@@ -131,8 +141,8 @@ private extension Lexicon.Graph.JSON {
 			.joined(separator: "\n")
 	}
 
-	func rustMacroTailKeywordArms() -> String {
-		rustMacroTailKeywords
+	func rustMacroTailKeywordArms() throws -> String {
+		try rustMacroTailKeywords()
 			.map { keyword in
 				"""
 					(@path [$($lexicon_path:tt)*] . \(keyword) $(.$tail:tt)*) => {
@@ -148,13 +158,15 @@ private extension Lexicon.Graph.JSON {
 			.filter(\.isRustRawIdentifierKeyword)
 	}
 
-	var rustMacroTailKeywords: [String] {
-		Array(Set(
-			classes
-				.flatMap { $0.standAloneAllAccessors(classes: classes) }
+	func rustMacroTailKeywords() throws -> [String] {
+		Array(
+			Set(
+			try classes
+				.flatMap { try $0.standAloneAllAccessors(classes: classes) }
 				.map(\.name.rustIdentifier)
 				.filter(\.isRustRawIdentifierKeyword)
-		))
+			)
+		)
 		.sorted()
 	}
 }
@@ -169,15 +181,19 @@ private extension Lexicon.Graph.Node.Class.JSON {
 		let type = id.rustTypeName
 
 		if let protonym = protonym {
+			let canonicalID = try classes.standAloneCanonicalID(
+				for: protonym,
+				referencedBy: id
+			)
 			return [
 				try SourceTemplate("pub type {{type}} = {{protonym}};").render([
 					"type": type,
-					"protonym": protonym.rustTypeName,
+					"protonym": canonicalID.rustTypeName,
 				])
 			]
 		}
 
-		let ownAccessors = standAloneAccessors()
+		let ownAccessors = try standAloneAccessors(classes: classes)
 		return [
 			try SourceTemplate(
 				"""
@@ -220,7 +236,7 @@ private extension Lexicon.Graph.Node.Class.JSON {
 					.joined(),
 				"inherited": try ownAccessors
 					.map { try $0.ownMethod() }
-					.joined() + standAloneInheritedAccessors(classes: classes)
+					.joined() + (try standAloneInheritedAccessors(classes: classes))
 					.filter { inherited in !ownAccessors.contains(where: { $0.name == inherited.name }) }
 					.map { try $0.method(receiverType: type) }
 					.joined(),
@@ -392,11 +408,36 @@ private extension String {
 	]
 }
 
+private extension Lemma.Name {
+
+	var rustTypeName: String { rawValue.rustTypeName }
+	var rustIdentifier: String { rawValue.rustIdentifier }
+	func rustSelector() throws -> String { try rawValue.rustSelector() }
+	var rustStringLiteralContent: String { rawValue.rustStringLiteralContent }
+}
+
+private extension Lemma.ID {
+
+	var rustTypeName: String { description.rustTypeName }
+	var rustStringLiteralContent: String { description.rustStringLiteralContent }
+}
+
+private extension Lemma.RelativeID {
+
+	var rustStringLiteralContent: String { description.rustStringLiteralContent }
+}
+
 private enum RustGenerationError: Error, CustomStringConvertible {
+	case reservedMember(owner: Lemma.ID, name: Lemma.Name)
+	case reservedRoot(Lemma.Name)
 	case unsupportedPathKeyword(String)
 
 	var description: String {
 		switch self {
+		case .reservedMember(let owner, let name):
+			"Rust reserves member '\(name)' in generated class '\(owner)'."
+		case .reservedRoot(let name):
+			"Rust root '\(name)' conflicts with a generated Lexicon constructor or entry point."
 		case .unsupportedPathKeyword(let keyword):
 			"""
 			Rust cannot generate exact member syntax for '\(keyword)' \
