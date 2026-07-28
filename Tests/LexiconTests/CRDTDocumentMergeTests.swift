@@ -66,6 +66,82 @@ struct CRDTDocumentMergeTests {
 	}
 
 	@Test
+	func test_crdt_parent_deletion_hides_descendants_and_converges() throws {
+		let root = Lexicon.CRDT.Operation.operation(
+			1,
+			"base",
+			.createNode(path: "root", parentPath: nil, name: "root")
+		)
+		let parent = Lexicon.CRDT.Operation.operation(
+			2,
+			"base",
+			.createNode(path: "root.parent", parentPath: "root", name: "parent")
+		)
+		let deletion = Lexicon.CRDT.Operation.operation(
+			3,
+			"left",
+			.deleteNode(path: "root.parent")
+		)
+		let child = Lexicon.CRDT.Operation.operation(
+			3,
+			"right",
+			.createNode(
+				path: "root.parent.child",
+				parentPath: "root.parent",
+				name: "child"
+			)
+		)
+
+		var left = try Lexicon.CRDT.Replica(operations: [root, parent])
+		try left.apply(deletion)
+		let deletedDocument = try left.materialized()
+		#expect(deletedDocument.roots.keys.sorted() == ["root"])
+		#expect(deletedDocument.roots["root"]?.children.isEmpty == true)
+
+		var right = try Lexicon.CRDT.Replica(operations: [root, parent])
+		try right.apply(child)
+
+		var leftThenRight = left
+		try leftThenRight.merge(right)
+		var rightThenLeft = right
+		try rightThenLeft.merge(left)
+
+		#expect(try leftThenRight.materialized() == rightThenLeft.materialized())
+		let mergedDocument = try leftThenRight.materialized()
+		#expect(mergedDocument.roots.keys.sorted() == ["root"])
+		#expect(mergedDocument.roots["root"]?.children.isEmpty == true)
+		#expect(
+			try leftThenRight.materialization().materializedPath(
+				forNodeAddress: "root.parent.child"
+			) == nil
+		)
+
+		var recreated = leftThenRight
+		try recreated.apply(.operation(
+			4,
+			"repair",
+			.createNode(path: "root.parent", parentPath: "root", name: "parent")
+		))
+		#expect(
+			try recreated.materialized()
+				.roots["root"]?.children["parent"]?.children.isEmpty == true
+		)
+		try recreated.apply(.operation(
+			5,
+			"repair",
+			.createNode(
+				path: "root.parent.child",
+				parentPath: "root.parent",
+				name: "child"
+			)
+		))
+		#expect(
+			try recreated.materialized()
+				.roots["root"]?.children["parent"]?.children.keys.sorted() == ["child"]
+		)
+	}
+
+	@Test
 	func test_crdt_replica_json_round_trip() throws {
 
 		var replica = Lexicon.CRDT.Replica()

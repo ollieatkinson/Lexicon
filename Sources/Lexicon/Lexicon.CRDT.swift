@@ -675,8 +675,28 @@ private extension Lexicon.CRDT {
 			nodes[path] = node
 		}
 
+		func isVisible(_ node: NodeState) -> Bool {
+			guard var creation = node.creation, !node.isDeleted else {
+				return false
+			}
+			var parentPath = node.parentPath
+			while let path = parentPath {
+				guard
+					let parent = nodes[path],
+					let parentCreation = parent.creation,
+					!parent.isDeleted,
+					creation.clock > parentCreation.clock
+				else {
+					return false
+				}
+				creation = parentCreation
+				parentPath = parent.parentPath
+			}
+			return true
+		}
+
 		func materialization() throws -> Materialization {
-			let visible = nodes.filter { !$0.value.isDeleted }
+			let visible = nodes.filter { isVisible($0.value) }
 			for path in visible.keys.sorted() {
 				guard let node = visible[path] else {
 					continue
