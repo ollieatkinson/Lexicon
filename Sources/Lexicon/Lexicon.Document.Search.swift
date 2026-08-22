@@ -344,7 +344,7 @@ public extension Lexicon.Search.EmbeddingProvider {
 
 	func embedQuery(_ query: String) async throws -> [Double] {
 		guard let vector = try await embed([descriptor.queryPrefix + query]).first else {
-			throw "Embedding provider returned no query vector."
+			throw LexiconError("Embedding provider returned no query vector.")
 		}
 		return vector
 	}
