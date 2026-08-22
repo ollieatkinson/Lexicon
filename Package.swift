@@ -174,17 +174,11 @@ let package = Package(
 				.product(
 					name: "onnxruntime",
 					package: "onnxruntime-swift-package-manager",
-					condition: .when(
-						platforms: [.macOS, .iOS, .tvOS, .watchOS, .visionOS],
-						traits: ["ONNXSearch"]
-					)
+					condition: .when(platforms: [.macOS, .iOS, .tvOS, .watchOS, .visionOS])
 				),
 				.target(
 					name: "CLexiconONNXRuntime",
-					condition: .when(
-						platforms: [.linux, .android],
-						traits: ["ONNXSearch"]
-					)
+					condition: .when(platforms: [.linux, .android])
 				),
 			]
 		),
