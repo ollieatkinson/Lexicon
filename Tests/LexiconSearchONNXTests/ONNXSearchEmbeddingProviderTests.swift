@@ -40,7 +40,7 @@ final class ONNXSearchEmbeddingProviderTests: XCTestCase {
 			queryVector: queryVector
 		)
 		XCTAssertFalse(results.isEmpty)
-		XCTAssertTrue(results.contains { $0.id.contains("delivery") })
+		XCTAssertTrue(results.contains(where: { $0.id.description.contains("delivery") }))
 	}
 
 	private func fixtureURLs() throws -> FixtureURLs {
