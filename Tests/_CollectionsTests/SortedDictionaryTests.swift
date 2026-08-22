@@ -1,12 +1,14 @@
 //
 // github.com/screensailor 2026
 //
-
-import XCTest
+import Testing
 import _Collections
 
-final class SortedDictionaryTests: XCTestCase {
+@Suite
 
+struct SortedDictionaryTests {
+
+	@Test
 	func test_dictionary_literal_sorts_keys() {
 		let dictionary: SortedDictionary<String, Int> = [
 			"zeta": 3,
@@ -14,12 +16,13 @@ final class SortedDictionaryTests: XCTestCase {
 			"middle": 2,
 		]
 
-		XCTAssertEqual(Array(dictionary.keys), ["alpha", "middle", "zeta"])
-		XCTAssertEqual(Array(dictionary.keysInOrder), ["alpha", "middle", "zeta"])
-		XCTAssertEqual(Array(dictionary.values), [1, 2, 3])
-		XCTAssertEqual(dictionary.valuesInKeyOrder, [1, 2, 3])
+		#expect(Array(dictionary.keys) == ["alpha", "middle", "zeta"])
+		#expect(Array(dictionary.keysInOrder) == ["alpha", "middle", "zeta"])
+		#expect(Array(dictionary.values) == [1, 2, 3])
+		#expect(dictionary.valuesInKeyOrder == [1, 2, 3])
 	}
 
+	@Test
 	func test_subscript_insert_keeps_keys_sorted() {
 		var dictionary = SortedDictionary<String, Int>()
 
@@ -27,10 +30,11 @@ final class SortedDictionaryTests: XCTestCase {
 		dictionary["alpha"] = 1
 		dictionary["middle"] = 2
 
-		XCTAssertEqual(Array(dictionary.keys), ["alpha", "middle", "zeta"])
-		XCTAssertEqual(Array(dictionary.values), [1, 2, 3])
+		#expect(Array(dictionary.keys) == ["alpha", "middle", "zeta"])
+		#expect(Array(dictionary.values) == [1, 2, 3])
 	}
 
+	@Test
 	func test_subscript_update_preserves_existing_position() {
 		var dictionary: SortedDictionary<String, Int> = [
 			"alpha": 1,
@@ -40,10 +44,11 @@ final class SortedDictionaryTests: XCTestCase {
 
 		dictionary["middle"] = 20
 
-		XCTAssertEqual(Array(dictionary.keys), ["alpha", "middle", "zeta"])
-		XCTAssertEqual(Array(dictionary.values), [1, 20, 3])
+		#expect(Array(dictionary.keys) == ["alpha", "middle", "zeta"])
+		#expect(Array(dictionary.values) == [1, 20, 3])
 	}
 
+	@Test
 	func test_subscript_nil_removes_value() {
 		var dictionary: SortedDictionary<String, Int> = [
 			"alpha": 1,
@@ -53,7 +58,7 @@ final class SortedDictionaryTests: XCTestCase {
 
 		dictionary["middle"] = nil
 
-		XCTAssertEqual(Array(dictionary.keys), ["alpha", "zeta"])
-		XCTAssertEqual(Array(dictionary.values), [1, 3])
+		#expect(Array(dictionary.keys) == ["alpha", "zeta"])
+		#expect(Array(dictionary.values) == [1, 3])
 	}
 }

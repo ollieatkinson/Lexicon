@@ -14,9 +14,20 @@ struct Validate: ParsableCommand {
 	@Flag(help: "Include non-fatal authoring warnings.")
 	var strict = false
 
+	@Flag(help: "Validate the source document without composing imports.")
+	var sourceOnly = false
+
 	func run() throws {
-		let document = try input.lexiconDocument()
-		try AgentJSON.print(ValidationOutput(document, strict: strict))
+		let input = try input.validationInput(sourceOnly: sourceOnly)
+		let output = ValidationOutput(
+			input.document,
+			strict: strict,
+			additionalDiagnostics: input.diagnostics
+		)
+		try AgentJSON.print(output)
+		guard output.valid else {
+			throw ExitCode.failure
+		}
 	}
 }
 
@@ -29,9 +40,20 @@ struct Lint: ParsableCommand {
 	@Argument(help: "TaskPaper lexicon path.")
 	var input: URL
 
+	@Flag(help: "Lint the source document without composing imports.")
+	var sourceOnly = false
+
 	func run() throws {
-		let document = try input.lexiconDocument()
-		try AgentJSON.print(ValidationOutput(document, strict: true))
+		let input = try input.validationInput(sourceOnly: sourceOnly)
+		let output = ValidationOutput(
+			input.document,
+			strict: true,
+			additionalDiagnostics: input.diagnostics
+		)
+		try AgentJSON.print(output)
+		guard output.valid else {
+			throw ExitCode.failure
+		}
 	}
 }
 
@@ -47,8 +69,11 @@ struct Inspect: AsyncParsableCommand {
 	@Argument(help: "Optional lemma ID to inspect.")
 	var id: String?
 
+	@Flag(help: "Inspect the source document without composing imports.")
+	var sourceOnly = false
+
 	mutating func run() async throws {
-		let document = try input.composedLexiconDocument()
+		let document = try sourceOnly ? input.lexiconDocument() : input.composedLexiconDocument()
 		if let id {
 			let lemma = try await document.lemma(id)
 			let inspection = await NodeInspection(lemma)
@@ -68,7 +93,7 @@ struct Tree: AsyncParsableCommand {
 	@Argument(help: "TaskPaper lexicon path.")
 	var input: URL
 
-	@Argument(help: "Optional root lemma ID. Defaults to the first document root.")
+	@Argument(help: "Optional root lemma ID. Defaults to the sole document root.")
 	var id: String?
 
 	@Option(help: "Maximum child depth to include.")
@@ -80,8 +105,11 @@ struct Tree: AsyncParsableCommand {
 	@Flag(help: "Include type, default, note, comment, and synonym metadata.")
 	var metadata = false
 
+	@Flag(help: "Explore the source document without composing imports.")
+	var sourceOnly = false
+
 	mutating func run() async throws {
-		let document = try input.composedLexiconDocument()
+		let document = try sourceOnly ? input.lexiconDocument() : input.composedLexiconDocument()
 		let rootID = try id ?? document.firstRootID()
 		if inherited {
 			let lemma = try await document.lemma(rootID)
@@ -170,7 +198,7 @@ struct Search: AsyncParsableCommand {
 		}
 		let options = Lexicon.Search.Options(
 			limit: limit,
-			root: root,
+			root: try root.map(Lemma.ID.init(parsing:)),
 			mode: try Lexicon.Search.Mode(agentArgument: mode),
 			scope: try Lexicon.Search.Scope(agentArgument: scope),
 			includeReferences: !namesOnly,
@@ -214,8 +242,11 @@ struct Refs: ParsableCommand {
 	@Argument(help: "Lemma ID to inspect references for.")
 	var id: String
 
+	@Flag(help: "Inspect references in the source document without composing imports.")
+	var sourceOnly = false
+
 	func run() throws {
-		let document = try input.composedLexiconDocument()
+		let document = try sourceOnly ? input.lexiconDocument() : input.composedLexiconDocument()
 		try AgentJSON.print(RefsOutput(document: document, id: id))
 	}
 }
@@ -232,8 +263,11 @@ struct Excerpt: AsyncParsableCommand {
 	@Argument(help: "Lemma ID to export.")
 	var id: String
 
+	@Flag(help: "Export from the source document without composing imports.")
+	var sourceOnly = false
+
 	mutating func run() async throws {
-		let document = try input.composedLexiconDocument()
+		let document = try sourceOnly ? input.lexiconDocument() : input.composedLexiconDocument()
 		let lemma = try await document.lemma(id)
 		let export = await lemma.exportBranchDocument()
 		try AgentJSON.print(ExcerptOutput(export))
@@ -265,7 +299,7 @@ struct Format: ParsableCommand {
 		if check {
 			try AgentJSON.print(FormatOutput(changed: original != formatted, output: output?.path))
 		} else if write {
-			try Data(formatted.utf8).write(to: input)
+			try Data(formatted.utf8).write(to: input, options: .atomic)
 			try AgentJSON.print(WriteOutput(written: true, output: input.path))
 		} else {
 			try AgentWriter.write(formatted, output: output)
@@ -327,20 +361,21 @@ struct Add: ParsableCommand {
 	var output: URL?
 
 	func run() throws {
-		guard Lemma.isValid(name: name) else {
-			throw ValidationError("Invalid lemma name: \(name)")
-		}
+		_ = try Lemma.Name(validating: name)
 		var document = try input.lexiconDocument()
-		var node = Lexicon.Graph.Node(
-			name: name,
-			children: [:],
-			type: Set(type),
+		let node = try Lexicon.Graph.Node(
+			type: Set(type.map(Lemma.ID.init(parsing:))),
+			protonym: protonym.map(Lemma.RelativeID.init(parsing:)),
 			defaultValue: defaultValue.map(Lexicon.Graph.Node.DefaultValue.parseAgentArgument),
 			notes: note,
 			comments: comment
 		)
-		node.protonym = protonym
-		try document.add(node, under: parent)
+		try document.add(
+			node,
+			named: name,
+			under: parent,
+			sourceURL: input
+		)
 		try AgentWriter.write(document, output: output)
 	}
 }
@@ -362,7 +397,7 @@ struct Remove: ParsableCommand {
 
 	func run() throws {
 		var document = try input.lexiconDocument()
-		try document.remove(id)
+		try document.remove(id, sourceURL: input)
 		try AgentWriter.write(document, output: output)
 	}
 }
@@ -387,7 +422,11 @@ struct Rename: ParsableCommand {
 
 	func run() throws {
 		var document = try input.lexiconDocument()
-		try document.rename(id, to: name)
+		try document.rename(
+			id,
+			to: name,
+			sourceURL: input
+		)
 		try AgentWriter.write(document, output: output)
 	}
 }
@@ -412,7 +451,11 @@ struct Move: ParsableCommand {
 
 	func run() throws {
 		var document = try input.lexiconDocument()
-		try document.move(id, under: parent)
+		try document.move(
+			id,
+			under: parent,
+			sourceURL: input
+		)
 		try AgentWriter.write(document, output: output)
 	}
 }
@@ -437,7 +480,13 @@ struct SetType: ParsableCommand {
 
 	func run() throws {
 		var document = try input.lexiconDocument()
-		try document.updateNode(id) { $0.type.insert(type) }
+		let type = try Lemma.ID(parsing: type)
+		try document.updateNode(
+			id,
+			sourceURL: input
+		) {
+			$0.type.insert(type)
+		}
 		try AgentWriter.write(document, output: output)
 	}
 }
@@ -462,7 +511,8 @@ struct UnsetType: ParsableCommand {
 
 	func run() throws {
 		var document = try input.lexiconDocument()
-		try document.updateNode(id) { node in
+		let type = try Lemma.ID(parsing: type)
+		try document.updateNode(id, sourceURL: input) { node in
 			guard node.type.remove(type) != nil else {
 				throw ValidationError("Node '\(id)' does not declare type '\(type)'.")
 			}
@@ -496,8 +546,12 @@ struct SetProtonym: ParsableCommand {
 		guard clear || protonym != nil else {
 			throw ValidationError("Provide a protonym reference or --clear.")
 		}
+		guard !(clear && protonym != nil) else {
+			throw ValidationError("Provide either a protonym reference or --clear, not both.")
+		}
 		var document = try input.lexiconDocument()
-		try document.updateNode(id) { node in
+		let protonym = try protonym.map(Lemma.RelativeID.init(parsing:))
+		try document.updateNode(id, sourceURL: input) { node in
 			node.protonym = clear ? nil : protonym
 		}
 		try AgentWriter.write(document, output: output)
@@ -529,9 +583,13 @@ struct SetDefault: ParsableCommand {
 		guard clear || value != nil else {
 			throw ValidationError("Provide a default value or --clear.")
 		}
+		guard !(clear && value != nil) else {
+			throw ValidationError("Provide either a default value or --clear, not both.")
+		}
 		var document = try input.lexiconDocument()
-		try document.updateNode(id) { node in
-			node.defaultValue = clear ? nil : value.map(Lexicon.Graph.Node.DefaultValue.parseAgentArgument)
+		let value = try value.map(Lexicon.Graph.Node.DefaultValue.parseAgentArgument)
+		try document.updateNode(id, sourceURL: input) { node in
+			node.defaultValue = clear ? nil : value
 		}
 		try AgentWriter.write(document, output: output)
 	}
@@ -554,7 +612,9 @@ struct AddNote: ParsableCommand {
 
 	func run() throws {
 		var document = try input.lexiconDocument()
-		try document.updateNode(id) { $0.notes.append(text) }
+		try document.updateNode(id, sourceURL: input) {
+			$0.notes.append(text)
+		}
 		try AgentWriter.write(document, output: output)
 	}
 }
@@ -568,7 +628,9 @@ struct RemoveNote: ParsableCommand {
 
 	func run() throws {
 		var document = try input.lexiconDocument()
-		try document.updateNode(id) { $0.notes.removeAll { $0 == text } }
+		try document.updateNode(id, sourceURL: input) {
+			$0.notes.removeAll { $0 == text }
+		}
 		try AgentWriter.write(document, output: output)
 	}
 }
@@ -581,7 +643,9 @@ struct ClearNotes: ParsableCommand {
 
 	func run() throws {
 		var document = try input.lexiconDocument()
-		try document.updateNode(id) { $0.notes.removeAll() }
+		try document.updateNode(id, sourceURL: input) {
+			$0.notes.removeAll()
+		}
 		try AgentWriter.write(document, output: output)
 	}
 }
@@ -603,7 +667,9 @@ struct AddComment: ParsableCommand {
 
 	func run() throws {
 		var document = try input.lexiconDocument()
-		try document.updateNode(id) { $0.comments.append(text) }
+		try document.updateNode(id, sourceURL: input) {
+			$0.comments.append(text)
+		}
 		try AgentWriter.write(document, output: output)
 	}
 }
@@ -617,7 +683,9 @@ struct RemoveComment: ParsableCommand {
 
 	func run() throws {
 		var document = try input.lexiconDocument()
-		try document.updateNode(id) { $0.comments.removeAll { $0 == text } }
+		try document.updateNode(id, sourceURL: input) {
+			$0.comments.removeAll { $0 == text }
+		}
 		try AgentWriter.write(document, output: output)
 	}
 }
@@ -630,7 +698,9 @@ struct ClearComments: ParsableCommand {
 
 	func run() throws {
 		var document = try input.lexiconDocument()
-		try document.updateNode(id) { $0.comments.removeAll() }
+		try document.updateNode(id, sourceURL: input) {
+			$0.comments.removeAll()
+		}
 		try AgentWriter.write(document, output: output)
 	}
 }

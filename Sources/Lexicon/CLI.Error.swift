@@ -29,24 +29,24 @@ public extension CLI.Error {
 				
 			case "invalidInputCharacter":
 				guard let string = json.string, string.count == 1 else {
-					throw "CLI.Error.invalidInputCharacter missing character in \(json)"
+					throw LexiconError("CLI.Error.invalidInputCharacter missing character in \(json)")
 				}
 				self = .invalidInputCharacter(string.first!)
 				
 			case "noChildrenMatchInput":
 				guard let string = json.string else {
-					throw "CLI.Error.noChildrenMatchInput missing string in \(json)"
+					throw LexiconError("CLI.Error.noChildrenMatchInput missing string in \(json)")
 				}
 				self = .noChildrenMatchInput(string)
 				
 			case "invalidSelection":
 				guard let int = json.int else {
-					throw "CLI.Error.invalidSelection missing int in \(json)"
+					throw LexiconError("CLI.Error.invalidSelection missing int in \(json)")
 				}
 				self = .invalidSelection(index: int)
 				
 			default:
-				throw "CLI.Error cannot decode \(json)"
+				throw LexiconError("CLI.Error cannot decode \(json)")
 		}
 	}
 	

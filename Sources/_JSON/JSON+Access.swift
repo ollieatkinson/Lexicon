@@ -15,6 +15,17 @@ public struct CastingError: Swift.Error, CustomStringConvertible, Sendable {
 	}
 }
 
+public enum JSONMutationError: Swift.Error, Equatable, Sendable, CustomStringConvertible {
+	case arrayIndexOutOfBounds(index: Int, count: Int)
+
+	public var description: String {
+		switch self {
+		case .arrayIndexOutOfBounds(let index, let count):
+			"JSON array index \(index) is outside the replace-or-append range 0...\(count)."
+		}
+	}
+}
+
 private extension JSON {
 	func cast<Value>(to type: Value.Type = Value.self) throws -> Value {
 		if Value.self == JSON.self {
@@ -48,31 +59,15 @@ public extension JSON {
 	}
 
 	subscript(_ path: CodingIndex...) -> JSON {
-		get {
-			self[path]
-		}
-		set {
-			self[path] = newValue
-		}
+		self[path]
 	}
 
 	subscript<Path>(_ path: Path) -> JSON where Path: Collection, Path.Element == CodingIndex {
-		get {
-			var current = self
-			for component in path {
-				current = current[component]
-			}
-			return current
+		var current = self
+		for component in path {
+			current = current[component]
 		}
-		set {
-			guard let head = path.first else {
-				self = newValue
-				return
-			}
-			var child = self[head]
-			child[path.dropFirst()] = newValue
-			self[head] = child
-		}
+		return current
 	}
 
 	subscript<Value>(_ path: CodingIndex..., as type: Value.Type = Value.self) -> Value {
@@ -91,21 +86,11 @@ public extension JSON {
 	}
 
 	subscript(component: CodingIndex) -> JSON {
-		get {
-			switch component {
-			case .key(let key):
-				return self[key]
-			case .index(let index):
-				return self[index]
-			}
-		}
-		set {
-			switch component {
-			case .key(let key):
-				self[key] = newValue
-			case .index(let index):
-				self[index] = newValue
-			}
+		switch component {
+		case .key(let key):
+			return self[key]
+		case .index(let index):
+			return self[index]
 		}
 	}
 
@@ -124,28 +109,63 @@ public extension JSON {
 	}
 
 	subscript(index: Int) -> JSON {
-		get {
-			guard let array, let index = array.resolvedIndex(index) else {
-				return .null
-			}
-			return array[index]
+		guard let array, let index = array.resolvedIndex(index) else {
+			return .null
 		}
-		set {
+		return array[index]
+	}
+
+	/// Replaces a value at `path`, creating keyed containers and appending only at an array's end.
+	///
+	/// Negative indexes address existing elements from the end. Sparse array writes throw
+	/// without changing the receiver.
+	mutating func set<Path>(_ newValue: JSON, at path: Path) throws
+	where Path: Collection, Path.Element == CodingIndex {
+		guard let head = path.first else {
+			self = newValue
+			return
+		}
+
+		switch head {
+		case .key(let key):
+			var object = object ?? [:]
+			var child = object[key] ?? .container(for: path.dropFirst().first)
+			try child.set(newValue, at: path.dropFirst())
+			object[key] = child
+			self = .object(object)
+
+		case .index(let requestedIndex):
 			var array = array ?? []
-			let resolvedIndex: Int
-			if index < 0 {
-				guard let index = array.resolvedIndex(index) else {
-					return
+			let index: Int
+			if requestedIndex < 0 {
+				guard let resolved = array.resolvedIndex(requestedIndex) else {
+					throw JSONMutationError.arrayIndexOutOfBounds(index: requestedIndex, count: array.count)
 				}
-				resolvedIndex = index
+				index = resolved
+			} else if requestedIndex < array.count {
+				index = requestedIndex
+			} else if requestedIndex == array.count {
+				array.append(.container(for: path.dropFirst().first))
+				index = requestedIndex
 			} else {
-				if index >= array.endIndex {
-					array.append(contentsOf: repeatElement(.null, count: index - array.endIndex + 1))
-				}
-				resolvedIndex = index
+				throw JSONMutationError.arrayIndexOutOfBounds(index: requestedIndex, count: array.count)
 			}
-			array[resolvedIndex] = newValue
-			self = JSON(array)
+
+			var child = array[index]
+			try child.set(newValue, at: path.dropFirst())
+			array[index] = child
+			self = .array(array)
+		}
+	}
+}
+
+private extension JSON {
+	static func container(for component: CodingIndex?) -> JSON {
+		switch component {
+		case .some(.index):
+			.array([])
+		case .some(.key), .none:
+			.object([:])
 		}
 	}
 }

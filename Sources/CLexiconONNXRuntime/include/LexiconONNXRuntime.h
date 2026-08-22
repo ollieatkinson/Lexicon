@@ -3,11 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#if __has_include("onnxruntime_c_api.h")
 #include "onnxruntime_c_api.h"
-#elif defined(LEXICON_ONNX_RUNTIME_REQUIRED)
-#error "Missing onnxruntime_c_api.h. Run `swift package --disable-sandbox --allow-writing-to-package-directory setup-onnx-search-artifacts -- --runtime linux-x64` or set LEXICON_ONNX_RUNTIME_INCLUDE."
-#endif
 
 typedef void *LexiconONNXRuntimeSessionRef;
 

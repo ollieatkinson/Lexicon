@@ -2,6 +2,8 @@
 // github.com/screensailor 2022
 //
 
+import Foundation
+
 extension Data {
 	
 	func string(encoding: String.Encoding = .utf8) throws -> String {

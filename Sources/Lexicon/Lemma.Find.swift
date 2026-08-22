@@ -22,7 +22,9 @@ public extension Lemma {
 			guard
 				o.count < max,
 				lemma != self,
-				prefix.localizedCaseInsensitiveCompare(lemma.name.prefix(prefix.count)) == .orderedSame
+				prefix.localizedCaseInsensitiveCompare(
+					String(lemma.name.rawValue.prefix(prefix.count))
+				) == .orderedSame
 			else {
 				return
 			}

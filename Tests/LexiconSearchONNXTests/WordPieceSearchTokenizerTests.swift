@@ -19,7 +19,20 @@ final class WordPieceSearchTokenizerTests: XCTestCase {
 		XCTAssertEqual(batch.tokenTypeIDs[0], Array(repeating: 0, count: batch.inputIDs[0].count))
 	}
 
-	private func temporaryVocabulary() throws -> URL {
+	func test_uncased_wordpiece_normalizes_accents_punctuation_and_chinese() throws {
+		let vocabulary = try temporaryVocabulary(extraTokens: ["cafe", ",", "世", "界"])
+		let tokenizer = try WordPieceSearchTokenizer(
+			vocabulary: vocabulary,
+			revision: "test",
+			maxLength: 8
+		)
+
+		let batch = try tokenizer.encode(["Café,世界"])
+
+		XCTAssertEqual(batch.inputIDs, [[2, 10, 11, 12, 13, 3]])
+	}
+
+	private func temporaryVocabulary(extraTokens: [String] = []) throws -> URL {
 		let url = FileManager.default.temporaryDirectory
 			.appendingPathComponent(UUID().uuidString)
 			.appendingPathExtension("txt")
@@ -34,7 +47,7 @@ final class WordPieceSearchTokenizerTests: XCTestCase {
 			"issuer",
 			"rejected",
 			"transaction",
-		]
+		] + extraTokens
 		try tokens.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
 		return url
 	}

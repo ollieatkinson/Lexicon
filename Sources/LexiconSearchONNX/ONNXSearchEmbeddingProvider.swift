@@ -62,7 +62,7 @@ public struct ONNXSearchEmbeddingProvider: Lexicon.Search.EmbeddingProvider {
 	}
 
 	public func embed(_ texts: [String]) async throws -> [[Double]] {
-		try await embed(texts, as: .document)
+		try await embedRaw(texts)
 	}
 
 	public func embedQuery(_ query: String) async throws -> [Double] {
@@ -72,8 +72,19 @@ public struct ONNXSearchEmbeddingProvider: Lexicon.Search.EmbeddingProvider {
 		return vector
 	}
 
+	public func embedDocuments(_ texts: [String]) async throws -> [[Double]] {
+		try await embed(texts, as: .document)
+	}
+
 	public func embed(_ texts: [String], as role: ONNXSearchTextRole) async throws -> [[Double]] {
-		let batch = try tokenizer.encode(texts.map { configuration.text($0, for: role) })
+		try await embedRaw(texts.map { configuration.text($0, for: role) })
+	}
+
+	private func embedRaw(_ texts: [String]) async throws -> [[Double]] {
+		guard !texts.isEmpty else {
+			return []
+		}
+		let batch = try tokenizer.encode(texts)
 		let output = try session.run(batch: batch, model: configuration)
 		return try pooling.vectors(
 			from: output,

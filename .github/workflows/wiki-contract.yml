@@ -1,0 +1,38 @@
+name: Live wiki contract
+
+on:
+  gollum:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wiki-contract-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  live-wiki:
+    name: Verify canonical wiki
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out source repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Check out canonical public wiki
+        env:
+          WIKI_REPOSITORY: https://github.com/ollieatkinson/Lexicon.wiki.git
+        run: git clone --depth 1 "$WIKI_REPOSITORY" "$RUNNER_TEMP/Lexicon.wiki"
+
+      - name: Record source and wiki revisions
+        run: |
+          git rev-parse HEAD
+          git -C "$RUNNER_TEMP/Lexicon.wiki" rev-parse HEAD
+
+      - name: Verify live wiki contract
+        run: python3 Scripts/verify_wiki_contract.py --wiki "$RUNNER_TEMP/Lexicon.wiki"

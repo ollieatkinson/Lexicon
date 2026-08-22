@@ -5,67 +5,181 @@
 import Foundation
 import Synchronization
 
-public final class Events: Sendable {
+public final class Events: Identifiable, Sendable {
 
 	private struct State: Sendable {
 		var nextID: UInt64 = 0
+		var sequence: UInt64 = 0
+		var isFinished = false
 		var continuations: [UInt64: AsyncStream<Event>.Continuation] = [:]
-		var delivery: Task<Void, Never>?
 	}
 
+	/// Controls how each observer buffers events while it is slower than the sender.
+	public enum BufferingPolicy: Hashable, Sendable {
+		/// Retain every pending event.
+		case unbounded
+		/// Retain the newest `capacity` events and drop the oldest pending event when full.
+		case newest(Int)
+		/// Retain the oldest `capacity` events and drop each newly sent event when full.
+		case oldest(Int)
+	}
+
+	/// Describes how a synchronous send was handled by the current observers.
+	public struct SendReceipt: Hashable, Sendable {
+		/// The monotonically increasing sequence assigned to this accepted send.
+		public let sequence: UInt64
+		/// Observers whose continuation accepted without overflowing its buffer.
+		public let enqueuedObservers: Int
+		/// Observers whose buffer overflowed. `.oldest` rejected this event;
+		/// `.newest` accepted it while displacing the oldest pending event.
+		public let droppedObservers: Int
+		/// Observers whose continuation had already terminated.
+		public let terminatedObservers: Int
+
+		public init(
+			sequence: UInt64,
+			enqueuedObservers: Int,
+			droppedObservers: Int,
+			terminatedObservers: Int
+		) {
+			self.sequence = sequence
+			self.enqueuedObservers = enqueuedObservers
+			self.droppedObservers = droppedObservers
+			self.terminatedObservers = terminatedObservers
+		}
+	}
+
+	public enum Error: Swift.Error, Equatable, Sendable, CustomStringConvertible {
+		case invalidBufferCapacity(Int)
+		case finished
+
+		public var description: String {
+			switch self {
+			case .invalidBufferCapacity(let capacity):
+				"Event buffer capacity must be positive, received \(capacity)."
+			case .finished:
+				"Cannot send an event after the event stream has finished."
+			}
+		}
+	}
+
+	private let bufferingPolicy: BufferingPolicy
+	private let delivery = Mutex(())
 	private let state = Mutex(State())
 
-	public init() {}
+	/// Creates an event bus that retains the oldest 256 pending events per observer.
+	public init() {
+		self.bufferingPolicy = .oldest(256)
+	}
+
+	/// Creates an event bus with an explicit per-observer buffering policy.
+	///
+	/// Bounded policies require a positive capacity.
+	public init(bufferingPolicy: BufferingPolicy) throws {
+		switch bufferingPolicy {
+		case .unbounded:
+			break
+		case .newest(let capacity), .oldest(let capacity):
+			guard capacity > 0 else {
+				throw Error.invalidBufferCapacity(capacity)
+			}
+		}
+		self.bufferingPolicy = bufferingPolicy
+	}
+
+	deinit {
+		finish()
+	}
+
+	public var id: ObjectIdentifier {
+		ObjectIdentifier(self)
+	}
 
 	public var stream: AsyncStream<Event> {
 		makeStream().stream
 	}
 
-	@discardableResult public func send(_ event: Event) -> Task<Void, Never> {
-		state.withLock { state in
-			let continuations = Array(state.continuations.values)
-			let previous = state.delivery
-			let delivery = Task {
-				await previous?.value
-				guard !Task.isCancelled else {
-					return
+	/// Publishes an event synchronously to every current observer.
+	///
+	/// Sends are serialized with other sends and ``finish()``. The returned receipt
+	/// reports each continuation's yield result.
+	@discardableResult public func send(_ event: Event) throws -> SendReceipt {
+		try delivery.withLock { _ in
+			let (sequence, continuations) = try state.withLock { state in
+				guard !state.isFinished else {
+					throw Error.finished
 				}
-				for continuation in continuations {
-					continuation.yield(event)
+				state.sequence += 1
+				return (state.sequence, Array(state.continuations.values))
+			}
+
+			var enqueued = 0
+			var dropped = 0
+			var terminated = 0
+			for continuation in continuations {
+				switch continuation.yield(event) {
+				case .enqueued:
+					enqueued += 1
+				case .dropped:
+					dropped += 1
+				case .terminated:
+					terminated += 1
+				@unknown default:
+					terminated += 1
 				}
 			}
-			state.delivery = delivery
-			return delivery
+			return SendReceipt(
+				sequence: sequence,
+				enqueuedObservers: enqueued,
+				droppedObservers: dropped,
+				terminatedObservers: terminated
+			)
 		}
 	}
 
-	public func finish() {
-		let (continuations, delivery) = state.withLock { state in
-			defer { state.continuations.removeAll() }
-			let delivery = state.delivery
-			state.delivery = nil
-			return (Array(state.continuations.values), delivery)
-		}
-		delivery?.cancel()
-		for continuation in continuations {
-			continuation.finish()
+	/// Closes the bus after all previously accepted events.
+	///
+	/// Buffered events remain available to observers before their streams end.
+	/// The first call returns `true`; later calls return `false`.
+	@discardableResult public func finish() -> Bool {
+		delivery.withLock { _ in
+			let continuations = state.withLock { state -> [AsyncStream<Event>.Continuation]? in
+				guard !state.isFinished else {
+					return nil
+				}
+				state.isFinished = true
+				defer { state.continuations.removeAll() }
+				return Array(state.continuations.values)
+			}
+			guard let continuations else {
+				return false
+			}
+			for continuation in continuations {
+				continuation.finish()
+			}
+			return true
 		}
 	}
 
-	public func then(_ ƒ: @escaping @Sendable (Event) async -> Void) -> EventHandler {
+	public func handler(_ ƒ: @escaping @Sendable (Event) async -> Void) -> EventHandler {
 		EventHandler(events: self, predicate: { _ in true }, action: ƒ)
 	}
 
-	public func subscribe(
+	@discardableResult public func on(
 		where predicate: @escaping @Sendable (Event) -> Bool = { _ in true },
-		_ action: @escaping @Sendable (Event) async -> Void
-	) -> EventSubscription {
-		let subscription = makeStream()
-		let task = Task { [weak self] in
+		perform action: @escaping @Sendable (Event) async -> Void
+	) -> Observer {
+		let observation = makeStream()
+		guard let observationID = observation.id else {
+			return .finished()
+		}
+		let state = Observer.State()
+		let task = Task { @concurrent [weak self] in
 			defer {
-				self?.remove(continuation: subscription.id)
+				state.finish()
+				self?.remove(continuation: observationID)
 			}
-			for await event in subscription.stream {
+			for await event in observation.stream {
 				guard !Task.isCancelled else {
 					break
 				}
@@ -75,23 +189,33 @@ public final class Events: Sendable {
 				await action(event)
 			}
 		}
-		return EventSubscription(task) { [weak self] in
-			self?.remove(continuation: subscription.id)
-			subscription.continuation.finish()
+		return Observer(task, state: state) { [weak self] in
+			self?.remove(continuation: observationID)
+			observation.continuation.finish()
 		}
 	}
 
-	private func makeStream() -> (id: UInt64, stream: AsyncStream<Event>, continuation: AsyncStream<Event>.Continuation) {
-		let stream = AsyncStream<Event>.makeStream()
-		let id = insert(stream.continuation)
+	private func makeStream() -> (
+		id: UInt64?,
+		stream: AsyncStream<Event>,
+		continuation: AsyncStream<Event>.Continuation
+	) {
+		let stream = AsyncStream<Event>.makeStream(bufferingPolicy: bufferingPolicy.asyncStreamPolicy)
+		guard let id = insert(stream.continuation) else {
+			stream.continuation.finish()
+			return (nil, stream.stream, stream.continuation)
+		}
 		stream.continuation.onTermination = { [weak self] _ in
 			self?.remove(continuation: id)
 		}
 		return (id, stream.stream, stream.continuation)
 	}
 
-	private func insert(_ continuation: AsyncStream<Event>.Continuation) -> UInt64 {
+	private func insert(_ continuation: AsyncStream<Event>.Continuation) -> UInt64? {
 		state.withLock { state in
+			guard !state.isFinished else {
+				return nil
+			}
 			state.nextID += 1
 			state.continuations[state.nextID] = continuation
 			return state.nextID
@@ -101,6 +225,19 @@ public final class Events: Sendable {
 	private func remove(continuation id: UInt64) {
 		state.withLock { state in
 			_ = state.continuations.removeValue(forKey: id)
+		}
+	}
+}
+
+private extension Events.BufferingPolicy {
+	var asyncStreamPolicy: AsyncStream<Event>.Continuation.BufferingPolicy {
+		switch self {
+		case .unbounded:
+			.unbounded
+		case .newest(let capacity):
+			.bufferingNewest(capacity)
+		case .oldest(let capacity):
+			.bufferingOldest(capacity)
 		}
 	}
 }
@@ -121,34 +258,95 @@ public struct EventHandler: Sendable {
 	}
 }
 
-public final class EventSubscription: Hashable, Sendable {
-	private let task: Task<Void, Never>
-	private let onCancel: @Sendable () -> Void
+public extension Events {
 
-	public init(_ task: Task<Void, Never>, onCancel: @escaping @Sendable () -> Void = {}) {
-		self.task = task
-		self.onCancel = onCancel
-	}
+	final class Observer: Hashable, Sendable {
+		fileprivate final class State: Sendable {
+			private let isObserving: Mutex<Bool>
 
-	deinit {
-		cancel()
-	}
+			init(isObserving: Bool = true) {
+				self.isObserving = Mutex(isObserving)
+			}
 
-	public func cancel() {
-		onCancel()
-		task.cancel()
-	}
+			var value: Bool {
+				isObserving.withLock { $0 }
+			}
 
-	public static func == (lhs: EventSubscription, rhs: EventSubscription) -> Bool {
-		lhs === rhs
-	}
+			func cancel() -> Bool {
+				isObserving.withLock { isObserving in
+					guard isObserving else {
+						return false
+					}
+					isObserving = false
+					return true
+				}
+			}
 
-	public func hash(into hasher: inout Hasher) {
-		hasher.combine(ObjectIdentifier(self))
+			func finish() {
+				isObserving.withLock { $0 = false }
+			}
+		}
+
+		private let task: Task<Void, Never>
+		private let onCancel: @Sendable () -> Void
+		private let state: State
+
+		public init(_ task: Task<Void, Never>, onCancel: @escaping @Sendable () -> Void = {}) {
+			let state = State()
+			self.task = task
+			self.state = state
+			self.onCancel = onCancel
+			Task {
+				await task.value
+				state.finish()
+			}
+		}
+
+		fileprivate init(_ task: Task<Void, Never>, state: State, onCancel: @escaping @Sendable () -> Void = {}) {
+			self.task = task
+			self.state = state
+			self.onCancel = onCancel
+		}
+
+		deinit {
+			cancel()
+		}
+
+		public var isObserving: Bool {
+			state.value
+		}
+
+		public func cancel() {
+			guard state.cancel() else {
+				return
+			}
+			onCancel()
+			task.cancel()
+		}
+
+		public func wait() async {
+			await task.value
+			state.finish()
+		}
+
+		public static func == (lhs: Observer, rhs: Observer) -> Bool {
+			lhs === rhs
+		}
+
+		public func hash(into hasher: inout Hasher) {
+			hasher.combine(ObjectIdentifier(self))
+		}
+
+		fileprivate static func finished() -> Observer {
+			Observer(Task {}, state: State(isObserving: false))
+		}
 	}
 }
 
-private struct EventMatcher: Sendable {
+public typealias EventObserver = Events.Observer
+
+struct EventMatcher: Sendable {
+	let id: String
 	private let lemma: String
 	private let values: [String: Event.Value]
 
@@ -156,23 +354,24 @@ private struct EventMatcher: Sendable {
 		if let event = event as? any KProtocol {
 			self.init(kProtocol: event)
 		} else {
-			self.init(lemma: event.__, values: [:])
+			self.init(id: event.__, lemma: event.__, values: [:])
 		}
 	}
 
 	init<A: L>(k event: K<A>) {
-		self.init(lemma: event(\.L).__, values: Dictionary(uniqueKeysWithValues: event.____.map { key, value in
+		self.init(id: event.__, lemma: event(\.L).__, values: Dictionary(uniqueKeysWithValues: event.____.map { key, value in
 			(key.__, value)
 		}))
 	}
 
 	init(kProtocol event: any KProtocol) {
-		self.init(lemma: event(\.L).__, values: Dictionary(uniqueKeysWithValues: event.____.map { key, value in
+		self.init(id: event.__, lemma: event(\.L).__, values: Dictionary(uniqueKeysWithValues: event.____.map { key, value in
 			(key.__, value)
 		}))
 	}
 
-	private init(lemma: String, values: [String: Event.Value]) {
+	private init(id: String, lemma: String, values: [String: Event.Value]) {
+		self.id = id
 		self.lemma = lemma
 		self.values = values
 	}
@@ -184,40 +383,83 @@ private struct EventMatcher: Sendable {
 	}
 }
 
-// MARK: send
+public extension Events {
 
-public func >> (event: Event, publisher: Events) {
-	publisher.send(event)
-}
+	@discardableResult func on(
+		perform action: @escaping @Sendable (Event) async -> Void
+	) -> EventObserver {
+		on(where: { _ in true }, perform: action)
+	}
 
-public func >> <A: L>(event: A, publisher: Events) {
-	publisher.send(Event(event))
-}
+	@discardableResult func on<A>(
+		_ type: A.Type,
+		perform action: @escaping @Sendable (Event) async -> Void
+	) -> EventObserver {
+		on(where: { event in
+			event.matches(type)
+		}, perform: action)
+	}
 
-public func >> <A: L>(event: K<A>, publisher: Events) {
-	publisher.send(Event(event))
+	@discardableResult func on(
+		_ event: some I,
+		perform action: @escaping @Sendable (Event) async -> Void
+	) -> EventObserver {
+		let matcher = EventMatcher(event)
+		return on(where: matcher.matches, perform: action)
+	}
+
+	@discardableResult func on<each Observed: I>(
+		_ events: repeat each Observed,
+		perform action: @escaping @Sendable (Event) async -> Void
+	) -> EventObserver {
+		var matchers: [EventMatcher] = []
+		for event in repeat each events {
+			matchers.append(EventMatcher(event))
+		}
+		return observe(matchers, perform: action)
+	}
+
+	@discardableResult func on<Observed: I>(
+		_ events: [Observed],
+		perform action: @escaping @Sendable (Event) async -> Void
+	) -> EventObserver {
+		let matchers = events.map(EventMatcher.init)
+		return observe(matchers, perform: action)
+	}
+
+	private func observe(
+		_ matchers: [EventMatcher],
+		perform action: @escaping @Sendable (Event) async -> Void
+	) -> EventObserver {
+		guard !matchers.isEmpty else {
+			return .finished()
+		}
+		return on(where: { event in
+			matchers.contains { $0.matches(event) }
+		}, perform: action)
+	}
 }
 
 // MARK: receive out of context
 
-public func >> <A>(event: A.Type, handler: EventHandler) -> EventSubscription {
-	handler.events.subscribe(where: { value in
+@discardableResult public func >> <A>(event: A.Type, handler: EventHandler) -> EventObserver {
+	handler.events.on(where: { value in
 		handler.predicate(value) && value.k(\.L) is A
-	}, handler.action)
+	}, perform: handler.action)
 }
 
-public func >> <A>(event: A, handler: EventHandler) -> EventSubscription where A: I {
+@discardableResult public func >> <A>(event: A, handler: EventHandler) -> EventObserver where A: I {
 	let matcher = EventMatcher(event)
-	return handler.events.subscribe(where: { value in
+	return handler.events.on(where: { value in
 		handler.predicate(value) && matcher.matches(value)
-	}, handler.action)
+	}, perform: handler.action)
 }
 
-public func >> <A>(event: K<A>, handler: EventHandler) -> EventSubscription where A: L {
+@discardableResult public func >> <A>(event: K<A>, handler: EventHandler) -> EventObserver where A: L {
 	let matcher = EventMatcher(k: event)
-	return handler.events.subscribe(where: { value in
+	return handler.events.on(where: { value in
 		handler.predicate(value) && matcher.matches(value)
-	}, handler.action)
+	}, perform: handler.action)
 }
 
 // MARK: receive in context
@@ -251,39 +493,39 @@ public struct EventContextHandler<Object: AnyObject & Sendable>: Sendable {
 	public let action: @Sendable (Object, Event) async -> Void
 }
 
-public func >> <O, A>(event: A.Type, handler: EventContextHandler<O>) -> EventSubscription
+@discardableResult public func >> <O, A>(event: A.Type, handler: EventContextHandler<O>) -> EventObserver
 where O: AnyObject & Sendable
 {
-	handler.subscribe { value in
+	handler.observe { value in
 		value.k(\.L) is A
 	}
 }
 
-public func >> <O, A>(event: A, handler: EventContextHandler<O>) -> EventSubscription
+@discardableResult public func >> <O, A>(event: A, handler: EventContextHandler<O>) -> EventObserver
 where A: I, O: AnyObject & Sendable
 {
 	let matcher = EventMatcher(event)
-	return handler.subscribe { value in
+	return handler.observe { value in
 		matcher.matches(value)
 	}
 }
 
-public func >> <O, A>(event: K<A>, handler: EventContextHandler<O>) -> EventSubscription
+@discardableResult public func >> <O, A>(event: K<A>, handler: EventContextHandler<O>) -> EventObserver
 where A: L, O: AnyObject & Sendable
 {
 	let matcher = EventMatcher(k: event)
-	return handler.subscribe { value in
+	return handler.observe { value in
 		matcher.matches(value)
 	}
 }
 
 private extension EventContextHandler {
 
-	func subscribe(_ matches: @escaping @Sendable (Event) -> Bool) -> EventSubscription {
+	func observe(_ matches: @escaping @Sendable (Event) -> Bool) -> EventObserver {
 		guard let events else {
-			return EventSubscription(Task {})
+			return .finished()
 		}
-		return events.subscribe(where: { [weak object] event in
+		return events.on(where: { [weak object] event in
 			guard let object else {
 				return false
 			}

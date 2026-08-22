@@ -8,7 +8,7 @@ struct LexiconCommand: AsyncParsableCommand {
 	static let configuration = CommandConfiguration(
 		commandName: "lexicon",
 		abstract: "A script-friendly utility for working with lexicon documents.",
-		version: "1.0.0",
+		version: Lexicon.version,
 		subcommands: [
 			Validate.self,
 			Lint.self,

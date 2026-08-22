@@ -3,6 +3,7 @@
 //
 
 import Foundation
+import Lexicon
 
 extension String {
 	
@@ -12,13 +13,17 @@ extension String {
 	
 	func file() throws -> Data {
 		guard let url = Bundle.module.url(forResource: "Resources/\(self)", withExtension: nil) else {
-			throw "Could not find '\(self)'"
+			throw LexiconError("Could not find '\(self)'")
 		}
 		return  try Data(contentsOf: url)
 	}
 	
 	func lexicon() async throws -> Lexicon {
-		try await Lexicon.from(TaskPaper(self).decode())
+		let document = try TaskPaper(self).decodeDocument()
+		guard let root = document.roots.keys.first else {
+			throw LexiconError("A lexicon document must declare a root")
+		}
+		return try await Lexicon(document: document, selectedRoot: root)
 	}
 }
 

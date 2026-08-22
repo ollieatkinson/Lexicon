@@ -2,13 +2,16 @@
 // github.com/screensailor 2022
 //
 
-class Lemma_Traversal™: Hopes {
+import Testing
+@Suite
+struct Lemma_Traversal™ {
 	
 	let sentences = """
 		one two three
 		a b c d
 		"""
 	
+	@Test
 	func test_BreadthFirstTraversal() async throws {
 		
 		let sentences = """
@@ -16,7 +19,7 @@ class Lemma_Traversal™: Hopes {
 			a b c d
 			"""
 		
-		let lemma = await Lexicon.from(.from(sentences: sentences)).root
+		let lemma = try await traversalRoot(sentences)
 		
 		var hierarchy: [Lemma] = []
 		
@@ -24,7 +27,7 @@ class Lemma_Traversal™: Hopes {
 			hierarchy.append(lemma)
 		}
 		
-		hope(hierarchy.map(\.id)) == [
+		#expect(hierarchy.map(\.id) == [
 			"a",
 			"a.sentence",
 			"a.word",
@@ -38,9 +41,10 @@ class Lemma_Traversal™: Hopes {
 			"a.sentence.a.b.c",
 			"a.sentence.one.two.three",
 			"a.sentence.a.b.c.d",
-		]
+		])
 	}
 	
+	@Test
 	func test_DepthFirstTraversal() async throws {
 		
 		let sentences = """
@@ -48,7 +52,7 @@ class Lemma_Traversal™: Hopes {
 			a b c d
 			"""
 		
-		let lemma = await Lexicon.from(.from(sentences: sentences)).root
+		let lemma = try await traversalRoot(sentences)
 		
 		var hierarchy: [Lemma] = []
 		
@@ -56,7 +60,7 @@ class Lemma_Traversal™: Hopes {
 			hierarchy.append(lemma)
 		}
 
-		hope(hierarchy.map(\.id)) == [
+		#expect(hierarchy.map(\.id) == [
 			"a",
 			"a.sentence",
 			"a.sentence.a",
@@ -70,6 +74,11 @@ class Lemma_Traversal™: Hopes {
 			"a.word.determiner",
 			"a.word.noun",
 			"a.word.number",
-		]
+		])
 	}
+}
+
+@LexiconActor
+private func traversalRoot(_ sentences: String) throws -> Lemma {
+	try Lexicon(graph: .from(sentences: sentences)).root
 }

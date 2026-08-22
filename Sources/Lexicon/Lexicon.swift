@@ -8,379 +8,293 @@ import Combine
 #endif
 import _Collections
 
-@LexiconActor public final class Lexicon: ObservableObject {
-	
-	@Published public private(set) var graph: Graph
-	@Published public private(set) var document: Document
-	
-	public internal(set) var dictionary: [Lemma.ID: Lemma] = [:]
-	public internal(set) var roots: SortedDictionary<Lemma.Name, Lemma> = [:]
-	
-	private var lemma: Lemma! // TODO: serioulsy?
-	
-	private init(document: Document, graph: Graph) {
-		self.document = document
-		self.graph = graph
-	}
-}
+@LexiconActor
+public final class Lexicon: ObservableObject {
 
-public extension Lexicon {
-	
-	var root: Lemma { lemma! }
-	
-	subscript(id: Lemma.ID) -> Lemma? {
-		if let o = dictionary[id] {
-			return o
+	nonisolated public static let version = "0.3.0"
+
+	public struct Identity: Hashable, Codable, Sendable, CustomStringConvertible {
+		public let rawValue: UUID
+
+		public init(rawValue: UUID = UUID()) {
+			self.rawValue = rawValue
 		}
-		guard let rootName = id.split(separator: ".", maxSplits: 1).first.map(String.init), let root = roots[rootName] else {
+
+		public var description: String {
+			rawValue.uuidString
+		}
+	}
+
+	public struct Revision: Hashable, Comparable, Codable, Sendable, CustomStringConvertible {
+		public let rawValue: UInt64
+
+		public init(rawValue: UInt64) {
+			self.rawValue = rawValue
+		}
+
+		public static let initial = Self(rawValue: 0)
+
+		public var description: String {
+			String(rawValue)
+		}
+
+		public static func < (lhs: Self, rhs: Self) -> Bool {
+			lhs.rawValue < rhs.rawValue
+		}
+
+		func next() throws -> Self {
+			guard rawValue < UInt64.max else {
+				throw LexiconError("Lexicon revision overflow")
+			}
+			return Self(rawValue: rawValue + 1)
+		}
+	}
+
+	nonisolated public let identity: Identity
+
+	@Published public private(set) var document: Document
+	@Published public private(set) var selectedRoot: Lemma.Name
+	@Published public private(set) var revision: Revision
+
+	private var generation: Generation
+
+	public init(
+		document: Document,
+		selectedRoot: Lemma.Name
+	) throws {
+		let document = try document.validated()
+		guard document.roots[selectedRoot] != nil else {
+			throw LexiconError("The document does not declare selected root '\(selectedRoot)'")
+		}
+		let identity = Identity()
+		let revision = Revision.initial
+		self.identity = identity
+		self.document = document
+		self.selectedRoot = selectedRoot
+		self.revision = revision
+		self.generation = Generation(
+			lexiconID: identity,
+			revision: revision,
+			document: document
+		)
+	}
+
+	public convenience init(graph: Graph) throws {
+		try self.init(document: Document(graph), selectedRoot: graph.rootName)
+	}
+
+	public var graph: Graph {
+		guard let graph = try? document.graph(root: selectedRoot) else {
+			preconditionFailure("The selected root '\(selectedRoot)' is missing.")
+		}
+		return graph
+	}
+
+	public var root: Lemma {
+		generation.lemma(Lemma.ID(root: selectedRoot))
+	}
+
+	public var roots: SortedDictionary<Lemma.Name, Lemma> {
+		var roots: SortedDictionary<Lemma.Name, Lemma> = [:]
+		for rootName in document.roots.keys {
+			roots[rootName] = generation.lemma(Lemma.ID(root: rootName))
+		}
+		return roots
+	}
+
+	public subscript(id: Lemma.ID) -> Lemma? {
+		guard generation.resolve(id) != nil else {
 			return nil
 		}
-		return root[id.components(separatedBy: ".").dropFirst()]
-	}
-}
-
-public extension Lexicon {
-	
-	static func from(_ graph: Graph) -> Lexicon {
-		let document = Document(graph)
-		let o = make(document: document, graph: graph)
-		all.append(o) // TODO: hard rethink
-		return o
+		return generation.lemma(id)
 	}
 
-	static func from(_ document: Document, root name: Graph.Node.Name? = nil) throws -> Lexicon {
-		let graph = try document.graph(root: name)
-		let o = make(document: document, graph: graph)
-		all.append(o) // TODO: hard rethink
-		return o
+	public func selectRoot(_ root: Lemma.Name) throws {
+		guard document.roots[root] != nil else {
+			throw LexiconError("The document does not declare root '\(root)'")
+		}
+		selectedRoot = root
 	}
 
-	#if EDITOR
-	func reset(to graph: Graph) {
-		var document = document
-		document.date = graph.date
-		document.roots[graph.root.name] = graph.root
-		Lexicon.connect(lexicon: self, with: document, graph: graph)
+	public func replaceDocument(
+		with document: Document,
+		selectedRoot: Lemma.Name
+	) throws {
+		let document = try document.validated()
+		guard document.roots[selectedRoot] != nil else {
+			throw LexiconError("The document does not declare selected root '\(selectedRoot)'")
+		}
+		try commit(document, selectedRoot: selectedRoot)
 	}
 
-	func reset(to document: Document, root name: Graph.Node.Name? = nil) throws {
-		try Lexicon.connect(lexicon: self, with: document, root: name)
+	func requireCurrent(_ lemma: Lemma) throws {
+		guard lemma.lexiconID == identity else {
+			throw LexiconError("Lemma '\(lemma.id)' belongs to a different lexicon")
+		}
+		guard lemma.revision == revision else {
+			throw LexiconError(
+				"Lemma '\(lemma.id)' is stale (revision \(lemma.revision), current \(revision))"
+			)
+		}
+		guard generation.resolve(lemma.id) != nil else {
+			throw LexiconError("Lemma '\(lemma.id)' is not present in the current generation")
+		}
 	}
-	#endif
+
+	func commit(_ document: Document, selectedRoot: Lemma.Name) throws {
+		let revision = try revision.next()
+		let generation = Generation(
+			lexiconID: identity,
+			revision: revision,
+			document: document
+		)
+		self.document = document
+		self.selectedRoot = selectedRoot
+		self.revision = revision
+		self.generation = generation
+	}
 }
 
 extension Lexicon {
 
-	static func temporary(from document: Document, root name: Graph.Node.Name? = nil) throws -> Lexicon {
-		let graph = try document.graph(root: name)
-		return make(document: document, graph: graph)
-	}
-}
-
-private extension Lexicon {
-	
-	static var all: [Lexicon] = []
-
-	static func make(document: Document, graph: Graph) -> Lexicon {
-		let o = Lexicon(document: document, graph: graph)
-		connect(lexicon: o, with: document, graph: graph)
-		return o
-	}
-	
-	static func connect(lexicon: Lexicon, with new: Graph? = nil) {
-		let graph = new ?? lexicon.graph
-		connect(lexicon: lexicon, with: Document(graph), graph: graph)
-	}
-
-	static func connect(lexicon: Lexicon, with document: Document, root name: Graph.Node.Name? = nil) throws {
-		try connect(lexicon: lexicon, with: document, graph: document.graph(root: name))
-	}
-
-	static func connect(lexicon: Lexicon, with document: Document, graph: Graph) {
-		lexicon.dictionary.removeAll(keepingCapacity: true)
-		lexicon.roots.removeAll(keepingCapacity: true)
-		for (name, root) in document.roots {
-			lexicon.roots[name] = Lemma(name: name, node: root, parent: nil, lexicon: lexicon)
-		}
-		lexicon.lemma = lexicon.roots[graph.root.name]!
-		lexicon.document = document
-		lexicon.graph = graph
-	}
-
-	func regenerateGraph(_ ƒ: ((Lemma) -> ())? = nil) -> Lexicon.Graph {
-		Lexicon.Graph(
-			root: root.regenerateNode(ƒ),
-			date: .init()
-		)
+	static func temporary(from document: Document, root name: Lemma.Name) throws -> Lexicon {
+		try Lexicon(document: document, selectedRoot: name)
 	}
 }
 
 #if EDITOR
+public extension Lexicon {
 
-// MARK: graph mutations
-
-// TODO: performance
-// TODO: throwing
-
-public extension Lexicon { // MARK: additive mutations
-	
-	func add(type: Lemma, to lemma: Lemma) -> Lemma? {
-		
-		guard
-			lemma.isValid(newType: type),
-			let path = lemma.graphPath
-		else {
-			return nil
-		}
-		
-		var graph = graph
-		graph.date = .init()
-		
-		graph[path].type.insert(type.id)
-		
-		reset(to: graph)
-		return self[lemma.id] ?? root
+	@discardableResult
+	func addChild(
+		named name: Lemma.Name,
+		to parent: Lemma
+	) throws -> Lemma {
+		try requireCurrent(parent)
+		var editor = try Document.Editor(document)
+		let id = try editor.addChild(named: name, to: parent.id)
+		try commit(editor.document, selectedRoot: selectedRoot)
+		return try committedLemma(id)
 	}
 
-	func make(child new: Graph, to lemma: Lemma) -> Lemma? {
-		
-		let name = new.root.name
-
-		guard
-			lemma.isValid(newChildName: name),
-			let path = lemma.graphPath
-		else {
-			return nil
-		}
-		
-		var new = new
-		new.root.protonym = nil // TODO: allow != nil
-		
-		let id = "\(lemma.id).\(name)"
-		
-		var graph = graph
-		graph.date = .init()
-		
-		graph[path].children[name] = new.root
-		reset(to: graph)
-		
-		guard let child = self[id] else {
-			return root
-		}
-
-		graph[path].children[name] = child.regenerateNode { o in
-			for (name, child) in o.ownChildren {
-				if
-					let protonym = child.node.protonym,
-					o[protonym.components(separatedBy: ".")] == nil
-				{
-					o.ownChildren.removeValue(forKey: name)
-				}
-			}
-			for id in o.node.type where self[id] == nil {
-				o.node.type.remove(name)
-			}
-		}
-		
-		reset(to: graph)
-		return self[id] ?? root
-	}
-	
-	func make(child name: Lemma.Name, to lemma: Lemma) -> Lemma? {
-		
-		guard
-			lemma.isValid(newChildName: name),
-			let path = lemma.graphPath
-		else {
-			return nil
-		}
-		
-		var graph = graph
-		graph.date = .init()
-
-		graph[path].make(child: name)
-
-		reset(to: graph)
-		return self["\(lemma.id).\(name)"] ?? root
-	}
-}
-
-public extension Lexicon { // MARK: non-additive mutations
-	
-	func delete(_ lemma: Lemma, alwaysReturningParent: Bool = false) -> Lemma? {
-		
-		guard
-			lemma.isGraphNode,
-			let parent = lemma.parent
-		else {
-			return nil
-		}
-		
-		let children = Array(parent.ownChildren.keys)
-		
-		let sibling: Lemma.Name? = children
-			.firstIndex(of: lemma.name)
-			.flatMap { i in
-				switch (i, children.count > 1) {
-					case (_, false): return nil
-					case (0, _):     return children[1]
-					case (_, _):     return children[i - 1]
-				}
-			}
-		
-		parent.ownChildren.removeValue(forKey: lemma.name)
-		
-		root.graphTraversal(.depthFirst) { o in
-			for (name, type) in o.ownType where type.unwrapped.isInLineage(of: lemma) {
-				o.ownType.removeValue(forKey: name) // TODO: don't like
-				o.children = o.lazy_children() // TODO: don't like
-				o.node.type.remove(name)
-			}
-		}
-
-		let graph = regenerateGraph { o in
-			for (name, child) in o.ownChildren {
-				if
-					let protonym = child.node.protonym,
-					o[protonym.components(separatedBy: ".")] == nil
-				{
-					o.ownChildren.removeValue(forKey: name)
-				}
-			}
-		}
-
-		reset(to: graph)
-		
-		guard let parent = self[parent.id] else {
-			return root
-		}
-		guard !alwaysReturningParent, let name = sibling, let sibling = parent[name] else {
-			return parent
-		}
-		return sibling
-	}
-	
-	func remove(type: Lemma, from lemma: Lemma) -> Lemma? {
-
-		guard let path = lemma.graphPath else {
-			return nil
-		}
-		
-		var graph = graph
-
-		guard graph[path].type.remove(type.id) != nil else {
-			return nil
-		}
-
-		reset(to: graph)
-		
-		graph = regenerateGraph { o in
-			for (name, child) in o.ownChildren {
-				if
-					let protonym = child.node.protonym,
-					o[protonym.components(separatedBy: ".")] == nil
-				{
-					o.ownChildren.removeValue(forKey: name)
-				}
-			}
-		}
-		
-		reset(to: graph)
-		return self[lemma.id] ?? root
-	}
-	
-	func removeProtonym(of lemma: Lemma) -> Lemma? {
-		
-		guard
-			lemma.node.protonym != nil,
-			let path = lemma.graphPath
-		else {
-			return nil
-		}
-		
-		var graph = graph
-		graph.date = .init()
-
-		graph[path].protonym = nil
-		
-		reset(to: graph) // TODO: reconsider, as it is not strictly necessary
-		return self[lemma.id] ?? root
+	@discardableResult
+	func insert(
+		_ graph: Graph,
+		under parent: Lemma
+	) throws -> Lemma {
+		try requireCurrent(parent)
+		var editor = try Document.Editor(document)
+		let id = try editor.insert(graph, under: parent.id)
+		try commit(editor.document, selectedRoot: selectedRoot)
+		return try committedLemma(id)
 	}
 
-	func rename(_ lemma: Lemma, to name: Lemma.Name) -> Lemma? {
-		
-		guard lemma.isValid(newName: name) else {
-			return nil
-		}
-		
-		let old = (
-			id: lemma.id,
-			name: lemma.name
-		)
-		
-		let new = (
-			id: String(lemma.id.dropLast(old.name.count)) + name,
-			name: name
-		)
-		
-		lemma.node.name = new.name
-		lemma.parent?.ownChildren.removeValue(forKey: old.name)
-		lemma.parent?.ownChildren[new.name] = lemma
-
-		root.graphTraversal(.breadthFirst) { o in
-			if
-				let protonym = o.protonym?.unwrapped,
-				protonym.lineage.contains(where: { $0.is(lemma) }) // TODO: measure performance without this
-			{
-				o.node.protonym = protonym.lineage
-					.prefix(while: { $0 != o.parent })
-					.reversed()
-					.map(\.node.name)
-					.joined(separator: ".")
-			}
-			else {
-				for id in o.node.type where id.starts(with: old.id) {
-					o.node.type.remove(id)
-					o.node.type.insert(
-						new.id + String(id.dropFirst(old.id.count))
-					)
-				}
-			}
-		}
-
-		let graph = regenerateGraph()
-		
-		reset(to: graph)
-		return self[new.id] ?? root
+	@discardableResult
+	func rename(
+		_ lemma: Lemma,
+		to name: Lemma.Name
+	) throws -> Lemma {
+		try requireCurrent(lemma)
+		var editor = try Document.Editor(document)
+		let id = try editor.rename(lemma.id, to: name)
+		let root = lemma.id.parent == nil && selectedRoot == lemma.id.root
+			? name
+			: selectedRoot
+		try commit(editor.document, selectedRoot: root)
+		return try committedLemma(id)
 	}
 
-	func set(protonym: Lemma, of lemma: Lemma) -> Lemma? {
-		
-		guard let protonym = lemma.validated(protonym: protonym) else {
-			return nil
-		}
-		
-		let id = lemma.id
-		
-		guard let parent = delete(lemma, alwaysReturningParent: true) else {
-			return nil
-		}
-		
-		guard let path = parent.graphPath else {
-			return parent
-		}
+	@discardableResult
+	func move(
+		_ lemma: Lemma,
+		under parent: Lemma
+	) throws -> Lemma {
+		try requireCurrent(lemma)
+		try requireCurrent(parent)
+		var editor = try Document.Editor(document)
+		let id = try editor.move(lemma.id, under: parent.id)
+		let root = editor.document.roots[selectedRoot] == nil
+			? try firstRoot(in: editor.document)
+			: selectedRoot
+		try commit(editor.document, selectedRoot: root)
+		return try committedLemma(id)
+	}
 
-		var graph = graph
-		graph.date = .init()
+	func delete(_ lemma: Lemma) throws {
+		try requireCurrent(lemma)
+		var editor = try Document.Editor(document)
+		try editor.delete(lemma.id)
+		let root = editor.document.roots[selectedRoot] == nil
+			? try firstRoot(in: editor.document)
+			: selectedRoot
+		try commit(editor.document, selectedRoot: root)
+	}
 
-		let node = Lexicon.Graph.Node(name: lemma.name, protonym: protonym)
-		
-		graph[path].children[node.name] = node
-				
-		reset(to: graph)
-		
-		return self[id] ?? root
+	@discardableResult
+	func addType(
+		_ type: Lemma,
+		to lemma: Lemma
+	) throws -> Lemma {
+		try requireCurrent(type)
+		try requireCurrent(lemma)
+		var editor = try Document.Editor(document)
+		try editor.addType(type.id, to: lemma.id)
+		try commit(editor.document, selectedRoot: selectedRoot)
+		return try committedLemma(lemma.id)
+	}
+
+	@discardableResult
+	func removeType(
+		_ type: Lemma,
+		from lemma: Lemma
+	) throws -> Lemma {
+		try requireCurrent(type)
+		try requireCurrent(lemma)
+		var editor = try Document.Editor(document)
+		try editor.removeType(type.id, from: lemma.id)
+		try commit(editor.document, selectedRoot: selectedRoot)
+		return try committedLemma(lemma.id)
+	}
+
+	@discardableResult
+	func setProtonym(
+		_ protonym: Lemma,
+		of lemma: Lemma
+	) throws -> Lemma {
+		try requireCurrent(protonym)
+		try requireCurrent(lemma)
+		var editor = try Document.Editor(document)
+		try editor.setProtonym(protonym.id, of: lemma.id)
+		try commit(editor.document, selectedRoot: selectedRoot)
+		return try committedLemma(lemma.id)
+	}
+
+	@discardableResult
+	func clearProtonym(of lemma: Lemma) throws -> Lemma {
+		try requireCurrent(lemma)
+		var editor = try Document.Editor(document)
+		try editor.clearProtonym(of: lemma.id)
+		try commit(editor.document, selectedRoot: selectedRoot)
+		return try committedLemma(lemma.id)
 	}
 }
 
+private extension Lexicon {
+
+	func committedLemma(_ id: Lemma.ID) throws -> Lemma {
+		guard let lemma = self[id] else {
+			throw LexiconError("Committed generation is missing lemma '\(id)'")
+		}
+		return lemma
+	}
+
+	func firstRoot(in document: Document) throws -> Lemma.Name {
+		guard document.roots.count == 1, let root = document.roots.keys.first else {
+			throw LexiconError(
+				"An edit that removes the selected root requires exactly one unambiguous replacement root"
+			)
+		}
+		return root
+	}
+}
 #endif

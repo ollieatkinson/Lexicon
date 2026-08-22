@@ -1,0 +1,26 @@
+# Shared commerce vocabulary.
+> API, UI, analytics, and support can keep local words while sharing meaning.
+
+commerce:
+	type:
+		boolean:
+		string:
+	api:
+		order:
+			submit:
+			+ commerce.type.boolean
+			? true
+	ui:
+		checkout:
+			button:
+				primary:
+				+ commerce.api.order.submit
+	analytics:
+		event:
+			checkout_started:
+			+ commerce.ui.checkout.button.primary
+	support:
+		ticket:
+			status:
+			+ commerce.type.string
+			? "open"

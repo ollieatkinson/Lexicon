@@ -2,12 +2,16 @@
 // github.com/screensailor 2022
 //
 
+import Testing
 import Lexicon
+
+#if EDITOR
 
 extension Lexicon™ {
 	
 	// MARK: additive mutations
 	
+	@Test
 	func test_make_child_graph() async throws {
 				
 		let taskpaper = """
@@ -31,12 +35,13 @@ extension Lexicon™ {
 					a:
 			"""
 			
-		let src = try await taskpaper.lemma("o.copy.a.b")
-		let dst = try await src.lexicon["o.paste.a"].hopefully()
+		let lexicon = try await taskpaper.lexicon()
+		let src = try #require(await lexicon[Lemma.ID(parsing: "o.copy.a.b")])
+		let dst = try #require(await lexicon["o.paste.a"])
 
-		let b = try await dst.make(child: src.graph).hopefully()
+		_ = try await lexicon.insert(src.graph, under: dst)
 		
-		await hope(that: b.lexicon.taskpaper()) == """
+		#expect(await lexicon.taskpaper() == """
 			o:
 				copy:
 					a:
@@ -65,9 +70,10 @@ extension Lexicon™ {
 							= c.d
 							e:
 							= c.d.e.copy
-			"""
+			""")
 	}
 	
+	@Test
 	func test_make_child_graph_where_root_is_a_synonym() async throws {
 				
 		let taskpaper = """
@@ -80,12 +86,14 @@ extension Lexicon™ {
 						= c
 			"""
 			
-		let src = try await taskpaper.lemma("o.a.b.x")
-		let dst = try await src.lexicon["o.a"].hopefully()
+		let lexicon = try await taskpaper.lexicon()
+		let src = try #require(await lexicon[Lemma.ID(parsing: "o.a.b.x")])
+		let dst = try #require(await lexicon["o.a"])
 
-		let b = try await dst.make(child: src.graph).hopefully()
+		_ = try await lexicon.insert(src.graph, under: dst)
 
-		await hope(that: b.lexicon.taskpaper()) == """
+		let actual = await lexicon.taskpaper()
+		#expect(actual == """
 			o:
 				a:
 					b:
@@ -94,39 +102,69 @@ extension Lexicon™ {
 						x:
 						= c
 					x:
+			""", "actual:\n\(actual)")
+	}
+
+	@Test
+	func test_make_child_graph_preserves_valid_root_synonym() async throws {
+
+		let taskpaper = """
+			o:
+				source:
+					target:
+					alias:
+					= target
+				destination:
+					target:
 			"""
+
+		let lexicon = try await taskpaper.lexicon()
+		let src = try #require(await lexicon[Lemma.ID(parsing: "o.source.alias")])
+		let dst = try #require(await lexicon["o.destination"])
+
+		_ = try await lexicon.insert(src.graph, under: dst)
+
+		let actual = await lexicon.taskpaper()
+		#expect(actual == """
+			o:
+				destination:
+					alias:
+					= target
+					target:
+				source:
+					alias:
+					= target
+					target:
+			""", "actual:\n\(actual)")
 	}
 	
 	// MARK: non-additive mutations
 	
+	@Test
 	func test_delete() async throws {
 		
 		let taskpaper = """
 			o:
 				a:
-				+ o
-				+ o.b
 				b:
-					x:
 				c:
-				= a.x
 				d:
-				= a
 			"""
 			
-		let b = try await taskpaper.lemma("o.b")
+		let lexicon = try await taskpaper.lexicon()
+		let b = try #require(await lexicon["o.b"])
+		try await lexicon.delete(b)
 		
-		let o = try await b.delete().hopefully()
-		
-		await hope(that: o.lexicon.taskpaper()) == """
+		let actual = await lexicon.taskpaper()
+		#expect(actual == """
 			o:
 				a:
-				+ o
+				c:
 				d:
-				= a
-			"""
+			""", "actual:\n\(actual)")
 	}
 	
+	@Test
 	func test_remove_type() async throws {
 		
 		let taskpaper = """
@@ -141,21 +179,23 @@ extension Lexicon™ {
 				= a
 			"""
 			
-		let a = try await taskpaper.lemma("o.a")
-		let o = try await a.lexicon["o"].hopefully()
+		let lexicon = try await taskpaper.lexicon()
+		let a = try #require(await lexicon["o.a"])
+		let o = await lexicon.root
 
-		let a₂ = try await a.remove(type: o).hopefully()
+		_ = try await lexicon.removeType(o, from: a)
 		
-		await hope(that: a₂.lexicon.taskpaper()) == """
+		#expect(await lexicon.taskpaper() == """
 			o:
 				a:
 				b:
 					x:
 				d:
 				= a
-			"""
+			""")
 	}
 	
+	@Test
 	func test_remove_protonym() async throws {
 		
 		let taskpaper = """
@@ -170,11 +210,12 @@ extension Lexicon™ {
 				= a
 			"""
 			
-		let c = try await taskpaper.lemma("o.c")
+		let lexicon = try await taskpaper.lexicon()
+		let c = try #require(await lexicon["o.c"])
 
-		let c₂ = try await c.removeProtonym().hopefully()
+		_ = try await lexicon.clearProtonym(of: c)
 		
-		await hope(that: c₂.lexicon.taskpaper()) == """
+		#expect(await lexicon.taskpaper() == """
 			o:
 				a:
 				+ o
@@ -183,9 +224,10 @@ extension Lexicon™ {
 				c:
 				d:
 				= a
-			"""
+			""")
 	}
 		
+	@Test
 	func test_rename() async throws {
 		
 		let taskpaper = """
@@ -216,11 +258,13 @@ extension Lexicon™ {
 					y:
 			"""
 			
-		let y = try await taskpaper.lemma("o.x.y")
+		let lexicon = try await taskpaper.lexicon()
+		let y = try #require(await lexicon["o.x.y"])
 
-		let y₂ = try await y.rename(to: "Y").hopefully()
-		
-		await hope(that: y₂.lexicon.taskpaper()) == """
+		_ = try await lexicon.rename(y, to: "Y")
+
+		let actual = await lexicon.taskpaper()
+		#expect(actual == """
 			o:
 				a:
 				+ o.ax
@@ -246,9 +290,10 @@ extension Lexicon™ {
 						z:
 				z:
 					y:
-			"""
+			""", "actual:\n\(actual)")
 	}
 
+	@Test
 	func test_set_protonym() async throws {
 		
 		let taskpaper = """
@@ -262,12 +307,13 @@ extension Lexicon™ {
 				= a
 			"""
 			
-		let c = try await taskpaper.lemma("o.c")
-		let x = try await c.lexicon["o.a.b.x"].hopefully()
+		let lexicon = try await taskpaper.lexicon()
+		let c = try #require(await lexicon["o.c"])
+		let x = try #require(await lexicon["o.a.b.x"])
 
-		let c₂ = try await c.set(protonym: x).hopefully()
+		_ = try await lexicon.setProtonym(x, of: c)
 
-		await hope(that: c₂.lexicon.taskpaper()) == """
+		#expect(await lexicon.taskpaper() == """
 			o:
 				a:
 				+ o
@@ -277,6 +323,8 @@ extension Lexicon™ {
 				= a.b.x
 				d:
 				= a
-			"""
+			""")
 	}
 }
+
+#endif

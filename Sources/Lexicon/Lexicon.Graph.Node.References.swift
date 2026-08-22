@@ -7,48 +7,56 @@ extension Lexicon.Graph.Node {
 	func rewritingInternalReferences(
 		from oldRootID: Lemma.ID,
 		to newRootID: Lemma.ID,
-		path: Lemma.ID,
-		parentPath: Lemma.ID?,
-		name newName: Name? = nil
+		oldPath: Lemma.ID,
+		newPath: Lemma.ID
 	) -> Self {
 		var node = self
-		if let newName {
-			node.name = newName
-		}
-		node.type = Set(node.type.map { $0.rewritingInternalReference(from: oldRootID, to: newRootID) })
+		node.type = Set(node.type.map {
+			$0.rewritingInternalReference(from: oldRootID, to: newRootID)
+		})
 		if case .reference(let reference) = node.defaultValue {
-			node.defaultValue = .reference(reference.rewritingInternalReference(from: oldRootID, to: newRootID))
-		}
-		if let protonym = node.protonym {
-			let rewritten = protonym.rewritingInternalReference(from: oldRootID, to: newRootID)
-			node.protonym = parentPath.map { rewritten.dotPath(after: $0) } ?? rewritten
-		}
-		var children: Lexicon.Graph.Node.Children = [:]
-		for (name, child) in node.children {
-			let childPath = "\(path).\(name)"
-			children[name] = child.rewritingInternalReferences(
-				from: oldRootID,
-				to: newRootID,
-				path: childPath,
-				parentPath: path,
-				name: name
+			node.defaultValue = .reference(
+				reference.rewritingInternalReference(from: oldRootID, to: newRootID)
 			)
 		}
-		node.children = children
+		if
+			let protonym = node.protonym,
+			let oldParent = oldPath.parent,
+			let newParent = newPath.parent
+		{
+			let oldTarget = oldParent.appending(protonym)
+			if oldTarget.isInLineage(of: oldRootID) {
+				let target = oldTarget.rewritingInternalReference(
+					from: oldRootID,
+					to: newRootID
+				)
+				node.protonym = try! target.relative(to: newParent)
+			}
+		}
+		for (name, child) in node.children {
+			node.children[name] = child.rewritingInternalReferences(
+				from: oldRootID,
+				to: newRootID,
+				oldPath: oldPath.appending(name),
+				newPath: newPath.appending(name)
+			)
+		}
 		return node
 	}
 }
 
-extension String {
+extension Lemma.ID {
 
-	func rewritingInternalReference(from oldRootID: String, to newRootID: String) -> String {
-		if self == oldRootID {
-			return newRootID
-		}
-		guard hasPrefix("\(oldRootID).") else {
+	func rewritingInternalReference(
+		from oldRootID: Self,
+		to newRootID: Self
+	) -> Self {
+		guard isInLineage(of: oldRootID) else {
 			return self
 		}
-		return "\(newRootID)\(dropFirst(oldRootID.count))"
+		return try! Self(
+			components: newRootID.components + components.dropFirst(oldRootID.components.count)
+		)
 	}
 }
 

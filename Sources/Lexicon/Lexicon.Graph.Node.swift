@@ -5,17 +5,16 @@
 import _Collections
 
 public extension Lexicon.Graph.Node {
-	typealias ID = String // TODO: consider [Name] or WritableKeyPath or [WritableKeyPath] instead
-	typealias Name = String
-	typealias Protonym = String
+	typealias ID = Lemma.ID
+	typealias Name = Lemma.Name
+	typealias Protonym = Lemma.RelativeID
 	typealias Children = SortedDictionary<Name, Lexicon.Graph.Node>
 }
 
 public extension Lexicon.Graph {
-	
-	struct Node: Sendable {
-		
-		public var name: Name
+
+	struct Node: Sendable, Equatable {
+
 		public var type: Set<ID>
 		public var protonym: Protonym?
 		public var defaultValue: DefaultValue?
@@ -23,37 +22,18 @@ public extension Lexicon.Graph {
 		public var notes: [String]
 		public var comments: [String]
 		public var children: Children
-		
+
 		public init(
-			name: Name,
-			protonym: Protonym,
-			defaultValue: DefaultValue? = nil,
-			connections: [Lexicon.Import] = [],
-			notes: [String] = [],
-			comments: [String] = []
-		) {
-			self.name = name
-			self.type = []
-			self.protonym = protonym
-			self.defaultValue = defaultValue
-			self.connections = connections
-			self.notes = notes
-			self.comments = comments
-			self.children = [:]
-		}
-		
-		public init(
-			name: Name,
 			children: [Name: Node] = [:],
 			type: Set<ID> = [],
+			protonym: Protonym? = nil,
 			defaultValue: DefaultValue? = nil,
 			connections: [Lexicon.Import] = [],
 			notes: [String] = [],
 			comments: [String] = []
 		) {
-			self.name = name
 			self.type = type
-			self.protonym = nil
+			self.protonym = protonym
 			self.defaultValue = defaultValue
 			self.connections = connections
 			self.notes = notes
@@ -66,7 +46,7 @@ public extension Lexicon.Graph {
 			if let child = children[name] {
 				return child
 			}
-			let child = Node(name: name)
+			let child = Node()
 			children[name] = child
 			return child
 		}
@@ -75,29 +55,27 @@ public extension Lexicon.Graph {
 
 internal extension Lexicon.Graph.Node {
 
-	/// - note: This is not an optional subscript!
-	subscript(child: String) -> Lexicon.Graph.Node {
-		get { children[child]! } // TODO: rethink
-		set { children[child] = newValue }
-	}
-}
-
-extension Lexicon.Graph.Node: CustomStringConvertible {
-	
-	public var description: String {
-		name
+	/// - note: This is not an optional subscript.
+	subscript(_ name: Name) -> Lexicon.Graph.Node {
+		get {
+			guard let node = children[name] else {
+				preconditionFailure("Missing graph child '\(name)'.")
+			}
+			return node
+		}
+		set { children[name] = newValue }
 	}
 }
 
 public extension Lexicon.Graph.Node {
-	
-	// TODO: rewrite to reflect Node changes
-	func traverse(parent: ID? = nil, name: Name? = nil, yield: ((id: ID, name: Name, node: Lexicon.Graph.Node)) -> ()) {
-		let name = name ?? self.name
-		let id = parent.map{ "\($0).\(name)" } ?? name
-		yield((id, name, self))
-		children.forEach { (name, child) in
-			child.traverse(parent: id, name: name, yield: yield)
+
+	func traverse(
+		id: ID,
+		yield: ((id: ID, name: Name, node: Lexicon.Graph.Node)) -> Void
+	) {
+		yield((id, id.name, self))
+		for (name, child) in children {
+			child.traverse(id: id.appending(name), yield: yield)
 		}
 	}
 }

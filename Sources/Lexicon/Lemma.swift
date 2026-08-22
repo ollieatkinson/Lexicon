@@ -3,402 +3,483 @@
 //
 
 import Foundation
-import Collections
 import _Collections
 
-@LexiconActor public final class Lemma {
-	
-	public typealias ID = String
-	public typealias Name = String
-	public typealias Protonym = String
+@LexiconActor
+public struct Lemma: Hashable, CustomStringConvertible, Sendable {
+
 	public typealias Description = String
 	public typealias Children = SortedDictionary<Name, Lemma>
-	public typealias Types = SortedDictionary<ID, Unowned<Lemma>>
-	
+	public typealias Types = SortedDictionary<ID, Lemma>
+
 	nonisolated public let id: ID
-	nonisolated public let name: Name
-	nonisolated public let breadcrumbs: [Name]
-	nonisolated public let isGraphNode: Bool
-	nonisolated public unowned let parent: Lemma?
-	nonisolated public unowned let lexicon: Lexicon
-	
-	public internal(set) var node: Lexicon.Graph.Node
-	public internal(set) var ownChildren: Children = [:]
+	nonisolated public let lexiconID: Lexicon.Identity
+	nonisolated public let revision: Lexicon.Revision
 
-	public internal(set) lazy var protonym: Unowned<Lemma>? = lazy_protonym()
-	public internal(set) lazy var children: Children = lazy_children()
-	public internal(set) lazy var type: Types = lazy_type()
-	public internal(set) lazy var ownType: Types = lazy_ownType()
-	
-	init(name: Name, node: Lexicon.Graph.Node, parent: Lemma?, lexicon: Lexicon) {
-		
-		self.breadcrumbs = (parent?.breadcrumbs ?? []) + [name]
-		self.id = breadcrumbs.joined(separator: ".")
-		
-		self.name = name
-		self.node = node
-		self.parent = parent
-		self.lexicon = lexicon
-		
-		self.isGraphNode = parent.map {
-			$0.isGraphNode && $0.node.children.keys.contains(name)
-		} ?? true
-		
-		lexicon.dictionary[id] = self // MARK: ads itself to the lexicon map
-		
-		for (name, node) in node.children { // MARK: recursively replicate the graph
-			ownChildren[name] = Lemma(name: name, node: node, parent: self, lexicon: lexicon)
+	private let generation: Lexicon.Generation
+
+	nonisolated internal init(id: ID, generation: Lexicon.Generation) {
+		self.id = id
+		self.lexiconID = generation.lexiconID
+		self.revision = generation.revision
+		self.generation = generation
+	}
+
+	nonisolated public var name: Name { id.name }
+	nonisolated public var breadcrumbs: [Name] { id.components }
+
+	public var isGraphNode: Bool {
+		generation.rawNodes[id] != nil
+	}
+
+	public var node: Lexicon.Graph.Node {
+		guard let resolution = generation.resolve(id) else {
+			preconditionFailure("Generation is missing lemma '\(id)'.")
 		}
+		return generation.node(for: resolution)
 	}
-}
 
-public extension Lemma {
-	
-	@inlinable subscript(descendant: Name...) -> Lemma? {
-		self[descendant]
+	public var graphNode: Lexicon.Graph.Node? {
+		generation.rawNodes[id]
 	}
-	
-	subscript<Descendant>(descendant: Descendant) -> Lemma? where Descendant: Collection, Descendant.Element == Name {
-		var o = self
-		for name in descendant {
-			guard let lemma = o.children[name] else {
-				return nil
+
+	public var parent: Lemma? {
+		id.parent.flatMap(generation.lemma)
+	}
+
+	public var ownChildren: Children {
+		guard let resolution = generation.resolve(id) else {
+			return [:]
+		}
+		var children: Children = [:]
+		for name in generation.node(for: resolution).children.keys {
+			let childID = id.appending(name)
+			if generation.resolve(childID) != nil {
+				children[name] = generation.lemma(childID)
 			}
-			o = lemma.protonym?.unwrapped ?? lemma
 		}
-		return o
+		return children
 	}
-	
-	func regenerateNode(_ ƒ: ((Lemma) -> ())? = nil) -> Lexicon.Graph.Node {
-		ƒ?(self)
-		if let protonym = node.protonym {
-			return Lexicon.Graph.Node(
-				name: node.name,
-				protonym: protonym,
-				defaultValue: node.defaultValue,
-				connections: node.connections,
-				notes: node.notes,
-				comments: node.comments
-			)
-		} else {
-			return Lexicon.Graph.Node(
-				name: node.name,
-				children: ownChildren.mapValues{ $0.regenerateNode(ƒ) },
-				type: node.type,
-				defaultValue: node.defaultValue,
-				connections: node.connections,
-				notes: node.notes,
-				comments: node.comments
-			)
-		}
-	}
-}
 
-public extension Lemma {
-	
-	var isConnected: Bool {
-		lexicon[id] === self
+	public var children: Children {
+		guard let resolution = generation.resolve(id) else {
+			return [:]
+		}
+		var children: Children = [:]
+		for name in generation.visibleChildNames(of: resolution) {
+			let childID = id.appending(name)
+			if generation.resolve(childID) != nil {
+				children[name] = generation.lemma(childID)
+			}
+		}
+		return children
 	}
-	
-	var source: Lemma {
-		sourceProtonym ?? self
+
+	public var protonym: Lemma? {
+		guard
+			let resolution = generation.resolve(id),
+			let source = generation.directProtonym(of: resolution)
+		else {
+			return nil
+		}
+		return generation.lemma(source.requestedID)
 	}
-	
-	var sourceProtonym: Lemma? { // TODO: not needed until we allow synonyms of synonyms
-		guard let o = protonym?.unwrapped else { return nil }
-		return o.sourceProtonym ?? o
+
+	public var sourceProtonym: Lemma? {
+		guard
+			let resolution = generation.resolve(id),
+			generation.directProtonym(of: resolution) != nil,
+			let source = generation.source(of: resolution),
+			source.nodeID != id
+		else {
+			return nil
+		}
+		return generation.lemma(source.nodeID)
 	}
-	
-	@inlinable var isSynonym: Bool {
+
+	public var source: Lemma {
+		guard
+			let resolution = generation.resolve(id),
+			let source = generation.source(of: resolution),
+			source.nodeID != id
+		else {
+			return self
+		}
+		return generation.lemma(source.nodeID)
+	}
+
+	public var isSynonym: Bool {
 		protonym != nil
 	}
-	
-	var graph: Lexicon.Graph {
-		Lexicon.Graph(root: node, date: lexicon.graph.date)
+
+	public var ownType: Types {
+		guard let resolution = generation.resolve(id) else {
+			return [:]
+		}
+		var types: Types = [:]
+		for type in generation.directTypeIDs(of: resolution) {
+			types[type] = generation.lemma(type)
+		}
+		return types
 	}
 
-	var graphPath: Lexicon.Graph.Path? {
-		guard isGraphNode else {
+	public var type: Types {
+		guard let resolution = generation.resolve(id) else {
+			return [:]
+		}
+		var types: Types = [:]
+		for type in generation.allTypeIDs(of: resolution) {
+			types[type] = generation.lemma(type)
+		}
+		return types
+	}
+
+	public var defaultValue: Lexicon.Graph.Node.DefaultValue? {
+		guard let resolution = generation.resolve(id) else {
 			return nil
 		}
-		return breadcrumbs.dropFirst().reduce(\.self) { a, e in // TODO: performance
-			a.appending(path: \.[String(e)])
-		}
-	}
-	
-	@inlinable var graphNode: Lexicon.Graph.Node? {
-		isGraphNode ? node : nil
+		return generation.defaultValue(of: resolution)
 	}
 
-	@inlinable var lineage: UnfoldSequence<Lemma, (Lemma?, Bool)> {
-		sequence(first: self, next: \.parent)
-	}
-	
-	func `is`(_ type: Lemma) -> Bool {
-		self.type.keys.contains(type.id)
+	public var graph: Lexicon.Graph {
+		Lexicon.Graph(
+			rootName: name,
+			root: node,
+			date: generation.document.date
+		)
 	}
 
-	var defaultValue: Lexicon.Graph.Node.DefaultValue? {
-		if let protonym = protonym {
-			return protonym.defaultValue
-		}
-		if let own = node.defaultValue {
-			return own
-		}
-		for (_, type) in ownType {
-			if let value = type.unwrapped.defaultValue {
-				return value
+	public var document: Lexicon.Document {
+		generation.document
+	}
+
+	public subscript(descendant: Name...) -> Lemma? {
+		self[descendant]
+	}
+
+	public subscript<Descendant>(descendant: Descendant) -> Lemma?
+	where Descendant: Collection, Descendant.Element == Name {
+		var current = self
+		for name in descendant {
+			guard let child = current.children[name] else {
+				return nil
 			}
+			current = child
 		}
-		return nil
-	}
-}
-
-public extension Lemma {
-	
-	nonisolated static let validFirstCharacterOfName = CharacterSet.letters
-	nonisolated static let validCharacterOfName = CharacterSet.letters.union(.decimalDigits).union(.init(charactersIn: "_"))
-	
-	nonisolated static func isValid(name: String) -> Bool {
-		name.unlessEmpty?.enumerated().allSatisfy { i, c in
-			Lemma.isValid(character: c, appendingTo: name.prefix(i))
-		} ?? false
-	}
-	
-	nonisolated static func isValid<S>(character: Character, appendingTo input: S) -> Bool where S: StringProtocol {
-		switch (character, input.last) {
-				
-			case (_, nil):
-				return CharacterSet(charactersIn: String(character)).isSubset(of: Lemma.validFirstCharacterOfName)
-				
-			case ("_", "_"):
-				return false
-				
-			default:
-				return CharacterSet(charactersIn: String(character)).isSubset(of: Lemma.validCharacterOfName)
-		}
+		return current
 	}
 
-	func isValid(newName: Name) -> Bool {
-		isGraphNode &&
-		parent?.children[newName] == nil &&
-		name != newName &&
-		Lemma.isValid(name: newName)
-	}
-	
-	func isValid(newChildName name: Name) -> Bool {
-		isGraphNode &&
-		children[name] == nil &&
-		Lemma.isValid(name: name)
+	public func `is`(_ type: Lemma) -> Bool {
+		self.type[type.id] != nil
 	}
 
-	func isValid(newType type: Lemma) -> Bool {
-		self.isGraphNode &&
-		!self.isSynonym &&
-		type.isGraphNode &&
-		!type.isSynonym &&
-		!self.is(type)
-	}
-	
-	func validated(protonym: Lemma) -> Protonym? {
-		guard let parent = parent, isValid(protonym: protonym) else {
-			return nil
-		}
-		return protonym.id.dotPath(after: parent.id)
-	}
-	
-	func isValid(protonym: Lemma) -> Bool { // TODO: reverse naming to lemma.isValidProtonym(for: proposedSynonym)
-		guard
-			let parent = parent,
-			protonym != self,
-			!protonym.isSynonym, // TODO: relax this one, one day
-			self.isGraphNode,
-			!protonym.isDescendant(of: self),
-			protonym.isDescendant(of: parent)
-		else {
-			return false
-		}
-		return true
-	}
-}
-
-public extension Lemma { // TODO: consider moving these ↓ to Node
-	
-	func isAncestor(of other: Lemma) -> Bool {
-		id.isDotPathAncestor(of: other.id)
-	}
-	
-	func isDescendant(of other: Lemma) -> Bool {
-		id.isDotPathDescendant(of: other.id)
-	}
-	
-	func isInLineage(of other: Lemma) -> Bool {
-		id == other.id || isDescendant(of: other)
-	}
-}
-
-extension String {
-	
-	func isDotPathAncestor(of other: String) -> Bool {
-		other.count > count + 1 &&
-		other[other.index(other.startIndex, offsetBy: count)] == "." &&
-		other.hasPrefix(self)
-	}
-	
-	func isDotPathDescendant(of other: String) -> Bool {
-		other.isDotPathAncestor(of: self)
-	}
-}
-
-#if EDITOR
-
-public extension Lemma { // MARK: additive graph mutations
-	
-	@inlinable func add(type: Lemma) -> Lemma? {
-		lexicon.add(type: type, to: self)
-	}
-	
-	@inlinable func make(child: Lexicon.Graph) -> Lemma? {
-		lexicon.make(child: child, to: self)
+	public func isAncestor(of other: Lemma) -> Bool {
+		id.isAncestor(of: other.id)
 	}
 
-	@inlinable func make(child: Name) -> Lemma? {
-		lexicon.make(child: child, to: self)
-	}
-}
-
-public extension Lemma { // MARK: non-additive graph mutations
-	
-	@inlinable func delete(alwaysReturningParent: Bool = false) -> Lemma? {
-		lexicon.delete(self, alwaysReturningParent: alwaysReturningParent)
-	}
-	
-	@inlinable func remove(type: Lemma) -> Lemma? {
-		lexicon.remove(type: type, from: self)
-	}
-	
-	@inlinable func removeProtonym() -> Lemma? {
-		lexicon.removeProtonym(of: self)
+	public func isDescendant(of other: Lemma) -> Bool {
+		id.isDescendant(of: other.id)
 	}
 
-	@inlinable func rename(to name: Lemma.Name) -> Lemma? {
-		lexicon.rename(self, to: name)
+	public func isInLineage(of other: Lemma) -> Bool {
+		id.isInLineage(of: other.id)
 	}
-	
-	@inlinable func set(protonym: Lemma) -> Lemma? {
-		lexicon.set(protonym: protonym, of: self)
+
+	public var lineage: AnySequence<Lemma> {
+		AnySequence(sequence(first: self) { $0.parent })
 	}
-}
 
-#endif
-
-extension Lemma: Equatable {
-	@inlinable nonisolated public static func == (lhs: Lemma, rhs: Lemma) -> Bool {
-		lhs === rhs // TODO: lhs.id == rhs.id
+	public func regenerateNode() -> Lexicon.Graph.Node {
+		node
 	}
-}
 
-extension Lemma: Hashable {
-	@inlinable nonisolated public func hash(into hasher: inout Hasher) {
+	nonisolated public static func == (lhs: Lemma, rhs: Lemma) -> Bool {
+		lhs.lexiconID == rhs.lexiconID &&
+		lhs.revision == rhs.revision &&
+		lhs.id == rhs.id
+	}
+
+	nonisolated public func hash(into hasher: inout Hasher) {
+		hasher.combine(lexiconID)
+		hasher.combine(revision)
 		hasher.combine(id)
 	}
-}
 
-extension Lemma: Comparable {
-	
-	@inlinable nonisolated public static func < (lhs: Lemma, rhs: Lemma) -> Bool {
-		lhs.id < rhs.id
-	}
-}
-
-extension Lemma: CustomStringConvertible {
-	
-	@inlinable nonisolated public var description: String {
-		id
+	nonisolated public var description: String {
+		id.description
 	}
 }
 
 public extension Lemma {
-	
-	nonisolated static let numericPrefixCharacterSet = CharacterSet(charactersIn: "_")
-	
-	nonisolated var displayName: Lemma.Name {
-		switch name.isEmpty {
-			case true: return "_"
-			case false: return name
-					.trimmingCharacters(in: Self.numericPrefixCharacterSet)
-					.replacingOccurrences(of: "_", with: " ")
-		}
+
+	nonisolated static func isValid(name: String) -> Bool {
+		Name.isValid(name)
+	}
+
+	nonisolated static func isValid<S>(
+		character: Character,
+		appendingTo input: S
+	) -> Bool where S: StringProtocol {
+		Name.isValidPrefix(String(input) + String(character))
+	}
+
+	nonisolated var displayName: String {
+		name.rawValue
+			.trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+			.replacingOccurrences(of: "_", with: " ")
 	}
 }
 
-extension Lemma {
-	
-	func lazy_protonym() -> Unowned<Lemma>? {
-		guard let suffix = node.protonym else {
-			return nil
+extension Lexicon {
+
+	final class Generation: Sendable {
+
+		struct Resolution: Hashable, Sendable {
+			var requestedID: Lemma.ID
+			var nodeID: Lemma.ID
 		}
-		guard let parent = parent else {
-			assertionFailure("Synonym '\(suffix)', lemma '\(id)', does not have a parent.")
-			return nil
+
+		enum Visit: Hashable {
+			case resolve(Lemma.ID)
+			case source(Lemma.ID)
+			case child(Lemma.ID, Lemma.Name)
 		}
-		guard let protonym = parent[suffix.components(separatedBy: ".")] else {
-			assertionFailure("Could not find protonym '\(suffix)' of \(id)")
-			return nil
-		}
-		lexicon.dictionary[id] = protonym // MARK: always map synonym to its protonym
-		return .init(protonym)
-	}
-	
-	func lazy_children() -> Children {
-		if let protonym = protonym {
-			var o: Children = [:]
-			for (name, child) in protonym.children {
-				o[name] = Lemma(name: name, node: child.node, parent: self, lexicon: lexicon)
-			}
-			return o
-		}
-		else {
-			var o = ownChildren
-			for (_, type) in ownType {
-				for (name, lemma) in type.children {
-					guard o[name] == nil else {
-						continue
-					}
-					o[name] = Lemma(name: name, node: lemma.node, parent: self, lexicon: lexicon)
+
+		let lexiconID: Identity
+		let revision: Revision
+		let document: Document
+		let rawNodes: [Lemma.ID: Graph.Node]
+
+		init(lexiconID: Identity, revision: Revision, document: Document) {
+			self.lexiconID = lexiconID
+			self.revision = revision
+			self.document = document
+			var rawNodes: [Lemma.ID: Graph.Node] = [:]
+			for (rootName, root) in document.roots {
+				root.traverse(id: Lemma.ID(root: rootName)) { item in
+					rawNodes[item.id] = item.node
 				}
 			}
-			return o
+			self.rawNodes = rawNodes
 		}
-	}
-	
-	func lazy_type() -> Types {
-		if let protonym = protonym { // TODO: make this computed pass through to the protonym
-			return protonym.type
+
+		func lemma(_ id: Lemma.ID) -> Lemma {
+			Lemma(id: id, generation: self)
 		}
-		else {
-			var o = ownType
-			o[id] = Unowned(self)
-			for (_, lemma) in ownType {
-				o.merge(lemma.type){ o, _ in o }
+
+		func node(for resolution: Resolution) -> Graph.Node {
+			guard let node = rawNodes[resolution.nodeID] else {
+				preconditionFailure("Generation is missing source node '\(resolution.nodeID)'.")
 			}
-			return o
+			return node
 		}
-	}
-	
-	func lazy_ownType() -> Types {
-		var o: Types = [:]
-		if isGraphNode {
-			for id in node.type.sorted() {
-				o[id] = lexicon.dictionary[id].map(Unowned.init)
+
+		func resolve(_ id: Lemma.ID) -> Resolution? {
+			var visiting: Set<Visit> = []
+			return resolve(id, visiting: &visiting)
+		}
+
+		private func resolve(_ id: Lemma.ID, visiting: inout Set<Visit>) -> Resolution? {
+			let visit = Visit.resolve(id)
+			guard visiting.insert(visit).inserted else {
+				return nil
 			}
-		} else if let parent = lineage.first(where: \.isGraphNode) {
-			let descendant = id.dotPath(after: parent.id).split(separator: ".").map(Name.init)
-			for id in parent.node.type.sorted() {
-				guard let node = lexicon.dictionary[id]?[descendant] else { continue }
-				o[node.id] = Unowned(node)
+			defer { visiting.remove(visit) }
+
+			let rootID = Lemma.ID(root: id.root)
+			guard rawNodes[rootID] != nil else {
+				return nil
+			}
+			var current = Resolution(requestedID: rootID, nodeID: rootID)
+			for name in id.components.dropFirst() {
+				guard let child = resolveChild(name, of: current, visiting: &visiting) else {
+					return nil
+				}
+				current = child
+			}
+			return current
+		}
+
+		func source(of resolution: Resolution) -> Resolution? {
+			var visiting: Set<Visit> = []
+			return source(of: resolution, visiting: &visiting)
+		}
+
+		private func source(
+			of resolution: Resolution,
+			visiting: inout Set<Visit>
+		) -> Resolution? {
+			let visit = Visit.source(resolution.nodeID)
+			guard visiting.insert(visit).inserted else {
+				return nil
+			}
+			defer { visiting.remove(visit) }
+
+			guard let target = directProtonym(of: resolution, visiting: &visiting) else {
+				return resolution
+			}
+			return source(of: target, visiting: &visiting)
+		}
+
+		func directProtonym(of resolution: Resolution) -> Resolution? {
+			var visiting: Set<Visit> = []
+			return directProtonym(of: resolution, visiting: &visiting)
+		}
+
+		private func directProtonym(
+			of resolution: Resolution,
+			visiting: inout Set<Visit>
+		) -> Resolution? {
+			let node = node(for: resolution)
+			guard let protonym = node.protonym, let parentID = resolution.nodeID.parent else {
+				return nil
+			}
+			return resolve(parentID.appending(protonym), visiting: &visiting)
+		}
+
+		private func resolveChild(
+			_ name: Lemma.Name,
+			of parent: Resolution,
+			visiting: inout Set<Visit>
+		) -> Resolution? {
+			let visit = Visit.child(parent.nodeID, name)
+			guard visiting.insert(visit).inserted else {
+				return nil
+			}
+			defer { visiting.remove(visit) }
+
+			guard let effective = source(of: parent, visiting: &visiting) else {
+				return nil
+			}
+			let node = node(for: effective)
+			if node.children[name] != nil {
+				return Resolution(
+					requestedID: parent.requestedID.appending(name),
+					nodeID: effective.nodeID.appending(name)
+				)
+			}
+			for typeID in node.type.sorted() {
+				guard
+					let type = resolve(typeID, visiting: &visiting),
+					let inherited = resolveChild(name, of: type, visiting: &visiting)
+				else {
+					continue
+				}
+				return Resolution(
+					requestedID: parent.requestedID.appending(name),
+					nodeID: inherited.nodeID
+				)
+			}
+			return nil
+		}
+
+		func visibleChildNames(of resolution: Resolution) -> [Lemma.Name] {
+			var visiting: Set<Visit> = []
+			guard let effective = source(of: resolution, visiting: &visiting) else {
+				return []
+			}
+			var names = Set(node(for: effective).children.keys)
+			collectInheritedChildNames(of: effective, names: &names, visiting: &visiting)
+			return names.sorted()
+		}
+
+		private func collectInheritedChildNames(
+			of resolution: Resolution,
+			names: inout Set<Lemma.Name>,
+			visiting: inout Set<Visit>
+		) {
+			let resolvedNode = node(for: resolution)
+			for typeID in resolvedNode.type.sorted() {
+				guard
+					let type = resolve(typeID, visiting: &visiting),
+					let source = source(of: type, visiting: &visiting)
+				else {
+					continue
+				}
+				names.formUnion(self.node(for: source).children.keys)
+				collectInheritedChildNames(of: source, names: &names, visiting: &visiting)
 			}
 		}
-		return o
+
+		func directTypeIDs(of resolution: Resolution) -> [Lemma.ID] {
+			if rawNodes[resolution.requestedID] == nil {
+				guard let source = source(of: resolution) else {
+					return []
+				}
+				return [source.nodeID]
+			}
+			guard let source = source(of: resolution) else {
+				return []
+			}
+			return node(for: source).type.sorted()
+		}
+
+		func allTypeIDs(of resolution: Resolution) -> [Lemma.ID] {
+			guard let source = source(of: resolution) else {
+				return []
+			}
+			if source.nodeID != resolution.nodeID {
+				return allTypeIDs(of: source)
+			}
+			var result: Set<Lemma.ID> = [resolution.requestedID]
+			if rawNodes[resolution.requestedID] == nil {
+				result.insert(source.nodeID)
+			}
+			var visiting: Set<Lemma.ID> = []
+			collectTypes(of: source, into: &result, visiting: &visiting)
+			return result.sorted()
+		}
+
+		private func collectTypes(
+			of resolution: Resolution,
+			into result: inout Set<Lemma.ID>,
+			visiting: inout Set<Lemma.ID>
+		) {
+			guard visiting.insert(resolution.nodeID).inserted else {
+				return
+			}
+			defer { visiting.remove(resolution.nodeID) }
+			for typeID in node(for: resolution).type.sorted() {
+				result.insert(typeID)
+				if let type = resolve(typeID), let source = source(of: type) {
+					collectTypes(of: source, into: &result, visiting: &visiting)
+				}
+			}
+		}
+
+		func defaultValue(of resolution: Resolution) -> Graph.Node.DefaultValue? {
+			var visiting: Set<Lemma.ID> = []
+			return defaultValue(of: resolution, visiting: &visiting)
+		}
+
+		private func defaultValue(
+			of resolution: Resolution,
+			visiting: inout Set<Lemma.ID>
+		) -> Graph.Node.DefaultValue? {
+			guard visiting.insert(resolution.nodeID).inserted else {
+				return nil
+			}
+			defer { visiting.remove(resolution.nodeID) }
+
+			guard let source = source(of: resolution) else {
+				return nil
+			}
+			if source.nodeID != resolution.nodeID {
+				return defaultValue(of: source, visiting: &visiting)
+			}
+			let node = node(for: source)
+			if let value = node.defaultValue {
+				return value
+			}
+			for typeID in node.type.sorted() {
+				if
+					let type = resolve(typeID),
+					let value = defaultValue(of: type, visiting: &visiting)
+				{
+					return value
+				}
+			}
+			return nil
+		}
 	}
 }

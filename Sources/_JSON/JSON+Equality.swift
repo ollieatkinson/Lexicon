@@ -22,8 +22,13 @@ public extension JSON {
 			hasher.combine(2)
 			hasher.combine(value)
 		case let value as Double:
-			hasher.combine(3)
-			hasher.combine(value)
+			if let integer = Int(exactly: value) {
+				hasher.combine(2)
+				hasher.combine(integer)
+			} else {
+				hasher.combine(3)
+				hasher.combine(value)
+			}
 		case let value as String:
 			hasher.combine(4)
 			hasher.combine(value)
@@ -44,6 +49,15 @@ public extension JSON {
 	}
 
 	private static func isEqual(_ value: JSONValue, to other: JSONValue) -> Bool {
+		switch (value, other) {
+		case (let integer as Int, let double as Double):
+			return Int(exactly: double) == integer
+		case (let double as Double, let integer as Int):
+			return Int(exactly: double) == integer
+		default:
+			break
+		}
+
 		if (value as any Equatable)._isSameType(as: other) {
 			return (value as any Equatable)._isEqual(to: other)
 		}

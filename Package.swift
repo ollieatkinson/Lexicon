@@ -13,13 +13,10 @@ func packagePath(_ path: String) -> String {
 
 let onnxRuntimeRoot = packagePath(environment["LEXICON_ONNX_RUNTIME_ROOT"] ?? ".build/onnx-runtime/current")
 let onnxRuntimePlatform = environment["LEXICON_ONNX_RUNTIME_PLATFORM"] ?? "linux-x64"
-let onnxRuntimeInclude = packagePath(environment["LEXICON_ONNX_RUNTIME_INCLUDE"] ?? "\(onnxRuntimeRoot)/include")
 let onnxRuntimeLibrary = packagePath(environment["LEXICON_ONNX_RUNTIME_LIB"] ?? "\(onnxRuntimeRoot)/lib/\(onnxRuntimePlatform)")
-let onnxRuntimeLibraryName = onnxRuntimePlatform == "windows-x64" ? "onnxruntime.dll" : "libonnxruntime.so"
 #if os(macOS)
 let useAppleONNXRuntimeBindings = (environment["LEXICON_ONNX_USE_APPLE_BINDINGS"] ?? "1") != "0"
 	&& environment["LEXICON_ONNX_RUNTIME_PLATFORM"] == nil
-	&& environment["LEXICON_ONNX_RUNTIME_INCLUDE"] == nil
 	&& environment["LEXICON_ONNX_RUNTIME_LIB"] == nil
 #else
 let useAppleONNXRuntimeBindings = false
@@ -38,11 +35,6 @@ let onnxRuntimeDependencies: [Target.Dependency] = useAppleONNXRuntimeBindings
 			condition: .when(traits: ["ONNXSearch"])
 		)
 	]
-let onnxPackageDependencies: [Package.Dependency] = useAppleONNXRuntimeBindings
-	? [
-		.package(url: "https://github.com/microsoft/onnxruntime-swift-package-manager", exact: "1.24.2")
-	]
-	: []
 
 let package = Package(
 	name: "Lexicon",
@@ -59,26 +51,29 @@ let package = Package(
 		.library(name: "SwiftLexicon", targets: ["SwiftLexicon"]),
 		.library(name: "LexiconGenerators", targets: ["LexiconGenerators"]),
 		.executable(name: "lexicon-generate", targets: ["lexicon-generate"]),
+		.executable(name: "lexicon-lsp", targets: ["lexicon-lsp"]),
 		.executable(name: "lexicon", targets: ["lexicon-cli"]),
 		.plugin(name: "SwiftStandAloneGeneratorPlugin", targets: ["SwiftStandAloneGeneratorPlugin"]),
 		.plugin(name: "SwiftLibraryGeneratorPlugin", targets: ["SwiftLibraryGeneratorPlugin"]),
 		.plugin(name: "ONNXSearchArtifactsPlugin", targets: ["ONNXSearchArtifactsPlugin"]),
 	],
 	traits: [
+		.trait(name: "Editor"),
 		.trait(name: "MLXSearch"),
 		.trait(name: "ONNXSearch"),
 	],
 	dependencies: [
-		.package(url: "https://github.com/screensailor/Hope", branch: "trunk"),
 		.package(url: "https://github.com/apple/swift-algorithms", from: "1.2.0"),
 		.package(url: "https://github.com/apple/swift-collections", from: "1.5.1"),
 		.package(url: "https://github.com/apple/swift-argument-parser", from: "1.7.1"),
 		.package(url: "https://github.com/apple/swift-async-algorithms", from: "1.1.3"),
 		.package(url: "https://github.com/ml-explore/mlx-swift", .upToNextMinor(from: "0.31.3")),
 		.package(url: "https://github.com/ml-explore/mlx-swift-lm", .upToNextMajor(from: "3.31.3")),
+		.package(url: "https://github.com/DePasqualeOrg/swift-hf-api", exact: "0.3.2"),
 		.package(url: "https://github.com/DePasqualeOrg/swift-hf-api-mlx", exact: "0.2.0"),
 		.package(url: "https://github.com/DePasqualeOrg/swift-tokenizers", from: "0.6.3"),
-	] + onnxPackageDependencies,
+		.package(url: "https://github.com/microsoft/onnxruntime-swift-package-manager", exact: "1.24.2"),
+	],
 	targets: [
 		.target(
 			name: "_Collections",
@@ -96,15 +91,16 @@ let package = Package(
 				.product(name: "Algorithms", package: "swift-algorithms"),
 				.product(name: "Collections", package: "swift-collections")
 			],
-			swiftSettings: [.define("EDITOR")] // TODO: make this opt in
+			swiftSettings: [.define("EDITOR", .when(traits: ["Editor"]))]
 		),
 		.testTarget(
 			name: "LexiconTests",
 			dependencies: [
-				"Hope",
-				"Lexicon"
+				"Lexicon",
+				"SwiftLexicon"
 			],
-			resources: [.copy("Resources")]
+			resources: [.copy("Resources")],
+			swiftSettings: [.define("EDITOR", .when(traits: ["Editor"]))]
 		),
 		.testTarget(
 			name: "_CollectionsTests",
@@ -120,10 +116,21 @@ let package = Package(
 				"Lexicon"
 			]
 		),
+		.target(
+			name: "LexiconLSP",
+			dependencies: [
+				"Lexicon"
+			]
+		),
+		.testTarget(
+			name: "LexiconLSPTests",
+			dependencies: [
+				"LexiconLSP"
+			]
+		),
 		.testTarget(
 			name: "LexiconGeneratorsTests",
 			dependencies: [
-				"Hope",
 				"LexiconGenerators"
 			],
 			resources: [.copy("Resources")]
@@ -139,7 +146,6 @@ let package = Package(
 		.testTarget(
 			name: "SwiftLexiconTests",
 			dependencies: [
-				"Hope",
 				"SwiftLexicon",
 				.product(name: "AsyncAlgorithms", package: "swift-async-algorithms")
 			],
@@ -151,6 +157,13 @@ let package = Package(
 				.target(name: "LexiconGenerators"),
 				.product(name: "ArgumentParser", package: "swift-argument-parser"),
 				.product(name: "Collections", package: "swift-collections")
+			]
+		),
+		.executableTarget(
+			name: "lexicon-lsp",
+			dependencies: [
+				"LexiconLSP",
+				.product(name: "ArgumentParser", package: "swift-argument-parser")
 			]
 		),
 		.executableTarget(
@@ -170,6 +183,7 @@ let package = Package(
 				.product(name: "MLX", package: "mlx-swift", condition: .when(traits: ["MLXSearch"])),
 				.product(name: "MLXEmbedders", package: "mlx-swift-lm", condition: .when(traits: ["MLXSearch"])),
 				.product(name: "MLXLMCommon", package: "mlx-swift-lm", condition: .when(traits: ["MLXSearch"])),
+				.product(name: "HFAPI", package: "swift-hf-api", condition: .when(traits: ["MLXSearch"])),
 				.product(name: "MLXEmbeddersHFAPI", package: "swift-hf-api-mlx", condition: .when(traits: ["MLXSearch"])),
 				.product(name: "Tokenizers", package: "swift-tokenizers", condition: .when(traits: ["MLXSearch"])),
 			]
@@ -182,9 +196,7 @@ let package = Package(
 			name: "CLexiconONNXRuntime",
 			publicHeadersPath: "include",
 			cSettings: [
-				.define("LEXICON_ONNX_RUNTIME_REQUIRED", .when(traits: ["ONNXSearch"])),
-				.define("LEXICON_ONNX_RUNTIME_LIBRARY_PATH", to: "\"\(onnxRuntimeLibrary)/\(onnxRuntimeLibraryName)\""),
-				.unsafeFlags(["-I", onnxRuntimeInclude])
+				.define("LEXICON_ONNX_RUNTIME_LIBRARY_PATH", to: "\"\(onnxRuntimeLibrary)/libonnxruntime.so\"")
 			]
 		),
 		.testTarget(

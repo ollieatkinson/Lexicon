@@ -5,50 +5,73 @@
 import Foundation
 
 public extension Lexicon {
-	
-	struct Graph: Sendable {
-		
+
+	struct Graph: Sendable, Equatable {
+
+		public typealias Path = [Lemma.Name]
+
 		public var date: Date
+		public var rootName: Lemma.Name
 		public var root: Node
-		
-		public init(name: Lemma.Name = "root", date: Date = .init()) {
+
+		public init(
+			name: Lemma.Name = "root",
+			date: Date = Document.unspecifiedDate
+		) {
 			self.date = date
-			self.root = Node(name: name)
+			self.rootName = name
+			self.root = Node()
 		}
-		
-		public init(root: Node, date: Date = .init()) {
+
+		public init(
+			rootName: Lemma.Name,
+			root: Node,
+			date: Date = Document.unspecifiedDate
+		) {
 			self.date = date
+			self.rootName = rootName
 			self.root = root
+		}
+
+		public var rootID: Lemma.ID {
+			Lemma.ID(root: rootName)
 		}
 	}
 }
 
 public extension Lexicon.Graph {
-	
-	typealias Path = WritableKeyPath<Node, Node>
-	
-	subscript(_ node: Path) -> Node {
-		get {
-			return root[keyPath: node]
-		}
-		set {
-			root[keyPath: node] = newValue
-		}
+
+	subscript(_ path: Path) -> Node {
+		get { root[path: path[...]] }
+		set { root[path: path[...]] = newValue }
 	}
 }
 
-extension Lexicon.Graph: Equatable {
-	
-	public static func == (lhs: Lexicon.Graph, rhs: Lexicon.Graph) -> Bool { // TODO: dodgy
-		lhs.date == rhs.date &&
-		lhs.root.name == rhs.root.name
+extension Lexicon.Graph.Node {
+
+	subscript<Path>(path path: Path) -> Self where Path: Collection, Path.Element == Lemma.Name {
+		get {
+			guard let name = path.first else {
+				return self
+			}
+			return self[name][path: path.dropFirst()]
+		}
+		set {
+			guard let name = path.first else {
+				self = newValue
+				return
+			}
+			var child = self[name]
+			child[path: path.dropFirst()] = newValue
+			children[name] = child
+		}
 	}
 }
 
 extension Lexicon.Graph: CustomStringConvertible {
-	
+
 	public var description: String {
-		"\(Self.self)(root: \(root.name), date: \(date)"
+		"\(Self.self)(root: \(rootName), date: \(date))"
 	}
 }
 
@@ -56,19 +79,14 @@ extension Lexicon.Graph: CustomStringConvertible {
 import NaturalLanguage
 
 public extension Lexicon.Graph {
-	
+
 	static let underscore = CharacterSet(charactersIn: "_")
 	static let specialSentenceTerminator = CharacterSet(charactersIn: ";–()[]{}")
-	
+
 	static func from(sentences string: String, root name: Lemma.Name = "a") -> Lexicon.Graph {
-
-		var root = Node(name: name)
-
-		root.make(child: "word")
-		root.make(child: "sentence")
-
-		let word: WritableKeyPath<Node, Node> = \.["word"]
-		let sentence: WritableKeyPath<Node, Node> = \.["sentence"]
+		var graph = Lexicon.Graph(name: name)
+		graph.root.make(child: "word")
+		graph.root.make(child: "sentence")
 
 		let tagger = NLTagger(tagSchemes: [.lexicalClass])
 		let options: NLTagger.Options = [.omitPunctuation, .omitWhitespace, .omitOther]
@@ -76,86 +94,96 @@ public extension Lexicon.Graph {
 		sentences.string = string
 
 		sentences.enumerateTokens(in: string.indices.range) { range, _ in
-
-			var node = sentence
+			var nodePath: Path = ["sentence"]
 
 			for sentence in string[range].components(separatedBy: specialSentenceTerminator) {
-
 				tagger.string = sentence
-
-				tagger.enumerateTags(in: sentence.indices.range, unit: .word, scheme: .lexicalClass, options: options) { tag, range in
-
-					guard let token = tag?.rawValue.lowercased() else {
+				tagger.enumerateTags(
+					in: sentence.indices.range,
+					unit: .word,
+					scheme: .lexicalClass,
+					options: options
+				) { tag, range in
+					guard
+						let token = tag?.rawValue.lowercased(),
+						let tokenName = try? Lemma.Name(validating: token)
+					else {
 						return true
 					}
 
-					var string = sentence[range].lowercased().trimmingCharacters(in: underscore).filter{ character in
-						CharacterSet(charactersIn: String(character)).isSubset(of: Lemma.validCharacterOfName)
+					var candidate = sentence[range]
+						.lowercased()
+						.trimmingCharacters(in: underscore)
+						.filter { character in
+							character == "_" || character.isLetter || character.isNumber
+						}
+					if candidate.first?.isNumber == true {
+						candidate = "_\(candidate)"
 					}
-
-					guard let first = string.first else {
+					guard let childName = try? Lemma.Name(validating: candidate) else {
 						return true
 					}
 
-					if first.isNumber {
-						string = "_\(string)"
-					}
-
-					root[keyPath: node].make(child: string)
-					node = node.appending(path: \.[string])
-
-					let type = root[keyPath: word].make(child: token)
-					
-					root[keyPath: node].type.insert("\(root.name).word.\(type.name)")
-
+					graph[nodePath].make(child: childName)
+					nodePath.append(childName)
+					graph[["word"]].make(child: tokenName)
+					graph[nodePath].type.insert(
+						graph.rootID.appending(Lemma.Name(stringLiteral: "word")).appending(tokenName)
+					)
 					return true
 				}
 			}
 			return true
 		}
-		return Lexicon.Graph(root: root)
+		return graph
 	}
 }
 #else
 public extension Lexicon.Graph {
 
 	static func from(sentences string: String, root name: Lemma.Name = "a") -> Lexicon.Graph {
-
-		var root = Node(name: name)
-
-		root.make(child: "word")
-		root.make(child: "sentence")
-
-		let word: WritableKeyPath<Node, Node> = \.["word"]
-		let sentence: WritableKeyPath<Node, Node> = \.["sentence"]
+		var graph = Lexicon.Graph(name: name)
+		graph.root.make(child: "word")
+		graph.root.make(child: "sentence")
 
 		for sentenceString in string.components(separatedBy: sentenceSeparators) {
-			var node = sentence
-
-			for string in Self.words(in: sentenceString) {
-				root[keyPath: node].make(child: string)
-				node = node.appending(path: \.[string])
-
-				let type = root[keyPath: word].make(child: Self.lexicalClass(for: string))
-
-				root[keyPath: node].type.insert("\(root.name).word.\(type.name)")
+			var nodePath: Path = ["sentence"]
+			for word in Self.words(in: sentenceString) {
+				guard
+					let wordName = try? Lemma.Name(validating: word),
+					let className = try? Lemma.Name(validating: Self.lexicalClass(for: word))
+				else {
+					continue
+				}
+				graph[nodePath].make(child: wordName)
+				nodePath.append(wordName)
+				graph[["word"]].make(child: className)
+				graph[nodePath].type.insert(
+					graph.rootID.appending(Lemma.Name(stringLiteral: "word")).appending(className)
+				)
 			}
 		}
-		return Lexicon.Graph(root: root)
+		return graph
 	}
 }
 
 private extension Lexicon.Graph {
 
-	static let sentenceSeparators = CharacterSet.newlines.union(CharacterSet(charactersIn: ".!?;–()[]{}"))
+	static let sentenceSeparators = CharacterSet.newlines.union(
+		CharacterSet(charactersIn: ".!?;–()[]{}")
+	)
 
 	static func words(in sentence: String) -> [String] {
 		sentence
 			.replacingOccurrences(of: "n't", with: " nt", options: .caseInsensitive)
 			.replacingOccurrences(of: "n’t", with: " nt", options: .caseInsensitive)
-			.components(separatedBy: Lemma.validCharacterOfName.inverted)
+			.components(separatedBy: CharacterSet.alphanumerics.union(
+				CharacterSet(charactersIn: "_")
+			).inverted)
 			.compactMap { word -> String? in
-				var word = word.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+				var word = word.lowercased().trimmingCharacters(
+					in: CharacterSet(charactersIn: "_")
+				)
 				guard let first = word.first else {
 					return nil
 				}
@@ -185,8 +213,8 @@ private extension Lexicon.Graph {
 				return "preposition"
 			case "s":
 				return "particle"
-			case "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
-				"ten", "eleven", "twelve":
+			case "zero", "one", "two", "three", "four", "five", "six", "seven", "eight",
+				"nine", "ten", "eleven", "twelve":
 				return "number"
 			default:
 				return "noun"

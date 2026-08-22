@@ -1,48 +1,55 @@
 //
 // github.com/screensailor 2026
 //
-
-@_exported import Hope
+import Testing
 @_exported import Lexicon
 @_exported import LexiconGenerators
 
-final class LexiconGeneratorsTests: Hopes {
+@Suite
 
+struct LexiconGeneratorsTests {
+
+	@Test
 	func test_registry_exposes_generator_values() throws {
 
 		let swift = try generator("Swift")
 		let swiftStandAlone = try generator("Swift Stand-Alone")
 		let kotlin = try generator("Kotlin Stand-Alone")
 		let go = try generator("Go Stand-Alone")
+		let rust = try generator("Rust Stand-Alone")
 		let typeScript = try generator("TypeScript Stand-Alone")
 		let json = try generator("JSON Classes & Mixins")
 		let skos = try generator("SKOS JSON-LD")
 
-		hope(swift.command) == "swift"
-		hope(swiftStandAlone.command) == "swift-standalone"
-		hope(kotlin.command) == "kotlin"
-		hope(go.command) == "go"
-		hope(typeScript.command) == "ts"
-		hope(json.command) == "json"
-		hope(skos.command) == "json-ld"
-		hope(swift.utType.preferredFilenameExtension) == "swift"
-		hope(swiftStandAlone.utType.preferredFilenameExtension) == "swift"
-		hope(kotlin.utType.preferredFilenameExtension) == "kt"
-		hope(go.utType.preferredFilenameExtension) == "go"
-		hope(typeScript.utType.preferredFilenameExtension) == "ts"
-		hope(json.utType.preferredFilenameExtension) == "json"
-		hope(skos.utType.preferredFilenameExtension) == "jsonld"
+		#expect(swift.command == "swift")
+		#expect(swiftStandAlone.command == "swift-standalone")
+		#expect(kotlin.command == "kotlin")
+		#expect(go.command == "go")
+		#expect(rust.command == "rust")
+		#expect(typeScript.command == "ts")
+		#expect(json.command == "json")
+		#expect(skos.command == "json-ld")
+		#expect(swift.utType.preferredFilenameExtension == "swift")
+		#expect(swiftStandAlone.utType.preferredFilenameExtension == "swift")
+		#expect(kotlin.utType.preferredFilenameExtension == "kt")
+		#expect(go.utType.preferredFilenameExtension == "go")
+		#expect(rust.utType.preferredFilenameExtension == "rs")
+		#expect(typeScript.utType.preferredFilenameExtension == "ts")
+		#expect(json.utType.preferredFilenameExtension == "json")
+		#expect(skos.utType.preferredFilenameExtension == "jsonld")
 	}
 
+	@Test
 	func test_registry_finds_generators_by_command() throws {
 		let generator = try LexiconSourceGenerators.all.find("swift-standalone").try()
 
-		hope(generator.command) == "swift-standalone"
-		hope(LexiconSourceGenerators.all.commandHelp) == "swift, swift-standalone, kotlin, go, ts, json, json-ld"
+		#expect(generator.command == "swift-standalone")
+		#expect(LexiconSourceGenerators.all.commandHelp == "swift, swift-standalone, kotlin, go, rust, ts, json, json-ld")
 	}
 
+	@Test
 	func test_json_registry_alias_matches_source_generator_registry() throws {
-		hope(Lexicon.Graph.JSON.generators.keys.map(\.self)) == LexiconSourceGenerators.all.keys.map(\.self)
+		#expect(Lexicon.Graph.JSON.generators.keys.map(\.self) == LexiconSourceGenerators.all.keys.map(\.self))
 	}
 
 	private func generator(_ name: String) throws -> LexiconSourceGenerator {

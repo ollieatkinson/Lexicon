@@ -6,103 +6,208 @@ import Foundation
 
 public extension Lexicon {
 
-	enum CRDT: Sendable {}
-}
+	enum CRDT {
+		public struct OperationID: Hashable, Comparable, Codable, Sendable,
+			CustomStringConvertible {
 
-public extension Lexicon.CRDT {
+			public var timestamp: UInt64
+			public var actor: String
 
-	struct OperationID: Hashable, Codable, Comparable, Sendable, CustomStringConvertible {
-		public var actor: String
-		public var counter: UInt64
+			public init(timestamp: UInt64, actor: String) {
+				self.timestamp = timestamp
+				self.actor = actor
+			}
 
-		public init(actor: String, counter: UInt64) {
-			self.actor = actor
-			self.counter = counter
+			public static let zero = Self(timestamp: 0, actor: "")
+
+			public static func < (lhs: Self, rhs: Self) -> Bool {
+				(lhs.timestamp, lhs.actor) < (rhs.timestamp, rhs.actor)
+			}
+
+			public var description: String {
+				"\(timestamp)@\(actor)"
+			}
 		}
 
-		public static func < (lhs: Self, rhs: Self) -> Bool {
-			(lhs.counter, lhs.actor) < (rhs.counter, rhs.actor)
+		public struct Operation: Hashable, Sendable {
+			public var id: OperationID
+			public var kind: Kind
+
+			public init(_ kind: Kind, id: OperationID) {
+				self.id = id
+				self.kind = kind
+			}
 		}
 
-		public var description: String {
-			"\(actor):\(counter)"
-		}
-	}
-
-	struct Operation: Hashable, Comparable, Sendable {
-		public var id: OperationID
-		public var kind: Kind
-
-		public init(_ kind: Kind, id: OperationID) {
-			self.id = id
-			self.kind = kind
-		}
-
-		public static func < (lhs: Self, rhs: Self) -> Bool {
-			lhs.id < rhs.id
-		}
-	}
-
-	enum Kind: Hashable, Sendable {
-		case setDocumentDate(Date)
-		case addDocumentNote(noteID: String, text: String)
-		case removeDocumentNote(noteID: String)
-		case addDocumentComment(commentID: String, text: String)
-		case removeDocumentComment(commentID: String)
-		case createNode(path: String, parentPath: String?, name: String)
-		case renameNode(path: String, name: String)
-		case deleteNode(path: String)
-		case addTypeReference(path: String, type: String)
-		case removeTypeReference(path: String, type: String)
-		case setProtonym(path: String, protonym: String)
-		case removeProtonym(path: String)
-		case setDefaultValue(path: String, value: Lexicon.Graph.Node.DefaultValue)
-		case removeDefaultValue(path: String)
-		case addConnection(path: String, Lexicon.Import)
-		case removeConnection(path: String, Lexicon.Import)
-		case addNote(path: String, noteID: String, text: String)
-		case removeNote(path: String, noteID: String)
-		case addComment(path: String, commentID: String, text: String)
-		case removeComment(path: String, commentID: String)
-		case addImport(Lexicon.Import)
-		case removeImport(Lexicon.Import)
-	}
-
-	struct Replica: Sendable {
-		public var operations: Set<Operation>
-
-		public init(operations: Set<Operation> = []) {
-			self.operations = operations
+		public enum Kind: Hashable, Sendable {
+			case setDocumentDate(Date)
+			case insertDocumentNote(after: OperationID?, text: String)
+			case removeDocumentNote(element: OperationID)
+			case insertDocumentComment(after: OperationID?, text: String)
+			case removeDocumentComment(element: OperationID)
+			case insertImport(after: OperationID?, value: Lexicon.Import)
+			case removeImport(element: OperationID)
+			case createNode(path: Lemma.ID, parentPath: Lemma.ID?, name: Lemma.Name)
+			case renameNode(path: Lemma.ID, name: Lemma.Name)
+			case deleteNode(path: Lemma.ID)
+			case addTypeReference(path: Lemma.ID, type: Lemma.ID)
+			case removeTypeReference(path: Lemma.ID, type: Lemma.ID)
+			case setProtonym(path: Lemma.ID, protonym: Lemma.RelativeID)
+			case removeProtonym(path: Lemma.ID)
+			case setDefaultValue(path: Lemma.ID, value: Lexicon.Graph.Node.DefaultValue)
+			case removeDefaultValue(path: Lemma.ID)
+			case insertConnection(
+				path: Lemma.ID,
+				after: OperationID?,
+				value: Lexicon.Import
+			)
+			case removeConnection(path: Lemma.ID, element: OperationID)
+			case insertNote(path: Lemma.ID, after: OperationID?, text: String)
+			case removeNote(path: Lemma.ID, element: OperationID)
+			case insertComment(path: Lemma.ID, after: OperationID?, text: String)
+			case removeComment(path: Lemma.ID, element: OperationID)
 		}
 
-		public mutating func apply(_ operation: Operation) {
-			operations.insert(operation)
+		public enum ReplicaError: Error, Hashable, Sendable, CustomStringConvertible,
+			LocalizedError {
+
+			case operationIDCollision(OperationID)
+			case invalidOperation(String)
+
+			public var description: String {
+				switch self {
+					case .operationIDCollision(let id):
+						return "Operation ID '\(id)' was reused with a different payload"
+					case .invalidOperation(let message):
+						return message
+				}
+			}
+
+			public var errorDescription: String? {
+				description
+			}
 		}
 
-		public mutating func merge(_ other: Replica) {
-			operations.formUnion(other.operations)
+		/// A validated document together with the stable CRDT addresses of its
+		/// currently visible nodes.
+		///
+		/// Operation `path` values are creation-time node addresses. They do not
+		/// change when a node or one of its ancestors is renamed. Use this value
+		/// to translate between those stable addresses and paths in the current
+		/// materialized document.
+		public struct Materialization: Sendable {
+			public let document: Lexicon.Document
+			public let materializedPathsByNodeAddress: [Lemma.ID: Lemma.ID]
+
+			init(
+				document: Lexicon.Document,
+				materializedPathsByNodeAddress: [Lemma.ID: Lemma.ID]
+			) {
+				self.document = document
+				self.materializedPathsByNodeAddress = materializedPathsByNodeAddress
+			}
+
+			public func materializedPath(
+				forNodeAddress address: Lemma.ID
+			) -> Lemma.ID? {
+				materializedPathsByNodeAddress[address]
+			}
+
+			public func nodeAddress(
+				forMaterializedPath path: Lemma.ID
+			) -> Lemma.ID? {
+				materializedPathsByNodeAddress.keys.sorted().first {
+					materializedPathsByNodeAddress[$0] == path
+				}
+			}
 		}
 
-		public func materialized() -> Lexicon.Document {
-			State(operations: operations).document()
+		public struct Replica: Sendable {
+			public private(set) var operations: [OperationID: Operation]
+
+			public init() {
+				self.operations = [:]
+			}
+
+			public init<Operations>(operations: Operations) throws
+			where Operations: Sequence, Operations.Element == Operation {
+				var candidate: [OperationID: Operation] = [:]
+				for operation in operations {
+					try Self.insert(operation, into: &candidate)
+				}
+				try Self.validate(candidate)
+				self.operations = candidate
+			}
+
+			/// Identical replay is a no-op. Reusing an ID for another payload
+			/// throws before the replica is changed.
+			public mutating func apply(_ operation: Operation) throws {
+				var candidate = operations
+				try Self.insert(operation, into: &candidate)
+				try Self.validate(candidate)
+				operations = candidate
+			}
+
+			/// Merges and validates the complete candidate before publishing it.
+			public mutating func merge(_ other: Self) throws {
+				var candidate = operations
+				for operation in other.operations.values.sorted(by: { $0.id < $1.id }) {
+					try Self.insert(operation, into: &candidate)
+				}
+				try Self.validate(candidate)
+				operations = candidate
+			}
+
+			public func materialized() throws -> Lexicon.Document {
+				try materialization().document
+			}
+
+			public func materialization() throws -> Materialization {
+				try Self.materialize(operations)
+			}
+
+			private static func insert(
+				_ operation: Operation,
+				into operations: inout [OperationID: Operation]
+			) throws {
+				if let existing = operations[operation.id] {
+					guard existing == operation else {
+						throw ReplicaError.operationIDCollision(operation.id)
+					}
+					return
+				}
+				operations[operation.id] = operation
+			}
+
+			private static func validate(
+				_ operations: [OperationID: Operation]
+			) throws {
+				try validateOperationStructure(operations)
+				_ = try materialize(operations)
+			}
+
+			private static func materialize(
+				_ operations: [OperationID: Operation]
+			) throws -> Materialization {
+				if operations.isEmpty {
+					return Materialization(
+						document: Lexicon.Document(),
+						materializedPathsByNodeAddress: [:]
+					)
+				}
+				let materialization = try State(operations: operations).materialization()
+				if materialization.document.roots.isEmpty {
+					throw ReplicaError.invalidOperation(
+						"A non-empty replica must materialize at least one root"
+					)
+				}
+				return Materialization(
+					document: try materialization.document.validated(),
+					materializedPathsByNodeAddress:
+						materialization.materializedPathsByNodeAddress
+				)
+			}
 		}
-	}
-}
-
-public extension Lexicon.CRDT.Operation {
-
-	struct JSON: Hashable, Codable, Sendable {
-		public var id: Lexicon.CRDT.OperationID
-		public var kind: Lexicon.CRDT.Kind.JSON
-
-		public init(_ operation: Lexicon.CRDT.Operation) {
-			self.id = operation.id
-			self.kind = Lexicon.CRDT.Kind.JSON(operation.kind)
-		}
-	}
-
-	init(_ json: JSON) {
-		self.init(Lexicon.CRDT.Kind(json.kind), id: json.id)
 	}
 }
 
@@ -110,40 +215,62 @@ public extension Lexicon.CRDT.Kind {
 
 	enum JSON: Hashable, Codable, Sendable {
 		case setDocumentDate(Date)
-		case addDocumentNote(noteID: String, text: String)
-		case removeDocumentNote(noteID: String)
-		case addDocumentComment(commentID: String, text: String)
-		case removeDocumentComment(commentID: String)
-		case createNode(path: String, parentPath: String?, name: String)
-		case renameNode(path: String, name: String)
-		case deleteNode(path: String)
-		case addTypeReference(path: String, type: String)
-		case removeTypeReference(path: String, type: String)
-		case setProtonym(path: String, protonym: String)
-		case removeProtonym(path: String)
-		case setDefaultValue(path: String, value: Lexicon.Graph.Node.DefaultValue.JSON)
-		case removeDefaultValue(path: String)
-		case addConnection(path: String, Lexicon.Import)
-		case removeConnection(path: String, Lexicon.Import)
-		case addNote(path: String, noteID: String, text: String)
-		case removeNote(path: String, noteID: String)
-		case addComment(path: String, commentID: String, text: String)
-		case removeComment(path: String, commentID: String)
-		case addImport(Lexicon.Import)
-		case removeImport(Lexicon.Import)
+		case insertDocumentNote(after: Lexicon.CRDT.OperationID?, text: String)
+		case removeDocumentNote(element: Lexicon.CRDT.OperationID)
+		case insertDocumentComment(after: Lexicon.CRDT.OperationID?, text: String)
+		case removeDocumentComment(element: Lexicon.CRDT.OperationID)
+		case insertImport(
+			after: Lexicon.CRDT.OperationID?,
+			value: Lexicon.Import
+		)
+		case removeImport(element: Lexicon.CRDT.OperationID)
+		case createNode(path: Lemma.ID, parentPath: Lemma.ID?, name: Lemma.Name)
+		case renameNode(path: Lemma.ID, name: Lemma.Name)
+		case deleteNode(path: Lemma.ID)
+		case addTypeReference(path: Lemma.ID, type: Lemma.ID)
+		case removeTypeReference(path: Lemma.ID, type: Lemma.ID)
+		case setProtonym(path: Lemma.ID, protonym: Lemma.RelativeID)
+		case removeProtonym(path: Lemma.ID)
+		case setDefaultValue(
+			path: Lemma.ID,
+			value: Lexicon.Graph.Node.DefaultValue.JSON
+		)
+		case removeDefaultValue(path: Lemma.ID)
+		case insertConnection(
+			path: Lemma.ID,
+			after: Lexicon.CRDT.OperationID?,
+			value: Lexicon.Import
+		)
+		case removeConnection(path: Lemma.ID, element: Lexicon.CRDT.OperationID)
+		case insertNote(
+			path: Lemma.ID,
+			after: Lexicon.CRDT.OperationID?,
+			text: String
+		)
+		case removeNote(path: Lemma.ID, element: Lexicon.CRDT.OperationID)
+		case insertComment(
+			path: Lemma.ID,
+			after: Lexicon.CRDT.OperationID?,
+			text: String
+		)
+		case removeComment(path: Lemma.ID, element: Lexicon.CRDT.OperationID)
 
 		public init(_ kind: Lexicon.CRDT.Kind) {
 			switch kind {
 				case .setDocumentDate(let value):
 					self = .setDocumentDate(value)
-				case .addDocumentNote(let noteID, let text):
-					self = .addDocumentNote(noteID: noteID, text: text)
-				case .removeDocumentNote(let noteID):
-					self = .removeDocumentNote(noteID: noteID)
-				case .addDocumentComment(let commentID, let text):
-					self = .addDocumentComment(commentID: commentID, text: text)
-				case .removeDocumentComment(let commentID):
-					self = .removeDocumentComment(commentID: commentID)
+				case .insertDocumentNote(let after, let text):
+					self = .insertDocumentNote(after: after, text: text)
+				case .removeDocumentNote(let element):
+					self = .removeDocumentNote(element: element)
+				case .insertDocumentComment(let after, let text):
+					self = .insertDocumentComment(after: after, text: text)
+				case .removeDocumentComment(let element):
+					self = .removeDocumentComment(element: element)
+				case .insertImport(let after, let value):
+					self = .insertImport(after: after, value: value)
+				case .removeImport(let element):
+					self = .removeImport(element: element)
 				case .createNode(let path, let parentPath, let name):
 					self = .createNode(path: path, parentPath: parentPath, name: name)
 				case .renameNode(let path, let name):
@@ -162,22 +289,18 @@ public extension Lexicon.CRDT.Kind {
 					self = .setDefaultValue(path: path, value: .init(value))
 				case .removeDefaultValue(let path):
 					self = .removeDefaultValue(path: path)
-				case .addConnection(let path, let value):
-					self = .addConnection(path: path, value)
-				case .removeConnection(let path, let value):
-					self = .removeConnection(path: path, value)
-				case .addNote(let path, let noteID, let text):
-					self = .addNote(path: path, noteID: noteID, text: text)
-				case .removeNote(let path, let noteID):
-					self = .removeNote(path: path, noteID: noteID)
-				case .addComment(let path, let commentID, let text):
-					self = .addComment(path: path, commentID: commentID, text: text)
-				case .removeComment(let path, let commentID):
-					self = .removeComment(path: path, commentID: commentID)
-				case .addImport(let value):
-					self = .addImport(value)
-				case .removeImport(let value):
-					self = .removeImport(value)
+				case .insertConnection(let path, let after, let value):
+					self = .insertConnection(path: path, after: after, value: value)
+				case .removeConnection(let path, let element):
+					self = .removeConnection(path: path, element: element)
+				case .insertNote(let path, let after, let text):
+					self = .insertNote(path: path, after: after, text: text)
+				case .removeNote(let path, let element):
+					self = .removeNote(path: path, element: element)
+				case .insertComment(let path, let after, let text):
+					self = .insertComment(path: path, after: after, text: text)
+				case .removeComment(let path, let element):
+					self = .removeComment(path: path, element: element)
 			}
 		}
 	}
@@ -186,14 +309,18 @@ public extension Lexicon.CRDT.Kind {
 		switch json {
 			case .setDocumentDate(let value):
 				self = .setDocumentDate(value)
-			case .addDocumentNote(let noteID, let text):
-				self = .addDocumentNote(noteID: noteID, text: text)
-			case .removeDocumentNote(let noteID):
-				self = .removeDocumentNote(noteID: noteID)
-			case .addDocumentComment(let commentID, let text):
-				self = .addDocumentComment(commentID: commentID, text: text)
-			case .removeDocumentComment(let commentID):
-				self = .removeDocumentComment(commentID: commentID)
+			case .insertDocumentNote(let after, let text):
+				self = .insertDocumentNote(after: after, text: text)
+			case .removeDocumentNote(let element):
+				self = .removeDocumentNote(element: element)
+			case .insertDocumentComment(let after, let text):
+				self = .insertDocumentComment(after: after, text: text)
+			case .removeDocumentComment(let element):
+				self = .removeDocumentComment(element: element)
+			case .insertImport(let after, let value):
+				self = .insertImport(after: after, value: value)
+			case .removeImport(let element):
+				self = .removeImport(element: element)
 			case .createNode(let path, let parentPath, let name):
 				self = .createNode(path: path, parentPath: parentPath, name: name)
 			case .renameNode(let path, let name):
@@ -212,23 +339,36 @@ public extension Lexicon.CRDT.Kind {
 				self = .setDefaultValue(path: path, value: .init(value))
 			case .removeDefaultValue(let path):
 				self = .removeDefaultValue(path: path)
-			case .addConnection(let path, let value):
-				self = .addConnection(path: path, value)
-			case .removeConnection(let path, let value):
-				self = .removeConnection(path: path, value)
-			case .addNote(let path, let noteID, let text):
-				self = .addNote(path: path, noteID: noteID, text: text)
-			case .removeNote(let path, let noteID):
-				self = .removeNote(path: path, noteID: noteID)
-			case .addComment(let path, let commentID, let text):
-				self = .addComment(path: path, commentID: commentID, text: text)
-			case .removeComment(let path, let commentID):
-				self = .removeComment(path: path, commentID: commentID)
-			case .addImport(let value):
-				self = .addImport(value)
-			case .removeImport(let value):
-				self = .removeImport(value)
+			case .insertConnection(let path, let after, let value):
+				self = .insertConnection(path: path, after: after, value: value)
+			case .removeConnection(let path, let element):
+				self = .removeConnection(path: path, element: element)
+			case .insertNote(let path, let after, let text):
+				self = .insertNote(path: path, after: after, text: text)
+			case .removeNote(let path, let element):
+				self = .removeNote(path: path, element: element)
+			case .insertComment(let path, let after, let text):
+				self = .insertComment(path: path, after: after, text: text)
+			case .removeComment(let path, let element):
+				self = .removeComment(path: path, element: element)
 		}
+	}
+}
+
+public extension Lexicon.CRDT.Operation {
+
+	struct JSON: Hashable, Codable, Sendable {
+		public var id: Lexicon.CRDT.OperationID
+		public var kind: Lexicon.CRDT.Kind.JSON
+
+		public init(_ operation: Lexicon.CRDT.Operation) {
+			self.id = operation.id
+			self.kind = .init(operation.kind)
+		}
+	}
+
+	init(_ json: JSON) {
+		self.init(.init(json.kind), id: json.id)
 	}
 }
 
@@ -238,7 +378,9 @@ public extension Lexicon.CRDT.Replica {
 		public var operations: [Lexicon.CRDT.Operation.JSON]
 
 		public init(_ replica: Lexicon.CRDT.Replica) {
-			self.operations = replica.operations.sorted().map(Lexicon.CRDT.Operation.JSON.init)
+			self.operations = replica.operations.values
+				.sorted { $0.id < $1.id }
+				.map(Lexicon.CRDT.Operation.JSON.init)
 		}
 	}
 
@@ -246,40 +388,205 @@ public extension Lexicon.CRDT.Replica {
 		JSON(self)
 	}
 
-	init(_ json: JSON) {
-		self.init(operations: Set(json.operations.map(Lexicon.CRDT.Operation.init)))
+	init(_ json: JSON) throws {
+		try self.init(operations: json.operations.map(Lexicon.CRDT.Operation.init))
+	}
+
+	init(_ document: Lexicon.Document) throws {
+		var builder = Lexicon.CRDT.DocumentOperationBuilder(actor: "document")
+		builder.append(document)
+		try self.init(operations: builder.operations)
 	}
 }
 
-extension Lexicon.CRDT.Replica {
+private extension Lexicon.CRDT.Replica {
 
-	init(_ document: Lexicon.Document) {
-		self.init(documents: [document])
+	enum ListScope: Hashable {
+		case documentNote
+		case documentComment
+		case documentImport
+		case connection(Lemma.ID)
+		case note(Lemma.ID)
+		case comment(Lemma.ID)
 	}
 
-	init<Documents>(documents: Documents) where Documents: Sequence, Documents.Element == Lexicon.Document {
-		var builder = Lexicon.CRDT.DocumentOperationBuilder(actor: "document")
-		for document in documents {
-			builder.append(document)
+	static func validateOperationStructure(
+		_ operations: [Lexicon.CRDT.OperationID: Lexicon.CRDT.Operation]
+	) throws {
+		let created = Set(operations.values.compactMap { operation -> Lemma.ID? in
+			if case .createNode(let path, _, _) = operation.kind {
+				return path
+			}
+			return nil
+		})
+		var insertions: [Lexicon.CRDT.OperationID: ListScope] = [:]
+		var listReferences: [
+			(scope: ListScope, operation: Lexicon.CRDT.OperationID, reference: Lexicon.CRDT.OperationID)
+		] = []
+
+		func requireNode(_ path: Lemma.ID) throws {
+			guard created.contains(path) else {
+				throw Lexicon.CRDT.ReplicaError.invalidOperation(
+					"Operation targets node '\(path)' without a create operation"
+				)
+			}
 		}
-		self.init(operations: builder.operations)
+
+		func insert(
+			_ operation: Lexicon.CRDT.Operation,
+			scope: ListScope,
+			after: Lexicon.CRDT.OperationID?
+		) {
+			insertions[operation.id] = scope
+			if let after {
+				listReferences.append((scope, operation.id, after))
+			}
+		}
+
+		for operation in operations.values.sorted(by: { $0.id < $1.id }) {
+			switch operation.kind {
+				case .setDocumentDate:
+					break
+				case .insertDocumentNote(let after, _):
+					insert(operation, scope: .documentNote, after: after)
+				case .removeDocumentNote(let element):
+					listReferences.append((.documentNote, operation.id, element))
+				case .insertDocumentComment(let after, _):
+					insert(operation, scope: .documentComment, after: after)
+				case .removeDocumentComment(let element):
+					listReferences.append((.documentComment, operation.id, element))
+				case .insertImport(let after, _):
+					insert(operation, scope: .documentImport, after: after)
+				case .removeImport(let element):
+					listReferences.append((.documentImport, operation.id, element))
+				case .createNode(let path, let parentPath, let name):
+					guard path.name == name, path.parent == parentPath else {
+						throw Lexicon.CRDT.ReplicaError.invalidOperation(
+							"Create operation path '\(path)' does not match its parent/name"
+						)
+					}
+					if let parentPath, !created.contains(parentPath) {
+						throw Lexicon.CRDT.ReplicaError.invalidOperation(
+							"Create operation for '\(path)' is missing parent '\(parentPath)'"
+						)
+					}
+				case .renameNode(let path, _),
+					.deleteNode(let path),
+					.removeProtonym(let path),
+					.removeDefaultValue(let path):
+					try requireNode(path)
+				case .addTypeReference(let path, _),
+					.removeTypeReference(let path, _):
+					try requireNode(path)
+				case .setProtonym(let path, _):
+					try requireNode(path)
+				case .setDefaultValue(let path, _):
+					try requireNode(path)
+				case .insertConnection(let path, let after, _):
+					try requireNode(path)
+					insert(operation, scope: .connection(path), after: after)
+				case .removeConnection(let path, let element):
+					try requireNode(path)
+					listReferences.append((.connection(path), operation.id, element))
+				case .insertNote(let path, let after, _):
+					try requireNode(path)
+					insert(operation, scope: .note(path), after: after)
+				case .removeNote(let path, let element):
+					try requireNode(path)
+					listReferences.append((.note(path), operation.id, element))
+				case .insertComment(let path, let after, _):
+					try requireNode(path)
+					insert(operation, scope: .comment(path), after: after)
+				case .removeComment(let path, let element):
+					try requireNode(path)
+					listReferences.append((.comment(path), operation.id, element))
+			}
+		}
+
+		for item in listReferences {
+			guard insertions[item.reference] == item.scope else {
+				throw Lexicon.CRDT.ReplicaError.invalidOperation(
+					"List operation '\(item.operation)' references an element from another or missing list"
+				)
+			}
+		}
 	}
 }
 
 private extension Lexicon.CRDT {
 
+	struct Register<Value: Sendable>: Sendable {
+		var value: Value
+		var clock: OperationID
+	}
+
+	struct RGA<Value: Sendable>: Sendable {
+		struct Insertion: Sendable {
+			var after: OperationID?
+			var value: Value
+		}
+
+		var insertions: [OperationID: Insertion] = [:]
+		var removals: Set<OperationID> = []
+
+		mutating func insert(
+			id: OperationID,
+			after: OperationID?,
+			value: Value
+		) {
+			insertions[id] = .init(after: after, value: value)
+		}
+
+		func values(after lowerBound: OperationID? = nil) -> [Value] {
+			var followers: [OperationID?: [OperationID]] = [:]
+			for (id, insertion) in insertions {
+				followers[insertion.after, default: []].append(id)
+			}
+			for key in followers.keys {
+				followers[key]?.sort()
+			}
+			var result: [Value] = []
+			var visited: Set<OperationID> = []
+
+			func append(after predecessor: OperationID?) {
+				for id in followers[predecessor, default: []] where visited.insert(id).inserted {
+					if
+						lowerBound.map({ id > $0 }) ?? true,
+						!removals.contains(id),
+						let insertion = insertions[id]
+					{
+						result.append(insertion.value)
+					}
+					append(after: id)
+				}
+			}
+
+			append(after: nil)
+			// A complete validated replica has no orphans; retaining this
+				// deterministic fallback keeps diagnostics/materialization total.
+				for id in insertions.keys.sorted() where visited.insert(id).inserted {
+					if
+						lowerBound.map({ id > $0 }) ?? true,
+						!removals.contains(id),
+						let insertion = insertions[id]
+					{
+						result.append(insertion.value)
+					}
+					append(after: id)
+			}
+			return result
+		}
+	}
+
 	struct State: Sendable {
 		var date: Register<Date>?
-		var documentNotes: [String: Register<String>] = [:]
-		var documentNoteRemoves: [String: OperationID] = [:]
-		var documentComments: [String: Register<String>] = [:]
-		var documentCommentRemoves: [String: OperationID] = [:]
-		var nodes: [String: NodeState] = [:]
-		var importAdds: [Lexicon.Import: OperationID] = [:]
-		var importRemoves: [Lexicon.Import: OperationID] = [:]
+		var documentNotes = RGA<String>()
+		var documentComments = RGA<String>()
+		var imports = RGA<Lexicon.Import>()
+		var nodes: [Lemma.ID: NodeState] = [:]
 
-		init(operations: Set<Operation>) {
-			for operation in operations.sorted() {
+		init(operations: [OperationID: Operation]) {
+			for operation in operations.values.sorted(by: { $0.id < $1.id }) {
 				apply(operation)
 			}
 		}
@@ -290,265 +597,416 @@ private extension Lexicon.CRDT {
 					if operation.id >= (date?.clock ?? .zero) {
 						date = .init(value: value, clock: operation.id)
 					}
-				case .addDocumentNote(let noteID, let text):
-					documentNotes[noteID] = .init(value: text, clock: operation.id)
-				case .removeDocumentNote(let noteID):
-					documentNoteRemoves[noteID] = max(documentNoteRemoves[noteID], operation.id)
-				case .addDocumentComment(let commentID, let text):
-					documentComments[commentID] = .init(value: text, clock: operation.id)
-				case .removeDocumentComment(let commentID):
-					documentCommentRemoves[commentID] = max(documentCommentRemoves[commentID], operation.id)
+				case .insertDocumentNote(let after, let text):
+					documentNotes.insert(id: operation.id, after: after, value: text)
+				case .removeDocumentNote(let element):
+					documentNotes.removals.insert(element)
+				case .insertDocumentComment(let after, let text):
+					documentComments.insert(id: operation.id, after: after, value: text)
+				case .removeDocumentComment(let element):
+					documentComments.removals.insert(element)
+				case .insertImport(let after, let value):
+					imports.insert(id: operation.id, after: after, value: value)
+				case .removeImport(let element):
+					imports.removals.insert(element)
 				case .createNode(let path, let parentPath, let name):
-					update(path) { $0.create(parentPath: parentPath, name: name, at: operation.id) }
+					update(path) {
+						$0.create(parentPath: parentPath, name: name, at: operation.id)
+					}
 				case .renameNode(let path, let name):
 					update(path) { $0.rename(to: name, at: operation.id) }
 				case .deleteNode(let path):
 					update(path) { $0.delete(at: operation.id) }
 				case .addTypeReference(let path, let type):
-					update(path) { $0.add(type: type, at: operation.id) }
+					update(path) { $0.typeAdds[type] = max($0.typeAdds[type], operation.id) }
 				case .removeTypeReference(let path, let type):
-					update(path) { $0.remove(type: type, at: operation.id) }
+					update(path) {
+						$0.typeRemoves[type] = max($0.typeRemoves[type], operation.id)
+					}
 				case .setProtonym(let path, let protonym):
-					update(path) { $0.set(protonym: protonym, at: operation.id) }
+					update(path) {
+						if operation.id >= ($0.protonym?.clock ?? .zero) {
+							$0.protonym = .init(value: protonym, clock: operation.id)
+						}
+					}
 				case .removeProtonym(let path):
-					update(path) { $0.removeProtonym(at: operation.id) }
+					update(path) { $0.protonymRemoval = max($0.protonymRemoval, operation.id) }
 				case .setDefaultValue(let path, let value):
-					update(path) { $0.set(defaultValue: value, at: operation.id) }
+					update(path) {
+						if operation.id >= ($0.defaultValue?.clock ?? .zero) {
+							$0.defaultValue = .init(value: value, clock: operation.id)
+						}
+					}
 				case .removeDefaultValue(let path):
-					update(path) { $0.removeDefault(at: operation.id) }
-				case .addConnection(let path, let value):
-					update(path) { $0.connectionAdds[value] = max($0.connectionAdds[value], operation.id) }
-				case .removeConnection(let path, let value):
-					update(path) { $0.connectionRemoves[value] = max($0.connectionRemoves[value], operation.id) }
-				case .addNote(let path, let noteID, let text):
-					update(path) { $0.notes[noteID] = .init(value: text, clock: operation.id) }
-				case .removeNote(let path, let noteID):
-					update(path) { $0.noteRemoves[noteID] = max($0.noteRemoves[noteID], operation.id) }
-				case .addComment(let path, let commentID, let text):
-					update(path) { $0.comments[commentID] = .init(value: text, clock: operation.id) }
-				case .removeComment(let path, let commentID):
-					update(path) { $0.commentRemoves[commentID] = max($0.commentRemoves[commentID], operation.id) }
-				case .addImport(let value):
-					importAdds[value] = max(importAdds[value], operation.id)
-				case .removeImport(let value):
-					importRemoves[value] = max(importRemoves[value], operation.id)
+					update(path) {
+						$0.defaultValueRemoval = max($0.defaultValueRemoval, operation.id)
+					}
+				case .insertConnection(let path, let after, let value):
+					update(path) {
+						$0.connections.insert(
+							id: operation.id,
+							after: after,
+							value: value
+						)
+					}
+				case .removeConnection(let path, let element):
+					update(path) { $0.connections.removals.insert(element) }
+				case .insertNote(let path, let after, let text):
+					update(path) {
+						$0.notes.insert(id: operation.id, after: after, value: text)
+					}
+				case .removeNote(let path, let element):
+					update(path) { $0.notes.removals.insert(element) }
+				case .insertComment(let path, let after, let text):
+					update(path) {
+						$0.comments.insert(id: operation.id, after: after, value: text)
+					}
+				case .removeComment(let path, let element):
+					update(path) { $0.comments.removals.insert(element) }
 			}
 		}
 
-		mutating func update(_ path: String, _ body: (inout NodeState) -> Void) {
+		mutating func update(
+			_ path: Lemma.ID,
+			_ body: (inout NodeState) -> Void
+		) {
 			var node = nodes[path] ?? .init(path: path)
 			body(&node)
 			nodes[path] = node
 		}
 
-		func document() -> Lexicon.Document {
-			let visible = nodes.filter { _, node in !node.isDeleted }
-			let roots = visibleChildren(parentPath: nil, visible: visible)
-				.sorted { $0.name < $1.name }
-				.reduce(into: [String: Lexicon.Graph.Node]()) { roots, node in
-					let graphNode = build(node, visible: visible)
-					roots[graphNode.name] = graphNode
+		func isVisible(_ node: NodeState) -> Bool {
+			guard var creation = node.creation, !node.isDeleted else {
+				return false
+			}
+			var parentPath = node.parentPath
+			while let path = parentPath {
+				guard
+					let parent = nodes[path],
+					let parentCreation = parent.creation,
+					!parent.isDeleted,
+					creation.clock > parentCreation.clock
+				else {
+					return false
 				}
-			let imports = importAdds
-				.filter { value, add in add > (importRemoves[value] ?? .zero) }
-				.map(\.key)
-				.sorted { $0.reference < $1.reference }
-			return .init(
-				date: date?.value ?? .init(),
-				roots: roots,
-				imports: imports,
-				notes: visibleDocumentNotes,
-				comments: visibleDocumentComments
-			)
+				creation = parentCreation
+				parentPath = parent.parentPath
+			}
+			return true
 		}
 
-		func build(_ node: NodeState, visible: [String: NodeState]) -> Lexicon.Graph.Node {
-			let children = visibleChildren(parentPath: node.path, visible: visible)
-				.sorted { $0.name < $1.name }
-				.reduce(into: [String: Lexicon.Graph.Node]()) { children, child in
-					let node = build(child, visible: visible)
-					children[node.name] = node
+		func materialization() throws -> Materialization {
+			let visible = nodes.filter { isVisible($0.value) }
+			for path in visible.keys.sorted() {
+				guard let node = visible[path] else {
+					continue
 				}
-			var graphNode = Lexicon.Graph.Node(
-				name: node.name,
-				children: children,
-				type: node.types,
-				defaultValue: node.defaultValue,
-				connections: node.connections,
-				notes: node.visibleNotes,
-				comments: node.visibleComments
-			)
-			graphNode.protonym = node.protonym
-			return graphNode
-		}
+				if let parent = node.parentPath, visible[parent] == nil {
+					throw ReplicaError.invalidOperation(
+						"Visible node '\(path)' is missing parent '\(parent)'"
+					)
+				}
+			}
 
-		func visibleChildren(parentPath: String?, visible: [String: NodeState]) -> [NodeState] {
-			visible.values
-				.filter { $0.parentPath == parentPath }
-				.reduce(into: [String: NodeState]()) { children, node in
-					guard let existing = children[node.name] else {
-						children[node.name] = node
-						return
-					}
-					if node.identitySortKey >= existing.identitySortKey {
-						children[node.name] = node
-					}
-				}
+			let rootStates = visible
+				.filter { $0.value.parentPath == nil }
 				.map(\.value)
+				.sorted { ($0.name, $0.path) < ($1.name, $1.path) }
+			try rejectDuplicateNames(rootStates, parent: nil)
+			for parent in visible.keys.sorted() {
+				let children = visible.values
+					.filter { $0.parentPath == parent }
+					.sorted { ($0.name, $0.path) < ($1.name, $1.path) }
+				try rejectDuplicateNames(children, parent: parent)
+			}
+
+			let materializedPaths = try materializedPaths(for: visible)
+			var roots: [Lemma.Name: Lexicon.Graph.Node] = [:]
+			for root in rootStates {
+				roots[root.name] = try build(
+					root,
+					visible: visible,
+					materializedPaths: materializedPaths
+				)
+			}
+			return Materialization(
+				document: .init(
+					date: date?.value ?? Lexicon.Document.unspecifiedDate,
+					roots: roots,
+					imports: imports.values(),
+					notes: documentNotes.values(),
+					comments: documentComments.values()
+				),
+				materializedPathsByNodeAddress: materializedPaths
+			)
 		}
 
-		var visibleDocumentNotes: [String] {
-			documentNotes
-				.filter { key, value in value.clock > (documentNoteRemoves[key] ?? .zero) }
-				.sorted { $0.key < $1.key }
-				.map(\.value.value)
+		func build(
+			_ state: NodeState,
+			visible: [Lemma.ID: NodeState],
+			materializedPaths: [Lemma.ID: Lemma.ID]
+		) throws -> Lexicon.Graph.Node {
+			let childStates = visible.values
+				.filter { $0.parentPath == state.path }
+				.sorted { ($0.name, $0.path) < ($1.name, $1.path) }
+			var children: [Lemma.Name: Lexicon.Graph.Node] = [:]
+			for child in childStates {
+				children[child.name] = try build(
+					child,
+					visible: visible,
+					materializedPaths: materializedPaths
+				)
+			}
+
+			let types = try Set(state.visibleTypes.map { address in
+				guard let path = materializedPaths[address] else {
+					throw ReplicaError.invalidOperation(
+						"Node '\(state.path)' references missing type address '\(address)'"
+					)
+				}
+				return path
+			})
+			let protonym = try materializedProtonym(
+				for: state,
+				materializedPaths: materializedPaths
+			)
+			let defaultValue = try materializedDefaultValue(
+				for: state,
+				materializedPaths: materializedPaths
+			)
+
+			return .init(
+				children: children,
+				type: types,
+				protonym: protonym,
+				defaultValue: defaultValue,
+				connections: state.connections.values(after: state.creation?.clock),
+				notes: state.notes.values(after: state.creation?.clock),
+				comments: state.comments.values(after: state.creation?.clock)
+			)
 		}
 
-		var visibleDocumentComments: [String] {
-			documentComments
-				.filter { key, value in value.clock > (documentCommentRemoves[key] ?? .zero) }
-				.sorted { $0.key < $1.key }
-				.map(\.value.value)
+		func materializedPaths(
+			for visible: [Lemma.ID: NodeState]
+		) throws -> [Lemma.ID: Lemma.ID] {
+			var result: [Lemma.ID: Lemma.ID] = [:]
+			let ordered = visible.values.sorted {
+				($0.path.components.count, $0.path) <
+					($1.path.components.count, $1.path)
+			}
+			for state in ordered {
+				if let parentAddress = state.parentPath {
+					guard let parentPath = result[parentAddress] else {
+						throw ReplicaError.invalidOperation(
+							"Visible node '\(state.path)' is missing parent '\(parentAddress)'"
+						)
+					}
+					result[state.path] = parentPath.appending(state.name)
+				} else {
+					result[state.path] = Lemma.ID(root: state.name)
+				}
+			}
+			return result
+		}
+
+		func materializedProtonym(
+			for state: NodeState,
+			materializedPaths: [Lemma.ID: Lemma.ID]
+		) throws -> Lemma.RelativeID? {
+			guard let protonym = state.visibleProtonym else {
+				return nil
+			}
+			guard
+				let parentAddress = state.parentPath,
+				let parentPath = materializedPaths[parentAddress]
+			else {
+				throw ReplicaError.invalidOperation(
+					"Root node address '\(state.path)' cannot declare a protonym"
+				)
+			}
+			let targetAddress = parentAddress.appending(protonym)
+			guard let targetPath = materializedPaths[targetAddress] else {
+				throw ReplicaError.invalidOperation(
+					"Node '\(state.path)' references missing protonym address '\(targetAddress)'"
+				)
+			}
+			do {
+				return try targetPath.relative(to: parentPath)
+			} catch {
+				throw ReplicaError.invalidOperation(
+					"Node '\(state.path)' has a protonym outside its materialized parent"
+				)
+			}
+		}
+
+		func materializedDefaultValue(
+			for state: NodeState,
+			materializedPaths: [Lemma.ID: Lemma.ID]
+		) throws -> Lexicon.Graph.Node.DefaultValue? {
+			guard case .reference(let address) = state.visibleDefaultValue else {
+				return state.visibleDefaultValue
+			}
+			guard let path = materializedPaths[address] else {
+				throw ReplicaError.invalidOperation(
+					"Node '\(state.path)' references missing default-value address '\(address)'"
+				)
+			}
+			return .reference(path)
+		}
+
+		func rejectDuplicateNames(
+			_ states: [NodeState],
+			parent: Lemma.ID?
+		) throws {
+			var names: Set<Lemma.Name> = []
+			for state in states where !names.insert(state.name).inserted {
+				throw ReplicaError.invalidOperation(
+					"Multiple visible nodes declare '\(state.name)' below '\(parent?.description ?? "<document>")'"
+				)
+			}
 		}
 	}
 
 	struct NodeState: Sendable {
-		var path: String
-		var parentPath: String?
-		var parentClock: OperationID = .zero
-		var name: String = ""
-		var nameClock: OperationID = .zero
-		var deleteClock: OperationID?
-		var typeAdds: [String: OperationID] = [:]
-		var typeRemoves: [String: OperationID] = [:]
-		var protonym: String?
-		var protonymClock: OperationID = .zero
-		var defaultValue: Lexicon.Graph.Node.DefaultValue?
-		var defaultClock: OperationID = .zero
-		var connectionAdds: [Lexicon.Import: OperationID] = [:]
-		var connectionRemoves: [Lexicon.Import: OperationID] = [:]
-		var notes: [String: Register<String>] = [:]
-		var noteRemoves: [String: OperationID] = [:]
-		var comments: [String: Register<String>] = [:]
-		var commentRemoves: [String: OperationID] = [:]
+		var path: Lemma.ID
+		var creation: Register<Creation>?
+		var rename: Register<Lemma.Name>?
+		var deletion: OperationID?
+		var typeAdds: [Lemma.ID: OperationID] = [:]
+		var typeRemoves: [Lemma.ID: OperationID] = [:]
+		var protonym: Register<Lemma.RelativeID>?
+		var protonymRemoval: OperationID?
+		var defaultValue: Register<Lexicon.Graph.Node.DefaultValue>?
+		var defaultValueRemoval: OperationID?
+		var connections = RGA<Lexicon.Import>()
+		var notes = RGA<String>()
+		var comments = RGA<String>()
 
-		var isDeleted: Bool {
-			deleteClock.map { $0 >= max(nameClock, parentClock) } ?? false
+		struct Creation: Sendable {
+			var parentPath: Lemma.ID?
+			var name: Lemma.Name
 		}
 
-		var types: Set<String> {
-			Set(typeAdds.filter { type, add in add > (typeRemoves[type] ?? .zero) }.map(\.key))
+		init(path: Lemma.ID) {
+			self.path = path
 		}
 
-		var connections: [Lexicon.Import] {
-			connectionAdds
-				.filter { value, add in add > (connectionRemoves[value] ?? .zero) }
-				.map(\.key)
-				.sorted { $0.reference < $1.reference }
-		}
-
-		var visibleNotes: [String] {
-			notes
-				.filter { key, value in value.clock > (noteRemoves[key] ?? .zero) }
-				.sorted { $0.key < $1.key }
-				.map(\.value.value)
-		}
-
-		var visibleComments: [String] {
-			comments
-				.filter { key, value in value.clock > (commentRemoves[key] ?? .zero) }
-				.sorted { $0.key < $1.key }
-				.map(\.value.value)
-		}
-
-		var identitySortKey: (OperationID, String) {
-			(max(parentClock, nameClock), path)
-		}
-
-		mutating func create(parentPath: String?, name: String, at clock: OperationID) {
-			if clock >= parentClock {
-				self.parentPath = parentPath
-				parentClock = clock
+		mutating func create(
+			parentPath: Lemma.ID?,
+			name: Lemma.Name,
+			at clock: OperationID
+		) {
+			if clock >= (creation?.clock ?? .zero) {
+				creation = .init(
+					value: .init(parentPath: parentPath, name: name),
+					clock: clock
+				)
 			}
-			rename(to: name, at: clock)
 		}
 
-		mutating func rename(to name: String, at clock: OperationID) {
-			if clock >= nameClock {
-				self.name = name
-				nameClock = clock
+		mutating func rename(to name: Lemma.Name, at clock: OperationID) {
+			if clock >= (rename?.clock ?? .zero) {
+				rename = .init(value: name, clock: clock)
 			}
 		}
 
 		mutating func delete(at clock: OperationID) {
-			deleteClock = max(deleteClock, clock)
+			deletion = max(deletion, clock)
 		}
 
-		mutating func add(type: String, at clock: OperationID) {
-			typeAdds[type] = max(typeAdds[type], clock)
-		}
-
-		mutating func remove(type: String, at clock: OperationID) {
-			typeRemoves[type] = max(typeRemoves[type], clock)
-		}
-
-		mutating func set(protonym: String, at clock: OperationID) {
-			if clock >= protonymClock {
-				self.protonym = protonym
-				protonymClock = clock
+		var isDeleted: Bool {
+			guard let creation else {
+				return true
 			}
+			return (deletion ?? .zero) >= creation.clock
 		}
 
-		mutating func removeProtonym(at clock: OperationID) {
-			if clock >= protonymClock {
-				protonym = nil
-				protonymClock = clock
+		var parentPath: Lemma.ID? {
+			creation?.value.parentPath
+		}
+
+		var name: Lemma.Name {
+			guard let creation else {
+				return path.name
 			}
-		}
-
-		mutating func set(defaultValue: Lexicon.Graph.Node.DefaultValue, at clock: OperationID) {
-			if clock >= defaultClock {
-				self.defaultValue = defaultValue
-				defaultClock = clock
+			if let rename, rename.clock > creation.clock {
+				return rename.value
 			}
+			return creation.value.name
 		}
 
-		mutating func removeDefault(at clock: OperationID) {
-			if clock >= defaultClock {
-				defaultValue = nil
-				defaultClock = clock
+		var visibleTypes: Set<Lemma.ID> {
+			guard let creation else {
+				return []
 			}
+			return Set(typeAdds.compactMap { type, add in
+				add > creation.clock && add > (typeRemoves[type] ?? .zero) ? type : nil
+			})
 		}
-	}
 
-	struct Register<Value: Sendable>: Sendable {
-		var value: Value
-		var clock: OperationID
+		var visibleProtonym: Lemma.RelativeID? {
+			guard
+				let creation,
+				let protonym,
+				protonym.clock > creation.clock,
+				protonym.clock > (protonymRemoval ?? .zero)
+			else {
+				return nil
+			}
+			return protonym.value
+		}
+
+		var visibleDefaultValue: Lexicon.Graph.Node.DefaultValue? {
+			guard
+				let creation,
+				let defaultValue,
+				defaultValue.clock > creation.clock,
+				defaultValue.clock > (defaultValueRemoval ?? .zero)
+			else {
+				return nil
+			}
+			return defaultValue.value
+		}
 	}
 
 	struct DocumentOperationBuilder {
-		let actor: String
-		var counter: UInt64 = 0
-		var operations: Set<Operation> = []
+		var actor: String
+		var timestamp: UInt64 = 0
+		var operations: [Operation] = []
 
 		mutating func append(_ document: Lexicon.Document) {
 			emit(.setDocumentDate(document.date))
+
+			var previous: OperationID?
 			for note in document.notes {
-				emit(.addDocumentNote(noteID: note, text: note))
+				previous = emit(.insertDocumentNote(after: previous, text: note))
 			}
+			previous = nil
 			for comment in document.comments {
-				emit(.addDocumentComment(commentID: comment, text: comment))
+				previous = emit(.insertDocumentComment(after: previous, text: comment))
 			}
-			for `import` in document.imports.sorted(by: { $0.reference < $1.reference }) {
-				emit(.addImport(`import`))
+			previous = nil
+			for `import` in document.imports {
+				previous = emit(.insertImport(after: previous, value: `import`))
 			}
-			for (name, root) in document.roots {
-				append(root, path: name, parentPath: nil)
+
+			for (rootName, root) in document.roots {
+				append(
+					root,
+					name: rootName,
+					path: Lemma.ID(root: rootName),
+					parentPath: nil
+				)
 			}
 		}
 
-		mutating func append(_ node: Lexicon.Graph.Node, path: String, parentPath: String?) {
-			emit(.createNode(path: path, parentPath: parentPath, name: node.name))
+		mutating func append(
+			_ node: Lexicon.Graph.Node,
+			name: Lemma.Name,
+			path: Lemma.ID,
+			parentPath: Lemma.ID?
+		) {
+			emit(.createNode(path: path, parentPath: parentPath, name: name))
 			for type in node.type.sorted() {
 				emit(.addTypeReference(path: path, type: type))
 			}
@@ -558,33 +1016,49 @@ private extension Lexicon.CRDT {
 			if let defaultValue = node.defaultValue {
 				emit(.setDefaultValue(path: path, value: defaultValue))
 			}
-			for connection in node.connections.sorted(by: { $0.reference < $1.reference }) {
-				emit(.addConnection(path: path, connection))
+
+			var previous: OperationID?
+			for connection in node.connections {
+				previous = emit(.insertConnection(
+					path: path,
+					after: previous,
+					value: connection
+				))
 			}
+			previous = nil
 			for note in node.notes {
-				emit(.addNote(path: path, noteID: note, text: note))
+				previous = emit(.insertNote(path: path, after: previous, text: note))
 			}
+			previous = nil
 			for comment in node.comments {
-				emit(.addComment(path: path, commentID: comment, text: comment))
+				previous = emit(.insertComment(
+					path: path,
+					after: previous,
+					text: comment
+				))
 			}
-			for (name, child) in node.children {
-				append(child, path: "\(path).\(name)", parentPath: path)
+			for (childName, child) in node.children {
+				append(
+					child,
+					name: childName,
+					path: path.appending(childName),
+					parentPath: path
+				)
 			}
 		}
 
-		mutating func emit(_ kind: Kind) {
-			counter += 1
-			operations.insert(.init(kind, id: .init(actor: actor, counter: counter)))
+		@discardableResult
+		mutating func emit(_ kind: Kind) -> OperationID {
+			timestamp += 1
+			let id = OperationID(timestamp: timestamp, actor: actor)
+			operations.append(.init(kind, id: id))
+			return id
 		}
 	}
 }
 
-private extension Lexicon.CRDT.OperationID {
-	static let zero = Self(actor: "", counter: 0)
-}
-
 private func max<T: Comparable>(_ lhs: T?, _ rhs: T) -> T {
-	guard let lhs = lhs else {
+	guard let lhs else {
 		return rhs
 	}
 	return Swift.max(lhs, rhs)

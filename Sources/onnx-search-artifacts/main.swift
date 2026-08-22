@@ -266,7 +266,6 @@ private enum ONNXRuntimeArtifact: String, CaseIterable {
 	case linuxX64 = "linux-x64"
 	case linuxAarch64 = "linux-aarch64"
 	case android = "android"
-	case windowsX64 = "windows-x64"
 
 	var id: String {
 		rawValue
@@ -274,7 +273,7 @@ private enum ONNXRuntimeArtifact: String, CaseIterable {
 
 	init(argument: String) throws {
 		guard let artifact = Self(rawValue: argument) else {
-			throw ONNXArtifactsError("Unknown ONNX runtime '\(argument)'. Expected linux-x64, linux-aarch64, android, windows-x64, or all.")
+			throw ONNXArtifactsError("Unknown ONNX runtime '\(argument)'. Expected linux-x64, linux-aarch64, android, or all.")
 		}
 		self = artifact
 	}
@@ -287,15 +286,13 @@ private enum ONNXRuntimeArtifact: String, CaseIterable {
 				"onnxruntime-linux-aarch64-\(version).tgz"
 			case .android:
 				"onnxruntime-android-\(version).aar"
-			case .windowsX64:
-				"onnxruntime-win-x64-\(version).zip"
 		}
 	}
 
 	func url(version: String) throws -> URL {
 		let string: String
 		switch self {
-			case .linuxX64, .linuxAarch64, .windowsX64:
+			case .linuxX64, .linuxAarch64:
 				string = "https://github.com/microsoft/onnxruntime/releases/download/v\(version)/\(archiveName(version: version))"
 			case .android:
 				string = "https://repo.maven.apache.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/\(version)/\(archiveName(version: version))"
@@ -335,12 +332,6 @@ private enum ONNXRuntimeArtifact: String, CaseIterable {
 							.appendingPathComponent("android-\(abi)", isDirectory: true)
 					)
 				}
-			case .windowsX64:
-				try installReleaseArchive(
-					from: extraction.appendingPathComponent("onnxruntime-win-x64-\(version)", isDirectory: true),
-					to: root,
-					libDirectoryName: "windows-x64"
-				)
 		}
 	}
 

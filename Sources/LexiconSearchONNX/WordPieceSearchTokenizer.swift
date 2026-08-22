@@ -20,7 +20,7 @@ public struct WordPieceSearchTokenizer: Sendable {
 		let contents = try String(contentsOf: url, encoding: .utf8)
 		var vocabulary: [String: Int64] = [:]
 		for (offset, token) in contents.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
-			vocabulary[String(token)] = Int64(offset)
+			vocabulary[String(token).trimmingCharacters(in: CharacterSet(charactersIn: "\r"))] = Int64(offset)
 		}
 		guard
 			let unknownTokenID = vocabulary["[UNK]"],
@@ -72,11 +72,11 @@ public struct WordPieceSearchTokenizer: Sendable {
 	private func basicTokens(in text: String) -> [String] {
 		var tokens: [String] = []
 		var current = ""
-		let normalized = lowercased ? text.lowercased() : text
-		for scalar in normalized.unicodeScalars {
+		let normalizedText = normalized(text)
+		for scalar in normalizedText.unicodeScalars {
 			if CharacterSet.whitespacesAndNewlines.contains(scalar) {
 				append(&current, to: &tokens)
-			} else if CharacterSet.punctuationCharacters.contains(scalar) || CharacterSet.symbols.contains(scalar) {
+			} else if isChinese(scalar) || CharacterSet.punctuationCharacters.contains(scalar) {
 				append(&current, to: &tokens)
 				tokens.append(String(scalar))
 			} else {
@@ -85,6 +85,44 @@ public struct WordPieceSearchTokenizer: Sendable {
 		}
 		append(&current, to: &tokens)
 		return tokens
+	}
+
+	private func normalized(_ text: String) -> String {
+		var cleaned = ""
+		for scalar in text.unicodeScalars {
+			if scalar.value == 0 || scalar.value == 0xFFFD || CharacterSet.controlCharacters.contains(scalar) {
+				if CharacterSet.whitespacesAndNewlines.contains(scalar) {
+					cleaned.append(" ")
+				}
+				continue
+			}
+			cleaned.unicodeScalars.append(scalar)
+		}
+		guard lowercased else {
+			return cleaned
+		}
+		let decomposed = cleaned.lowercased().decomposedStringWithCanonicalMapping
+		var stripped = ""
+		for scalar in decomposed.unicodeScalars where !CharacterSet.nonBaseCharacters.contains(scalar) {
+			stripped.unicodeScalars.append(scalar)
+		}
+		return stripped
+	}
+
+	private func isChinese(_ scalar: Unicode.Scalar) -> Bool {
+		switch scalar.value {
+			case 0x4E00...0x9FFF,
+				0x3400...0x4DBF,
+				0x20000...0x2A6DF,
+				0x2A700...0x2B73F,
+				0x2B740...0x2B81F,
+				0x2B820...0x2CEAF,
+				0xF900...0xFAFF,
+				0x2F800...0x2FA1F:
+				true
+			default:
+				false
+		}
 	}
 
 	private func append(_ current: inout String, to tokens: inout [String]) {
@@ -98,6 +136,9 @@ public struct WordPieceSearchTokenizer: Sendable {
 	private func wordPieces(for token: String) -> [String] {
 		guard !token.isEmpty else {
 			return []
+		}
+		guard token.count <= 100 else {
+			return ["[UNK]"]
 		}
 		if vocabulary[token] != nil {
 			return [token]

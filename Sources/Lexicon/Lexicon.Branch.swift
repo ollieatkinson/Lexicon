@@ -39,10 +39,10 @@ public extension Lexicon {
 	}
 
 	struct PasteResult: Sendable {
-		public var lemmaID: Lemma.ID?
+		public var lemmaID: Lemma.ID
 		public var diagnostics: [ReferenceDiagnostic]
 
-		public init(lemmaID: Lemma.ID?, diagnostics: [ReferenceDiagnostic]) {
+		public init(lemmaID: Lemma.ID, diagnostics: [ReferenceDiagnostic]) {
 			self.lemmaID = lemmaID
 			self.diagnostics = diagnostics
 		}
@@ -52,17 +52,25 @@ public extension Lexicon {
 public extension Lemma {
 
 	func exportBranchDocument() -> Lexicon.BranchExport {
-		let root = regenerateNode()
-			.rewritingInternalReferences(from: id, to: name, path: name, parentPath: nil)
-		let diagnostics = root.referenceDiagnostics(branchID: root.name, path: root.name)
+		let branchID = Lemma.ID(root: name)
+		let root = node.rewritingInternalReferences(
+			from: id,
+			to: branchID,
+			oldPath: id,
+			newPath: branchID
+		)
+		let diagnostics = root.referenceDiagnostics(
+			branchID: branchID,
+			path: branchID
+		)
 		let imports = diagnostics
-			.map { Lexicon.Import($0.reference.components(separatedBy: ".").first ?? $0.reference) }
+			.map { Lexicon.Import($0.reference.root.rawValue) }
 			.uniqued()
 			.sorted { $0.reference < $1.reference }
 		return .init(
 			document: .init(
-				date: lexicon.graph.date,
-				roots: [root.name: root],
+				date: graph.date,
+				roots: [name: root],
 				imports: imports
 			),
 			diagnostics: diagnostics
@@ -73,73 +81,72 @@ public extension Lemma {
 #if EDITOR
 public extension Lexicon {
 
-	func paste(_ document: Document, root rootName: Graph.Node.Name? = nil, to lemma: Lemma) -> PasteResult {
-		let graph: Graph
-		do {
-			graph = try document.graph(root: rootName)
-		} catch {
-			return .init(lemmaID: nil, diagnostics: [])
-		}
+	func paste(
+		_ document: Document,
+		root rootName: Lemma.Name,
+		to lemma: Lemma
+	) throws -> PasteResult {
+		try requireCurrent(lemma)
+		let graph = try document.graph(root: rootName)
+		let branchID = Lemma.ID(root: rootName)
 		let diagnostics = graph.root.referenceDiagnostics(
-			branchID: graph.root.name,
-			path: graph.root.name
+			branchID: branchID,
+			path: branchID
 		)
-		guard
-			lemma.isValid(newChildName: graph.root.name),
-			let path = lemma.graphPath
-		else {
-			return .init(lemmaID: nil, diagnostics: diagnostics)
-		}
-
-		var current = self.graph
-		current.date = .init()
-		current[path].children[graph.root.name] = graph.root.rewritingInternalReferences(
-			from: graph.root.name,
-			to: "\(lemma.id).\(graph.root.name)",
-			path: "\(lemma.id).\(graph.root.name)",
-			parentPath: lemma.id
-		)
-		reset(to: current)
-
-		return .init(
-			lemmaID: "\(lemma.id).\(graph.root.name)",
-			diagnostics: diagnostics
-		)
+		let pasted = try insert(graph, under: lemma)
+		return .init(lemmaID: pasted.id, diagnostics: diagnostics)
 	}
 }
 #endif
 
 private extension Lexicon.Graph.Node {
 
-	func referenceDiagnostics(branchID: Lemma.ID, path: Lemma.ID) -> [Lexicon.ReferenceDiagnostic] {
+	func referenceDiagnostics(
+		branchID: Lemma.ID,
+		path: Lemma.ID
+	) -> [Lexicon.ReferenceDiagnostic] {
 		var diagnostics: [Lexicon.ReferenceDiagnostic] = []
 
-		for type in type.sorted() where type.isExternalReference(to: branchID) {
-			diagnostics.append(.init(kind: .externalType, path: path, reference: type))
+		for type in type.sorted() where !type.isInLineage(of: branchID) {
+			diagnostics.append(.init(
+				kind: .externalType,
+				path: path,
+				reference: type
+			))
 		}
 
-		if let protonym = protonym, protonym.isExternalReference(to: branchID) {
-			diagnostics.append(.init(kind: .externalProtonym, path: path, reference: protonym))
+		if
+			let protonym,
+			let parent = path.parent
+		{
+			let target = parent.appending(protonym)
+			if !target.isInLineage(of: branchID) {
+				diagnostics.append(.init(
+					kind: .externalProtonym,
+					path: path,
+					reference: target
+				))
+			}
 		}
 
-		if case .reference(let reference) = defaultValue, reference.isExternalReference(to: branchID) {
-			diagnostics.append(.init(kind: .externalDefault, path: path, reference: reference))
+		if
+			case .reference(let reference) = defaultValue,
+			!reference.isInLineage(of: branchID)
+		{
+			diagnostics.append(.init(
+				kind: .externalDefault,
+				path: path,
+				reference: reference
+			))
 		}
 
 		for (name, child) in children {
-			diagnostics.append(contentsOf: child.referenceDiagnostics(branchID: branchID, path: "\(path).\(name)"))
+			diagnostics.append(contentsOf: child.referenceDiagnostics(
+				branchID: branchID,
+				path: path.appending(name)
+			))
 		}
 
 		return diagnostics
-	}
-}
-
-private extension String {
-
-	func isExternalReference(to branchID: String) -> Bool {
-		guard contains(".") else {
-			return false
-		}
-		return self != branchID && !hasPrefix("\(branchID).")
 	}
 }

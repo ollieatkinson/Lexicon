@@ -40,7 +40,12 @@ public struct Event: Sendable, Hashable, Identifiable, CustomStringConvertible {
 		Snapshot(id: id, description: description, lemma: l.__, values: values)
 	}
 
-	public func `is`(_ i: I) -> Bool {
+	public var detail: EventDetail {
+		EventDetail(id: l.__, data: values)
+	}
+
+	/// Returns whether this event has the same lemma and any values specified by `i`.
+	public func matches(_ i: any I) -> Bool {
 		switch i {
 			case let i as L:
 				return k(\.L) == i
@@ -55,11 +60,13 @@ public struct Event: Sendable, Hashable, Identifiable, CustomStringConvertible {
 		}
 	}
 
-	public func `is`<A>(_: A.Type) -> Bool {
+	/// Returns whether this event's lemma is an instance of `type`.
+	public func matches<A>(_: A.Type) -> Bool {
 		k(\.L) is A
 	}
 
-	public func `is`<A>(_ a: K<A>) -> Bool {
+	/// Returns whether this event has the same lemma and bracketed values as `a`.
+	public func matches<A>(_ a: K<A>) -> Bool {
 		k(\.L) == a(\.L) && a.____.allSatisfy { key, value in
 			k.____[key] == value
 		}
@@ -100,11 +107,8 @@ public extension JSON {
 		if let string {
 			return string
 		}
-		if let array {
-			return "[" + array.map(\.eventDescription).joined(separator: ", ") + "]"
-		}
-		if let object {
-			return "{" + object.sortedEntries.map { "\($0.key): \($0.value.eventDescription)" }.joined(separator: ", ") + "}"
+		if array != nil || object != nil, let data = try? data(options: [.fragmentsAllowed, .sortedKeys]) {
+			return String(decoding: data, as: UTF8.self)
 		}
 		return String(describing: any)
 	}
@@ -155,22 +159,6 @@ public extension Event {
 }
 
 public extension Event {
-
-	static func == <A: L>(lhs: A, rhs: Event) -> Bool {
-		Event(lhs) == rhs
-	}
-
-	static func == <A: L>(lhs: Event, rhs: A) -> Bool {
-		lhs == Event(rhs)
-	}
-
-	static func == <A: L>(lhs: K<A>, rhs: Event) -> Bool {
-		Event(lhs) == rhs
-	}
-
-	static func == <A: L>(lhs: Event, rhs: K<A>) -> Bool {
-		lhs == Event(rhs)
-	}
 
 	static func == (lhs: Event, rhs: Event) -> Bool {
 		lhs.id == rhs.id

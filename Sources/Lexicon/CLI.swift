@@ -4,7 +4,7 @@
 
 import Foundation
 
-public struct CLI: @unchecked Sendable, Hashable {
+public struct CLI: Sendable, Hashable {
 	public var date: Date // date is not sendable?
 	public var root: Lemma
 	public var breadcrumbs: [Lemma]
@@ -23,7 +23,7 @@ public extension CLI {
 	@LexiconActor static func with(lemma: Lemma, root: Lemma? = nil) -> CLI {
 		let breadcrumbs = lemma.lineage.reversed()
 		var o = CLI(
-			date: lemma.lexicon.graph.date,
+			date: lemma.document.date,
 			root: root ?? breadcrumbs.first!,
 			breadcrumbs: breadcrumbs,
 			suggestions: lemma.childrenSortedByType
@@ -216,14 +216,13 @@ public extension CLI {
 public extension CLI {
 	
 	@discardableResult
-	mutating func update(with lexicon: Lexicon? = nil) async -> Self {
+	mutating func update(with lexicon: Lexicon) async -> Self {
 		self = await updated(with: lexicon)
 		return self
 	}
 	
 	@LexiconActor
-	func updated(with lexicon: Lexicon? = nil) -> CLI {
-		let lexicon = lexicon ?? self.lemma.lexicon
+	func updated(with lexicon: Lexicon) -> CLI {
 		var o = self
 		o.date = lexicon.graph.date
 		o.root = lexicon[o.root.id] ?? lexicon.root
@@ -262,7 +261,7 @@ public extension Lemma {
 	func suggestions(for input: String) -> [Lemma] {
 		let input = input.lowercased()
 		return childrenSortedByType.filter { child in
-			child.name.lowercased().starts(with: input)
+			child.name.rawValue.lowercased().starts(with: input)
 		}
 	}
 	
@@ -276,7 +275,7 @@ public extension Lemma {
 		}
 		var o = [(self, ownChildren.valuesInKeyOrder)]
 		for type in ownType.valuesInKeyOrder {
-			o.append((type.unwrapped, type.children.keysInOrder.compactMap{ children[$0] }))
+			o.append((type, type.children.keysInOrder.compactMap { children[$0] }))
 		}
 		return o
 	}

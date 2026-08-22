@@ -32,12 +32,18 @@ enum AgentWriter {
 
 	static func write(_ string: String, output: URL?) throws {
 		if let output {
-			try Data(string.utf8).write(to: output)
+			try Data(string.utf8).write(to: output, options: .atomic)
 			try AgentJSON.print(WriteOutput(written: true, output: output.path))
 		} else {
 			print(string)
 		}
 	}
+
+}
+
+struct ValidationInput {
+	var document: Lexicon.Document
+	var diagnostics: [AgentDiagnostic]
 }
 
 extension Lexicon.Search.Mode {
@@ -95,8 +101,12 @@ extension Lexicon.Search.Scope {
 extension URL: @retroactive ExpressibleByArgument {
 
 	public init?(argument: String) {
-		if argument.hasPrefix("http") {
-			self.init(string: argument)
+		if
+			let remoteURL = URL(string: argument),
+			["http", "https"].contains(remoteURL.scheme?.lowercased()),
+			remoteURL.host != nil
+		{
+			self = remoteURL
 		} else {
 			self.init(fileURLWithPath: argument)
 		}
@@ -106,10 +116,32 @@ extension URL: @retroactive ExpressibleByArgument {
 		try TaskPaper(Data(contentsOf: self)).decodeDocument()
 	}
 
+	func validationInput(sourceOnly: Bool) throws -> ValidationInput {
+		let result = try TaskPaper(Data(contentsOf: self)).parse()
+		var diagnostics = result.diagnostics.map(AgentDiagnostic.init)
+		guard
+			!sourceOnly,
+			!result.diagnostics.contains(where: { $0.severity == .error })
+		else {
+			return ValidationInput(
+				document: result.document,
+				diagnostics: diagnostics
+			)
+		}
+
+			let plan = try result.document.composed(resolving: FileLexiconImportResolver(
+				baseURL: deletingLastPathComponent(),
+				rootURL: self
+			))
+		diagnostics.append(contentsOf: plan.conflicts.map(AgentDiagnostic.init))
+		return ValidationInput(document: plan.document, diagnostics: diagnostics)
+	}
+
 	func composedLexiconDocument() throws -> Lexicon.Document {
-		let plan = try lexiconDocument().composed(resolving: FileLexiconImportResolver(
-			baseURL: deletingLastPathComponent()
-		))
+			let plan = try lexiconDocument().composed(resolving: FileLexiconImportResolver(
+				baseURL: deletingLastPathComponent(),
+				rootURL: self
+			))
 		guard plan.conflicts.isEmpty else {
 			throw ValidationError(plan.conflicts.map(\.description).joined(separator: "\n"))
 		}
@@ -117,97 +149,7 @@ extension URL: @retroactive ExpressibleByArgument {
 	}
 }
 
-extension Lexicon.Document.Roots {
-
-	mutating func mutate(
-		_ key: Lexicon.Graph.Node.Name,
-		body: (inout Lexicon.Graph.Node) throws -> Void
-	) throws {
-		guard var value = self[key] else {
-			throw ValidationError("Could not find lemma: \(key)")
-		}
-		try body(&value)
-		self[key] = value
-	}
-}
-
-extension Set where Element == String {
-
-	func resolves(_ reference: String, fromParentOf id: String) -> Bool {
-		if contains(reference) {
-			return true
-		}
-		let components = id.pathComponents
-		guard components.count > 1 else {
-			return false
-		}
-		let parent = components.dropLast().joined(separator: ".")
-		return contains("\(parent).\(reference)")
-	}
-
-	func resolvesRelative(_ reference: String, fromParentOf id: String) -> Bool {
-		reference.resolvedRelative(fromParentOf: id, in: self) != nil
-	}
-}
-
 extension String {
-
-	var pathComponents: [String] {
-		components(separatedBy: ".").filter { !$0.isEmpty }
-	}
-
-	func isSameOrDescendant(of ancestor: String) -> Bool {
-		self == ancestor || hasPrefix("\(ancestor).")
-	}
-
-	func resolved(fromParentOf id: String, in index: Set<String>) -> String? {
-		if index.contains(self) {
-			return self
-		}
-		let components = id.pathComponents
-		guard components.count > 1 else {
-			return nil
-		}
-		let parent = components.dropLast().joined(separator: ".")
-		let relative = "\(parent).\(self)"
-		return index.contains(relative) ? relative : nil
-	}
-
-	func resolvedRelative(fromParentOf id: String, in index: Set<String>) -> String? {
-		let components = id.pathComponents
-		guard components.count > 1 else {
-			return nil
-		}
-		let parent = components.dropLast().joined(separator: ".")
-		let relative = "\(parent).\(self)"
-		return index.contains(relative) ? relative : nil
-	}
-
-	func rewritingReference(from oldID: String, to newID: String, at id: String, index: Set<String>) -> String {
-		if isSameOrDescendant(of: oldID) {
-			return newID + dropFirst(oldID.count)
-		}
-		guard let resolved = resolved(fromParentOf: id, in: index), resolved.isSameOrDescendant(of: oldID) else {
-			return self
-		}
-		return newID + resolved.dropFirst(oldID.count)
-	}
-
-	func relativeReference(fromParentOf id: String) -> String {
-		let components = id.pathComponents
-		guard components.count > 1 else {
-			return self
-		}
-		let parent = components.dropLast().joined(separator: ".")
-		if self == parent {
-			return ""
-		}
-		let prefix = "\(parent)."
-		guard hasPrefix(prefix) else {
-			return self
-		}
-		return String(dropFirst(prefix.count))
-	}
 
 	func shellWords() throws -> [String] {
 		var words: [String] = []

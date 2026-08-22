@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "wiki": {
+    "canonical": true,
+    "repository": "https://github.com/ollieatkinson/Lexicon.wiki.git",
+    "baselineRevision": "7fb0e3318ba02c30419bfaaf4485a964e20ad11b",
+    "validatedRevision": null,
+    "companionUpdateRequired": true
+  },
+  "repositoryAssertions": [
+    {
+      "file": "README.md",
+      "contains": [
+        "The GitHub wiki is the canonical home for narrative documentation",
+        "| `LexiconSearchMLX` |",
+        "| `LexiconSearchONNX` |",
+        "| `Editor` |",
+        "| `MLXSearch` |",
+        "| `ONNXSearch` |",
+        "| Android | Experimental",
+        "Documentation/Lexicon.docc/Migration-0.3.md"
+      ],
+      "excludes": [
+        "It also runs tests on an Android emulator",
+        "cross-builds Android ARM64"
+      ]
+    }
+  ],
+  "contracts": [
+    {
+      "id": "quick-start-commerce",
+      "page": "Quick-Start.md",
+      "marker": "quick-start-commerce",
+      "language": "taskpaper",
+      "fixture": "Documentation/WikiContract/Fixtures/quick-start-commerce.lexicon",
+      "sha256": "a1cf6b2354a11cd1ad89b3f8afb40fc3df99521883ce9b9c82ec3779e551bd28",
+      "checks": [
+        "taskpaper-tabs"
+      ]
+    },
+    {
+      "id": "quick-start-lsp",
+      "page": "Quick-Start.md",
+      "marker": "quick-start-lsp",
+      "language": "json",
+      "fixture": "Documentation/WikiContract/Fixtures/quick-start-lsp.json",
+      "sha256": "7f802f5408cbcbfbf41f022d432173954dd9114ed4550cd498fd118add4ea702",
+      "checks": [
+        "json"
+      ]
+    },
+    {
+      "id": "composition-base",
+      "page": "Composition-and-Imports.md",
+      "marker": "composition-base",
+      "language": "taskpaper",
+      "fixture": "Documentation/WikiContract/Fixtures/composition-base.lexicon",
+      "sha256": "726f01316497b0f93fe646484ba4e3559a22aa4316a9a4231f1b73ab9b57608a",
+      "checks": [
+        "taskpaper-tabs"
+      ]
+    },
+    {
+      "id": "composition-overlay",
+      "page": "Composition-and-Imports.md",
+      "marker": "composition-overlay",
+      "language": "taskpaper",
+      "fixture": "Documentation/WikiContract/Fixtures/composition-overlay.lexicon",
+      "sha256": "14d9b737620321130b465609955d926b7be86e4666753d52c0c267ef6f319e6e",
+      "checks": [
+        "taskpaper-tabs"
+      ]
+    },
+    {
+      "id": "composition-root",
+      "page": "Composition-and-Imports.md",
+      "marker": "composition-root",
+      "language": "taskpaper",
+      "fixture": "Documentation/WikiContract/Fixtures/composition-root.lexicon",
+      "sha256": "6c4dedc154c38741676fb30a62b921ecf714eb7090d8d1a7cbaed1b96daf5813",
+      "checks": [
+        "taskpaper-tabs"
+      ]
+    },
+    {
+      "id": "composition-expected",
+      "page": "Composition-and-Imports.md",
+      "marker": "composition-expected",
+      "language": "json",
+      "fixture": "Documentation/WikiContract/Fixtures/composition-expected.json",
+      "sha256": "5f5c38af718ca4ea92b5a2395b6218ddd6379cc8f39d77d8f4036fb0af14a287",
+      "checks": [
+        "json",
+        "composition-precedence"
+      ]
+    },
+    {
+      "id": "cli-validation-contract",
+      "page": "CLI-Reference.md",
+      "marker": "cli-validation-contract",
+      "language": "json",
+      "fixture": "Documentation/WikiContract/Fixtures/cli-validation-contract.json",
+      "sha256": "a2d295b634136f400cf6bac38968386ebf7ace4e8b9f204ec6d9c98c8278a571",
+      "checks": [
+        "json",
+        "cli-validation-contract"
+      ]
+    },
+    {
+      "id": "runtime-events-basic",
+      "page": "Runtime-Events.md",
+      "marker": "runtime-events-basic",
+      "language": "swift",
+      "fixture": "Documentation/WikiContract/Fixtures/runtime-events-basic.swift",
+      "sha256": "9f650010e2857c0f0747a2149e3abcd70c385feba59c3caf3ff2e6a8d804c125",
+      "checks": [
+        "runtime-events-api"
+      ]
+    }
+  ]
+}

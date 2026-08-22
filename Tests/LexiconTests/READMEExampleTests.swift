@@ -2,12 +2,15 @@
 // github.com/screensailor 2026
 //
 
+import Testing
 import Foundation
-import Hope
 @testable import Lexicon
 
-final class READMEExampleTests: Hopes {
+@Suite
 
+struct READMEExampleTests {
+
+	@Test
 	func test_readme_commerce_example_composes() async throws {
 
 		let examples = try Self.resourceExamples()
@@ -23,100 +26,96 @@ final class READMEExampleTests: Hopes {
 		let source = baseURL.appendingPathComponent("commerce.lexicon")
 		let document = try TaskPaper(Data(contentsOf: source)).decodeDocument()
 
-		hope(document.comments) == ["Commerce language shared by API, UI, session and product surfaces."]
-		hope(document.notes) == ["Product teams can add local dialects without replacing the shared vocabulary."]
-		hope(document.imports) == [.init("./shared-commerce.lexicon")]
-		hope(Array(document.roots.keys)) == ["commerce", "support"]
+		#expect(document.comments == ["Commerce language shared by API, UI, session and product surfaces."])
+		#expect(document.notes == ["Product teams can add local dialects without replacing the shared vocabulary."])
+		#expect(document.imports == [.init("./shared-commerce.lexicon")])
+		#expect(Array(document.roots.keys) == ["commerce", "support"])
 
 		let supportStatus = try document.roots["support"].try().child("case.status")
-		hope(supportStatus.type) == ["commerce.db.type.string"]
-		hope(supportStatus.defaultValue) == .literal(.string("open"))
+		#expect(supportStatus.type == ["commerce.db.type.string"])
+		#expect(supportStatus.defaultValue == .literal(.string("open")))
 
-		let plan = try document.composed(resolving: FileLexiconImportResolver(baseURL: baseURL))
+		let plan = try document.composed(resolving: FileLexiconImportResolver(
+			baseURL: baseURL,
+			rootURL: source
+		))
 
-		hope(plan.conflicts) == []
-		hope(Array(plan.document.roots.keys)) == ["commerce"]
+		#expect(plan.conflicts == [])
+		#expect(Array(plan.document.roots.keys) == ["commerce", "support"])
 
 		let commerce = try plan.document.roots["commerce"].try()
-		hope(commerce.notes) == ["Terms under this root are composed into generated platform code."]
-		hope(Array(commerce.children.keys)) == ["api", "db", "session", "support", "ui", "ux"]
+		#expect(commerce.notes == ["Terms under this root are composed into generated platform code."])
+		#expect(Array(commerce.children.keys) == ["api", "db", "session", "ui", "ux"])
 
 		let product = try commerce.child("api.storefront.products.product")
-		hope(product.type) == ["commerce.db.collection"]
+		#expect(product.type == ["commerce.db.collection"])
 
 		let eligible = try commerce.child("api.storefront.products.product.is.eligible")
-		hope(eligible.type) == [
+		#expect(eligible.type == [
 			"commerce.db.type.boolean",
 			"commerce.session.state.value",
-		]
+		])
 
 		let submit = try commerce.child("api.storefront.order.create.can.submit")
-		hope(submit.type) == [
+		#expect(submit.type == [
 			"commerce.db.type.boolean",
 			"commerce.session.configuration.value",
-		]
+		])
 
 		let primaryAction = try commerce.child("api.storefront.order.create.primary.action")
-		hope(primaryAction.type) == [
+		#expect(primaryAction.type == [
 			"commerce.ui.type.button.primary",
 			"commerce.ux.type.action",
-		]
+		])
 
 		let enabled = try commerce.child("ui.product.card.buy.enabled")
-		hope(enabled.type) == ["commerce.api.storefront.order.create.can.submit"]
-		hope(enabled.defaultValue) == .literal(.bool(true))
+		#expect(enabled.type == ["commerce.api.storefront.order.create.can.submit"])
+		#expect(enabled.defaultValue == .literal(.bool(true)))
 
 		let active = try commerce.child("ui.product.card.buy.active")
-		hope(active.protonym) == "enabled"
+		#expect(active.protonym == "enabled")
 
-		let composedSupportStatus = try commerce.child("support.case.status")
-		hope(composedSupportStatus.type) == ["commerce.db.type.string"]
-		hope(composedSupportStatus.defaultValue) == .literal(.string("open"))
+		let support = try plan.document.roots["support"].try()
+		let composedSupportStatus = try support.child("case.status")
+		#expect(composedSupportStatus.type == ["commerce.db.type.string"])
+		#expect(composedSupportStatus.defaultValue == .literal(.string("open")))
 
-		let lexicon = try await Lexicon.from(plan.document, root: "commerce")
-		let enabledLemma = try await lexicon["commerce.ui.product.card.buy.enabled"].hopefully()
-		let submitLemma = try await lexicon["commerce.api.storefront.order.create.can.submit"].hopefully()
+		let lexicon = try await Lexicon(
+			document: plan.document,
+			selectedRoot: "commerce"
+		)
+		let enabledLemma = try #require(await lexicon["commerce.ui.product.card.buy.enabled"])
+		let submitLemma = try #require(await lexicon["commerce.api.storefront.order.create.can.submit"])
 		let enabledDefault = await enabledLemma.defaultValue
 		let enabledIsSubmitCapability = await enabledLemma.is(submitLemma)
 		let json = await lexicon.json()
 
-		hope(enabledDefault) == .literal(.bool(true))
-		hope(enabledIsSubmitCapability) == true
+		#expect(enabledDefault == .literal(.bool(true)))
+		#expect(enabledIsSubmitCapability == true)
 
 		let rootJSON = try json.classes.first { $0.id == "commerce" }.try()
 		let enabledJSON = try json.classes.first { $0.id == "commerce.ui.product.card.buy.enabled" }.try()
 		let buyJSON = try json.classes.first { $0.id == "commerce.ui.product.card.buy" }.try()
 
-		hope(rootJSON.notes) == ["Terms under this root are composed into generated platform code."]
-		hope(enabledJSON.defaultValue) == DefaultValueJSON(.literal(.bool(true)))
-		hope(buyJSON.synonyms) == ["active": "enabled"]
+		#expect(rootJSON.notes == ["Terms under this root are composed into generated platform code."])
+		#expect(enabledJSON.defaultValue == DefaultValueJSON(.literal(.bool(true))))
+		#expect(buyJSON.synonyms == ["active": "enabled"])
 	}
 
-	func test_readme_swift_examples_use_generated_member_access() throws {
+	@Test
+	func test_readme_links_to_wiki_and_keeps_generated_member_access_example() throws {
 
 		guard let readme = try Self.readmeIfAvailable() else {
 			return
 		}
 
-		hope.false(readme.contains("lexicon[\""))
-		hope.true(readme.contains("commerce.api.storefront.order.create.can.submit"))
-		hope.true(readme.contains("commerce.ui.product.card.buy.enabled"))
-
-		for filename in Self.connectedExampleFilenames {
-			hope.true(readme.contains("<summary><code>\(filename)</code></summary>"))
-		}
-	}
-
-	func test_readme_taskpaper_examples_match_test_resources_when_available() throws {
-
-		guard let readme = try Self.readmeIfAvailable() else {
-			return
-		}
-
-		for (filename, resource) in try Self.resourceExamples() {
-			let example = try Self.taskpaperExample(named: filename, in: readme)
-			hope(example) == resource
-		}
+		#expect(!(readme.contains("lexicon[\"")))
+		#expect(readme.contains("commerce.api.order.submit"))
+		#expect(readme.contains("commerce.ui.checkout.button.primary"))
+		#expect(readme.contains("https://github.com/ollieatkinson/Lexicon/wiki/Quick-Start"))
+		#expect(readme.contains("https://github.com/ollieatkinson/Lexicon/wiki/Gardening-Philosophy"))
+		#expect(readme.contains("https://github.com/ollieatkinson/Lexicon/wiki/Example-Commerce-Vocabulary"))
+		#expect(readme.contains("https://github.com/ollieatkinson/Lexicon/wiki/Editor-Support"))
 	}
 }
 
@@ -142,30 +141,9 @@ private extension READMEExampleTests {
 			forResource: "Resources/READMEExamples/\(filename)",
 			withExtension: nil
 		) else {
-			throw "README example resource not found: \(filename)"
+			throw LexiconError("README example resource not found: \(filename)")
 		}
 		return try String(contentsOf: url, encoding: .utf8).droppingTrailingNewline()
-	}
-
-	static func taskpaperExample(named filename: String, in readme: String) throws -> String {
-		let marker = filename == mainExampleFilename
-			? "`\(filename)`"
-			: "<summary><code>\(filename)</code></summary>"
-		guard let markerRange = readme.range(of: marker) else {
-			throw "README example marker not found: \(filename)"
-		}
-
-		let tail = readme[markerRange.upperBound...]
-		guard let fenceStart = tail.range(of: "```taskpaper\n") else {
-			throw "README TaskPaper fence not found: \(filename)"
-		}
-
-		let content = tail[fenceStart.upperBound...]
-		guard let fenceEnd = content.range(of: "\n```") else {
-			throw "README TaskPaper fence end not found: \(filename)"
-		}
-
-		return String(content[..<fenceEnd.lowerBound])
 	}
 
 	static func readmeIfAvailable() throws -> String? {
@@ -185,7 +163,8 @@ private extension Lexicon.Graph.Node {
 
 	func child(_ path: String) throws -> Self {
 		try path.split(separator: ".").reduce(self) { node, component in
-			try node.children[String(component)].try()
+			let name = try Lemma.Name(validating: String(component))
+			return try node.children[name].try()
 		}
 	}
 }

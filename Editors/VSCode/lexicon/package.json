@@ -1,0 +1,127 @@
+{
+  "name": "lexicon",
+  "displayName": "Lexicon",
+  "description": "Lexicon language support.",
+  "version": "0.0.1",
+  "publisher": "ollieatkinson",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ollieatkinson/Lexicon.git",
+    "directory": "Editors/VSCode/lexicon"
+  },
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "lexicon",
+    "lsp",
+    "ontology"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Syntax highlighting remains available in Restricted Mode. Trust the workspace before the Lexicon language server can run.",
+      "restrictedConfigurations": [
+        "lexicon.lsp.binary.path",
+        "lexicon.lsp.binary.arguments",
+        "lexicon.lsp.binary.env"
+      ]
+    }
+  },
+  "activationEvents": [
+    "onLanguage:lexicon",
+    "workspaceContains:lexicon-lsp.json",
+    "workspaceContains:**/lexicon-lsp.json",
+    "workspaceContains:.lexicon-lsp.json",
+    "workspaceContains:**/.lexicon-lsp.json",
+    "workspaceContains:lexicon.conf",
+    "workspaceContains:**/lexicon.conf",
+    "workspaceContains:.lexicon.conf",
+    "workspaceContains:**/.lexicon.conf",
+    "onCommand:lexicon.restartLanguageServer",
+    "onCommand:lexicon.showOutput"
+  ],
+  "main": "./dist/extension.js",
+  "scripts": {
+    "check": "tsc -p ./ --noEmit",
+    "compile": "tsc -p ./ && npm run bundle",
+    "bundle": "esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --minify --outfile=dist/extension.js --sourcemap",
+    "watch": "tsc -watch -p ./",
+    "test:unit": "npm run compile && node --test out/test/*.test.js",
+    "test:extension": "npm run compile && swift build --package-path ../../.. --product lexicon-lsp && node ./out/test/runTest.js",
+    "test": "npm run test:unit && npm run test:extension",
+    "package": "npm run compile && vsce package --out lexicon.vsix",
+    "audit": "npm audit --audit-level=high"
+  },
+  "dependencies": {
+    "vscode-languageclient": "10.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "@types/vscode": "1.100.0",
+    "@vscode/test-electron": "3.1.0",
+    "@vscode/vsce": "3.9.2",
+    "esbuild": "0.28.1",
+    "typescript": "7.0.2"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "lexicon.restartLanguageServer",
+        "title": "Lexicon: Restart Language Server",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "lexicon.showOutput",
+        "title": "Lexicon: Show Language Server Output"
+      }
+    ],
+    "configuration": {
+      "title": "Lexicon",
+      "properties": {
+        "lexicon.lsp.binary.path": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the lexicon-lsp executable. If empty, the extension checks workspace .build folders and then PATH."
+        },
+        "lexicon.lsp.binary.arguments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Arguments passed to lexicon-lsp."
+        },
+        "lexicon.lsp.binary.env": {
+          "type": "object",
+          "default": {},
+          "description": "Environment variables added when launching lexicon-lsp."
+        }
+      }
+    },
+    "languages": [
+      {
+        "id": "lexicon",
+        "aliases": [
+          "Lexicon",
+          "lexicon"
+        ],
+        "extensions": [
+          ".lexicon"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "lexicon",
+        "scopeName": "source.lexicon",
+        "path": "./syntaxes/lexicon.tmLanguage.json"
+      }
+    ]
+  }
+}

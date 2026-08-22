@@ -2,13 +2,17 @@
 // github.com/screensailor 2026
 //
 
+import Testing
 import Foundation
 
-final class SKOSJSONLDTests: Hopes {
+@Suite
 
+struct SKOSJSONLDTests {
+
+	@Test
 	func test_skos_json_ld_export_maps_lexicon_concepts() async throws {
 
-		let lexicon = try await Lexicon.from(TaskPaper("""
+		let lexicon = try await TaskPaper("""
 			root:
 			> root note
 				animal:
@@ -20,12 +24,12 @@ final class SKOSJSONLDTests: Hopes {
 					name:
 				kitty:
 				= cat
-			""").decodeDocument())
+			""").lexicon()
 		let json = await lexicon.json()
 		let output = try SKOSJSONLD.generate(json).string()
 
-		hope(SKOSJSONLD.utType.preferredFilenameExtension) == "jsonld"
-		hope(output) == """
+		#expect(SKOSJSONLD.utType.preferredFilenameExtension == "jsonld")
+		#expect(output == """
 			{
 			  "@context" : {
 			    "lexicon" : "https:\\/\\/github.com\\/ollieatkinson\\/Lexicon#",
@@ -118,6 +122,30 @@ final class SKOSJSONLDTests: Hopes {
 			    }
 			  ]
 			}
-			"""
+			""")
+	}
+
+	@Test
+	func test_skos_json_ld_maps_protonym_chains_to_the_canonical_concept() async throws {
+		let json = try await TaskPaper("""
+			root:
+				target:
+				alias1:
+				= target
+				alias2:
+				= alias1
+			""").lexicon().json()
+		let alias2 = try json.classes.first { $0.id == "root.alias2" }.try()
+		#expect(alias2.protonym == "root.alias1")
+
+		let output = try SKOSJSONLD.generate(json).string()
+
+		#expect(output.contains(#""name" : "alias1""#))
+		#expect(output.contains(#""name" : "alias2""#))
+		#expect(
+			output.components(separatedBy: #""protonym" : "root.target""#).count - 1 == 2
+		)
+		#expect(!output.contains(#""@id" : "root.alias1""#))
+		#expect(!output.contains(#""@id" : "root.alias2""#))
 	}
 }

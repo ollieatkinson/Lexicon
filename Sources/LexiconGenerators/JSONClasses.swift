@@ -19,6 +19,9 @@ public enum JSONClasses: CodeGenerator {
 		return try encoder.encode(json)
 	}
 	
+	// Foundation declares these base classes @unchecked Sendable. These
+	// subclasses add no stored state, so restate the inherited conformance.
+	// Remove this when Foundation provides checked Sendable conformances.
 	public class Encoder: JSONEncoder, @unchecked Sendable {
 		public override init() {
 			super.init()

@@ -6,39 +6,76 @@ import Collections
 import Foundation
 
 public extension Lexicon.Graph {
-	
-	// TODO: array of referenced nodes (i.e. useful protocols/interfaces)
-	
+
 	struct JSON: Codable, Sendable {
 		public var date: Date
 		public var name: Lemma.Name
 		public var classes: [Node.Class.JSON]
+		public var references: OrderedSet<Lemma.ID>?
 	}
 }
 
 public extension Lexicon {
 	
 	func json() -> Graph.JSON {
-		Graph.JSON(
+		let classes = classes().values.map(\.json).sorted { $0.id < $1.id }
+		return Graph.JSON(
 			date: document.date,
-			name: graph.root.name,
-			classes: classes().values.map(\.json).sorted { $0.id < $1.id }
+			name: graph.rootName,
+			classes: classes,
+			references: classes.references
 		)
 	}
 
 	func classes() -> [Lemma.ID: Graph.Node.Class] {
 
 		var classes: [Lemma.ID: Graph.Node.Class] = [:]
+		var discovered: Set<Lemma.ID> = []
+		var expanded: Set<Lemma.ID> = []
 
-		for root in roots.values {
-			root.graphTraversal(.depthFirst) { lemma in
-				let o = Graph.Node.Class(lemma: lemma)
-				classes[o.json.id] = o
+		func add(_ lemma: Lemma, includingChildren: Bool) {
+			if discovered.insert(lemma.id).inserted {
+				let klass = Graph.Node.Class(lemma: lemma)
+				classes[klass.json.id] = klass
+
+				for dependency in lemma.ownType.values {
+					addDependency(dependency)
+				}
+				if let protonym = lemma.protonym {
+					addDependency(protonym)
+				}
+				if
+					case .reference(let reference) = lemma.defaultValue,
+					let dependency = self[reference]
+				{
+					addDependency(dependency)
+				}
+			}
+
+			guard includingChildren, expanded.insert(lemma.id).inserted else {
+				return
+			}
+			for child in lemma.ownChildren.values {
+				add(child, includingChildren: true)
 			}
 		}
 
-		for klass in classes.values {
+		func addDependency(_ dependency: Lemma) {
+			let lineage = Array(dependency.lineage).reversed()
+			for lemma in lineage {
+				// A generated ancestor exposes all of its declared members. Keep
+				// that dependency root internally complete so none of those
+				// generated member references dangle.
+				add(lemma, includingChildren: true)
+			}
+		}
+
+		add(root, includingChildren: true)
+
+		let declaredClasses = classes.values.sorted { $0.json.id < $1.json.id }
+		for klass in declaredClasses {
 			klass.json.supertype = Lemma.supertype(for: klass, in: &classes)
+			klass.refreshReferences()
 		}
 
 		return classes
@@ -58,6 +95,7 @@ public extension Lemma {
 		
 		for klass in classes.values {
 			klass.json.supertype = Self.supertype(for: klass, in: &classes)
+			klass.refreshReferences()
 		}
 		
 		return classes
@@ -67,7 +105,7 @@ public extension Lemma {
 public extension Sequence where Element == Lexicon.Graph.Node.Class {
 	
 	func sortedByDependancy() -> [Element] {
-		sorted{ l, r in l.json.id.lexicographicallyPrecedes(r.json.id) }.sorted{ l, r in
+		sorted { l, r in l.json.id < r.json.id }.sorted { l, r in
 			r.is(l)
 		}
 	}
@@ -78,7 +116,7 @@ private extension Sequence where Element == Lemma {
 	@LexiconActor func sortedByChildCount() -> [Element] {
 		sorted{ l, r in
 			guard l.ownChildren.count != r.ownChildren.count else {
-				return l.id.lexicographicallyPrecedes(r.id)
+				return l.id < r.id
 			}
 			return l.ownChildren.count > r.ownChildren.count
 		}
@@ -96,30 +134,59 @@ fileprivate extension Lemma {
 		guard type.count > 1 else {
 			return first
 		}
-		let orderedType = klass.lemma?.ownType.values.map(\.unwrapped).sortedByChildCount() ?? []
-		return mixin(forOrderedType: orderedType, in: &classes).json.id
+		return mixin(forOrderedType: klass.orderedType, in: &classes)?.json.id
 	}
-	
-	static func mixin(forOrderedType type: [Lemma], in classes: inout [ID: Class]) -> Class {
+
+	static func mixin(
+		forOrderedType type: [ID],
+		in classes: inout [ID: Class]
+	) -> Class? {
 		guard type.count > 1, let first = type.first, let last = type.last else {
-			fatalError()
+			return nil
 		}
-		let id = type.map(\.id).joined(separator: "_&_")
-		if let o = classes[id] {
-			return o
+
+		let baseName = "mixin_" + type
+			.map { id in
+				id.description.utf8.map { byte in
+					let hex = String(byte, radix: 16)
+					return byte < 16 ? "0\(hex)" : hex
+				}.joined()
+			}
+			.joined(separator: "_and_")
+		var collision = 0
+		let id: ID
+		while true {
+			let rawName = collision == 0 ? baseName : "\(baseName)_\(collision)"
+			guard let name = try? Lemma.Name(validating: rawName) else {
+				return nil
+			}
+			let candidate = Lemma.ID(root: name)
+			if let existing = classes[candidate] {
+				if existing.synthesizedMixinTypes == type {
+					return existing
+				}
+				collision += 1
+				continue
+			}
+			id = candidate
+			break
 		}
-		let supertype: Class
+
+		let supertype: Class?
 		if type.count > 2 {
 			supertype = mixin(forOrderedType: Array(type.dropLast()), in: &classes)
 		} else {
-			supertype = classes[first.id]!
+			supertype = classes[first]
 		}
-		let mixin = classes[last.id]!
+		guard let supertype, let mixin = classes[last] else {
+			return nil
+		}
 		let klass = Class(
 			id: id,
 			supertype: supertype.json.id,
 			mixin: mixin,
-			kind: supertype.kind.union(mixin.kind)
+			kind: supertype.kind.union(mixin.kind),
+			synthesizedMixinTypes: type
 		)
 		classes[klass.json.id] = klass
 		return klass
@@ -129,53 +196,91 @@ fileprivate extension Lemma {
 public extension Lexicon.Graph.Node {
 	
 	class Class: Hashable {
-		
+
 		public var json: JSON
-		public let lemma: Lemma? // TODO: removing lemma would allow for synchronous code generation
+		public let children: OrderedJSONDictionary<Lemma.ID>?
+		let inheritedChildren: OrderedJSONDictionary<Lemma.ID>?
+		public let orderedType: [Lemma.ID]
 		public var kind: Set<Lemma.ID>
-		
+		fileprivate let synthesizedMixinTypes: [Lemma.ID]?
+
 		@LexiconActor init(lemma: Lemma) {
-			
+			let type = lemma.ownType
+				.keys
+				.unlessEmpty
+			let children = lemma.ownChildren
+				.filter(\.value.protonym.isNil)
+				.map { (name, lemma) in (name.rawValue, lemma.id) }
+				.sorted { $0.0 < $1.0 }
+				.unlessEmpty
+				.map(OrderedJSONDictionary.init(uniqueKeysWithValues:))
+			let inheritedChildren = lemma.node.protonym.isNil
+				? lemma.children
+					.filter(\.value.protonym.isNil)
+					.map { (name, lemma) in (name.rawValue, lemma.id) }
+					.sorted { $0.0 < $1.0 }
+					.unlessEmpty
+					.map(OrderedJSONDictionary.init(uniqueKeysWithValues:))
+				: nil
+			let synonyms = lemma.ownChildren
+				.compactMap { (name, lemma) in
+					lemma.node.protonym.map { protonym in (name.rawValue, protonym) }
+				}
+				.sorted { $0.0 < $1.0 }
+				.unlessEmpty
+				.map(OrderedJSONDictionary.init(uniqueKeysWithValues:))
+
 			self.json = JSON(
 				id: lemma.id,
 				protonym: lemma.protonym?.id,
-				type: lemma.ownType
-					.keys
-					.unlessEmpty,
-				children: lemma.ownChildren
-					.filter(\.value.protonym.isNil)
-					.keys
-					.unlessEmpty,
-				synonyms: lemma.ownChildren
-					.compactMap{ (name, lemma) in lemma.node.protonym.map{ protonym in (name, protonym)  } }
-					.unlessEmpty
-					.map{ Dictionary($0){ _, last in last }},
+				type: type,
+				children: children.map {
+					OrderedSet($0.values.keys.map { try! Lemma.Name(validating: $0) })
+				},
+				synonyms: synonyms,
 				defaultValue: lemma.jsonDefaultValue.map(Lexicon.Graph.Node.DefaultValue.JSON.init),
 				notes: lemma.node.notes.unlessEmpty
 			)
-			
-			self.lemma = lemma
+
+			self.children = children
+			self.inheritedChildren = inheritedChildren
+			self.orderedType = lemma.ownType.values
+				.sortedByChildCount()
+				.map(\.id)
 			self.kind = Set(lemma.type.keys)
+			self.synthesizedMixinTypes = nil
+			refreshReferences()
 		}
-		
-		@LexiconActor init(id: Lemma.ID, supertype: Lemma.ID, mixin: Lexicon.Graph.Node.Class, kind: Set<Lemma.ID>) {
-			
+
+		init(
+			id: Lemma.ID,
+			supertype: Lemma.ID,
+			mixin: Lexicon.Graph.Node.Class,
+			kind: Set<Lemma.ID>,
+			synthesizedMixinTypes: [Lemma.ID]
+		) {
+
 			self.json = JSON(
 				id: id,
 				supertype: supertype,
 				mixin: JSON.Mixin(
 					type: mixin.json.id,
-					children: mixin.lemma?.children
-						.map{ (name, child) in (name, "\(child.id)") }
-						.unlessEmpty
-						.map{ Dictionary($0){ _, last in last } }
+					children: mixin.inheritedChildren
 				)
 			)
-			
-			self.lemma = nil
+
+			self.children = nil
+			self.inheritedChildren = nil
+			self.orderedType = synthesizedMixinTypes
 			self.kind = kind
+			self.synthesizedMixinTypes = synthesizedMixinTypes
+			refreshReferences()
 		}
-		
+
+		func refreshReferences() {
+			json.references = json.referencedIDs
+		}
+
 		@inlinable public func `is`(_ type: Class) -> Bool {
 			self.kind.contains(type.json.id)
 		}
@@ -191,19 +296,18 @@ public extension Lexicon.Graph.Node {
 }
 
 extension Lexicon.Graph.Node.Class: Encodable {
-	
-	// TODO: replace dictionaries with OrderedDictionary when it's json serialisation is fixed
-	
+
 	public struct JSON: Codable, Sendable {
 		public var id: Lemma.ID
 		public var protonym: Lemma.ID?
 		public var type: OrderedSet<Lemma.ID>?
 		public var children: OrderedSet<Lemma.Name>?
-		public var synonyms: [Lemma.Name: Lemma.Protonym]?
+		public var synonyms: OrderedJSONDictionary<Lemma.Protonym>?
 		public var defaultValue: Lexicon.Graph.Node.DefaultValue.JSON?
 		public var notes: [String]?
 		public var supertype: Lemma.ID?
 		public var mixin: Mixin?
+		public var references: OrderedSet<Lemma.ID>?
 	}
 	
 	@inlinable public func encode(to encoder: Encoder) throws {
@@ -212,10 +316,10 @@ extension Lexicon.Graph.Node.Class: Encodable {
 }
 
 public extension Lexicon.Graph.Node.Class.JSON {
-	
+
 	struct Mixin: Codable, Sendable {
 		public var type: Lemma.ID
-		public var children: [Lemma.Name: Lemma.ID]?
+		public var children: OrderedJSONDictionary<Lemma.ID>?
 	}
 }
 
@@ -227,6 +331,42 @@ public extension Lexicon.Graph.Node.Class.JSON {
 	
 	var hasNoProperties: Bool {
 		(children?.isEmpty ?? true) && (synonyms?.isEmpty ?? true) && (mixin?.children?.isEmpty ?? true)
+	}
+
+	var referencedIDs: OrderedSet<Lemma.ID>? {
+		var references: OrderedSet<Lemma.ID> = []
+		if let protonym {
+			references.append(protonym)
+		}
+		for type in type ?? [] {
+			references.append(type)
+		}
+		for child in children ?? [] {
+			references.append(id.appending(child))
+		}
+		for (_, protonym) in synonyms ?? [:] {
+			references.append(id.appending(protonym))
+		}
+		if let reference = defaultValue?.reference {
+			references.append(reference)
+		}
+		if let supertype {
+			references.append(supertype)
+		}
+		if let mixin {
+			references.append(mixin.type)
+			for (_, child) in mixin.children ?? [:] {
+				references.append(child)
+			}
+		}
+		return references.unlessEmpty
+	}
+}
+
+private extension Sequence where Element == Lexicon.Graph.Node.Class.JSON {
+
+	var references: OrderedSet<Lemma.ID>? {
+		OrderedSet(flatMap { $0.references ?? [] }).unlessEmpty
 	}
 }
 
@@ -263,7 +403,8 @@ private extension JSONValue {
 			case .object(let object) where fields.isNotEmpty:
 				let values = object.reduce(into: [String: JSONValue]()) { values, field in
 					guard
-						let lemma = fields[field.key],
+						let name = try? Lemma.Name(validating: field.key),
+						let lemma = fields[name],
 						let value = field.value.filtered(matching: lemma)
 					else {
 						return
@@ -278,5 +419,77 @@ private extension JSONValue {
 			default:
 				return fields.isEmpty ? self : nil
 		}
+	}
+}
+
+public struct OrderedJSONDictionary<Value: Codable & Sendable>: Sendable {
+	public var values: OrderedDictionary<String, Value>
+
+	public init(_ values: OrderedDictionary<String, Value>) {
+		self.values = values
+	}
+
+	public init<S>(uniqueKeysWithValues keysAndValues: S) where S: Sequence, S.Element == (String, Value) {
+		self.values = OrderedDictionary(uniqueKeysWithValues: keysAndValues)
+	}
+}
+
+extension OrderedJSONDictionary: ExpressibleByDictionaryLiteral {
+	public init(dictionaryLiteral elements: (String, Value)...) {
+		self.init(uniqueKeysWithValues: elements)
+	}
+}
+
+extension OrderedJSONDictionary: Sequence {
+	public typealias Element = (key: String, value: Value)
+
+	public var isEmpty: Bool {
+		values.isEmpty
+	}
+
+	public func makeIterator() -> AnyIterator<Element> {
+		var iterator = values.makeIterator()
+		return AnyIterator {
+			iterator.next()
+		}
+	}
+}
+
+extension OrderedJSONDictionary: Codable {
+	public init(from decoder: Decoder) throws {
+		let container = try decoder.container(keyedBy: OrderedJSONDictionaryKey.self)
+		let pairs = try container.allKeys
+			.sorted { $0.stringValue < $1.stringValue }
+			.map { key in
+				(key.stringValue, try container.decode(Value.self, forKey: key))
+			}
+		self.init(uniqueKeysWithValues: pairs)
+	}
+
+	public func encode(to encoder: Encoder) throws {
+		var container = encoder.container(keyedBy: OrderedJSONDictionaryKey.self)
+		for (key, value) in values {
+			try container.encode(value, forKey: OrderedJSONDictionaryKey(key))
+		}
+	}
+}
+
+extension OrderedJSONDictionary: Equatable where Value: Equatable {}
+
+private struct OrderedJSONDictionaryKey: CodingKey {
+	var stringValue: String
+	var intValue: Int?
+
+	init(_ stringValue: String) {
+		self.stringValue = stringValue
+		self.intValue = nil
+	}
+
+	init?(stringValue: String) {
+		self.init(stringValue)
+	}
+
+	init?(intValue: Int) {
+		return nil
 	}
 }
