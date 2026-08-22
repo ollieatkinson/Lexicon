@@ -13,8 +13,10 @@
       "contains": [
         "The GitHub wiki is the canonical home for narrative documentation",
         "| `LexiconSearchMLX` |",
+        "| `LexiconSearchONNX` |",
         "| `Editor` |",
         "| `MLXSearch` |",
+        "| `ONNXSearch` |",
         "| Android | Experimental",
         "Documentation/Lexicon.docc/Migration-0.3.md"
       ],

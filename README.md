@@ -183,6 +183,30 @@ swift run lexicon format commerce.lexicon --write
 
 Search supports hybrid, semantic, token and lexical modes. The default `hybrid` mode is the normal entry point; use narrower modes when you need deterministic ID matching or semantic ranking.
 
+```sh
+swift run --traits MLXSearch lexicon search commerce.lexicon "order submit" \
+	--embedding-provider mlx \
+	--embedding-model TaylorAI/bge-micro-v2
+```
+
+MLX document embeddings are cached under the user cache directory by default. The first semantic search builds the cache and logs indexing progress to stderr; pass `--embedding-cache` or `--rebuild-embeddings` to control that cache.
+
+For a portable ONNX Runtime backend, fetch the model/runtime artifacts with the SwiftPM command plugin, then build with the `ONNXSearch` trait:
+
+```sh
+swift package --disable-sandbox --allow-writing-to-package-directory \
+	setup-onnx-search-artifacts -- \
+	--preset bge-small-en-v1.5 \
+	--runtime linux-x64
+
+swift run --traits ONNXSearch lexicon search commerce.lexicon "order submit" \
+	--mode semantic \
+	--embedding-provider onnx \
+	--embedding-model-preset bge-small-en-v1.5
+```
+
+ONNX presets currently include MiniLM, BGE-small, GTE-small and E5-small-v2. BGE-small is a good first ONNX model to try for semantic search, but `hybrid` remains the default because exact graph names and references still matter.
+
 See [CLI Reference](https://github.com/ollieatkinson/Lexicon/wiki/CLI-Reference) and [Search](https://github.com/ollieatkinson/Lexicon/wiki/Search).
 
 ## Package Products
@@ -193,6 +217,7 @@ See [CLI Reference](https://github.com/ollieatkinson/Lexicon/wiki/CLI-Reference)
 | `SwiftLexicon` | Runtime support for generated Swift lexicons and event streams. |
 | `LexiconGenerators` | Code generators and generator registry. |
 | `LexiconSearchMLX` | MLX-backed embedding provider when the `MLXSearch` trait is enabled. |
+| `LexiconSearchONNX` | ONNX Runtime embedding provider when the `ONNXSearch` trait is enabled. |
 | `_JSON` | JSON support used by package and generated runtime code; no independent compatibility promise. |
 | `_Collections` | Collection support used by package implementation; no independent compatibility promise. |
 | `lexicon` | CLI for validating, inspecting, formatting, diffing and editing lexicons. |
@@ -200,6 +225,7 @@ See [CLI Reference](https://github.com/ollieatkinson/Lexicon/wiki/CLI-Reference)
 | `lexicon-lsp` | Sidecar language server for Lexicon path completions and diagnostics. |
 | `SwiftLibraryGeneratorPlugin` | SwiftPM plugin for generated Swift that depends on `SwiftLexicon`. |
 | `SwiftStandAloneGeneratorPlugin` | SwiftPM plugin for stand-alone generated Swift. |
+| `ONNXSearchArtifactsPlugin` | SwiftPM command plugin for downloading ONNX search model and runtime artifacts. |
 
 ## Package Traits
 
@@ -209,12 +235,14 @@ Traits are opt-in and have no defaults:
 | --- | --- |
 | `Editor` | Enables incremental graph-editing APIs in `Lexicon`; read-only clients do not compile the editor-only surface. |
 | `MLXSearch` | Links the MLX/tokenizer stack and enables MLX-backed semantic search in `LexiconSearchMLX` and `lexicon`. |
+| `ONNXSearch` | Enables portable ONNX Runtime semantic search in `LexiconSearchONNX` and `lexicon`. |
 
 Test or build the surface you adopt:
 
 ```sh
 swift test --traits Editor
 swift build --traits MLXSearch --product lexicon
+swift build --traits ONNXSearch --product lexicon
 ```
 
 See [Package products and traits](Documentation/Lexicon.docc/Package-Traits.md) for compatibility and availability boundaries.
@@ -235,6 +263,7 @@ Then depend on the products you need:
 .product(name: "SwiftLexicon", package: "Lexicon")
 .product(name: "LexiconGenerators", package: "Lexicon")
 .product(name: "LexiconSearchMLX", package: "Lexicon")
+.product(name: "LexiconSearchONNX", package: "Lexicon")
 ```
 
 The package currently declares Swift 6.3, Swift language mode 6, macOS 15 and iOS 18.
@@ -250,7 +279,7 @@ Package declarations and verification evidence are deliberately separate:
 | Linux | Supported | Built and tested in CI. |
 | Android | Experimental | Not currently verified by emulator or ARM64 cross-build CI. |
 
-On Apple platforms, sentence graph generation can use NaturalLanguage. Deterministic fallbacks keep the core API available when NaturalLanguage is unavailable. MLX-backed search has narrower host support and remains opt-in.
+On Apple platforms, sentence graph generation can use NaturalLanguage. Deterministic fallbacks keep the core API available when NaturalLanguage is unavailable. MLX-backed search has narrower host support and remains opt-in. ONNX-backed search is runtime-tested on Linux; its C shim is compile-tested on macOS, while Apple runtime setup and Android remain experimental.
 
 See [Platform Support](https://github.com/ollieatkinson/Lexicon/wiki/Platform-Support).
 

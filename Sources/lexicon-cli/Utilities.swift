@@ -69,6 +69,23 @@ extension Lexicon.Search.Mode {
 		}
 		self = mode
 	}
+
+	var agentArgument: String {
+		if self == .hybrid {
+			return "hybrid"
+		}
+		var components: [String] = []
+		if contains(.lexical) {
+			components.append("lexical")
+		}
+		if contains(.token) {
+			components.append("token")
+		}
+		if contains(.semantic) {
+			components.append("semantic")
+		}
+		return components.joined(separator: ",")
+	}
 }
 
 extension Lexicon.Search.Scope {

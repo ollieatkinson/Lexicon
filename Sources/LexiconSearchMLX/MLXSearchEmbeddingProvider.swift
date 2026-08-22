@@ -10,11 +10,14 @@ import Synchronization
 import Tokenizers
 
 public enum MLXSearchEmbeddingProviderError: Error, Hashable, Sendable, CustomStringConvertible {
+	case queryEmbeddingMissing
 	case tokenizerEncodingFailed(text: String, reason: String)
 	case tokenizerDecodingFailed(tokenIDs: [Int], reason: String)
 
 	public var description: String {
 		switch self {
+		case .queryEmbeddingMissing:
+			"MLX search did not return a query embedding."
 		case .tokenizerEncodingFailed(let text, let reason):
 			"MLX tokenizer could not encode \(String(reflecting: text)): \(reason)"
 		case .tokenizerDecodingFailed(let tokenIDs, let reason):
@@ -26,15 +29,25 @@ public enum MLXSearchEmbeddingProviderError: Error, Hashable, Sendable, CustomSt
 public struct MLXSearchEmbeddingProvider: Lexicon.Search.EmbeddingProvider {
 	public var descriptor: Lexicon.Search.EmbeddingDescriptor
 	private var container: EmbedderModelContainer
+	private let queryPrefix: String
+	private let documentPrefix: String
 	private let tokenizerFailures: TokenizerFailureRecorder
 
-	public init(modelID: String) async throws {
+	public init(
+		modelID: String,
+		queryPrefix: String = "search_query: ",
+		documentPrefix: String = "search_document: "
+	) async throws {
+		self.queryPrefix = queryPrefix
+		self.documentPrefix = documentPrefix
 		self.descriptor = .init(
 			provider: "mlx",
 			model: modelID,
 			tokenizer: "swift-tokenizers/auto",
 			normalized: true,
-			pooling: "mlx-embedders"
+			pooling: "mlx-embedders",
+			queryPrefix: queryPrefix,
+			documentPrefix: documentPrefix
 		)
 		let configuration = ModelConfiguration(id: modelID)
 		let tokenizerFailures = TokenizerFailureRecorder()
@@ -47,6 +60,21 @@ public struct MLXSearchEmbeddingProvider: Lexicon.Search.EmbeddingProvider {
 	}
 
 	public func embed(_ texts: [String]) async throws -> [[Double]] {
+		try await embedRaw(texts)
+	}
+
+	public func embedQuery(_ query: String) async throws -> [Double] {
+		guard let vector = try await embedRaw([queryPrefix + query]).first else {
+			throw MLXSearchEmbeddingProviderError.queryEmbeddingMissing
+		}
+		return vector
+	}
+
+	public func embedDocuments(_ texts: [String]) async throws -> [[Double]] {
+		try await embedRaw(texts.map { documentPrefix + $0 })
+	}
+
+	private func embedRaw(_ texts: [String]) async throws -> [[Double]] {
 		guard !texts.isEmpty else {
 			return []
 		}

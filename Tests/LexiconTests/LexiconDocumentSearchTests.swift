@@ -222,6 +222,42 @@ struct LexiconDocumentSearchTests {
 		)
 		#expect(decoded.identifier == descriptor.identifier)
 	}
+
+	@Test
+	func test_legacy_embedding_descriptor_decodes_with_legacy_prefixes() throws {
+		let data = Data("""
+			{
+				"provider": "test",
+				"model": "legacy",
+				"tokenizer": "test",
+				"normalized": true,
+				"pooling": "mean"
+			}
+			""".utf8)
+
+		let descriptor = try JSONDecoder().decode(
+			Lexicon.Search.EmbeddingDescriptor.self,
+			from: data
+		)
+
+		#expect(descriptor.queryPrefix == "search_query: ")
+		#expect(descriptor.documentPrefix == "search_document: ")
+	}
+
+	@Test
+	func test_default_embedding_provider_methods_apply_descriptor_prefixes() async throws {
+		let recorder = EmbeddingTextRecorder()
+		let provider = PrefixRecordingEmbeddingProvider(recorder: recorder)
+
+		_ = try await provider.embedQuery("refund status")
+		_ = try await provider.embedDocuments(["refund policy"])
+
+		let batches = await recorder.batches
+		#expect(batches == [
+			["query: refund status"],
+			["passage: refund policy"],
+		])
+	}
 }
 
 private extension LexiconDocumentSearchTests {
@@ -323,6 +359,39 @@ private actor EmbeddingBatchRecorder {
 	}
 }
 
+private actor EmbeddingTextRecorder {
+	private var recordedBatches: [[String]] = []
+
+	func record(_ texts: [String]) {
+		recordedBatches.append(texts)
+	}
+
+	var batches: [[String]] {
+		recordedBatches
+	}
+}
+
+private struct PrefixRecordingEmbeddingProvider: Lexicon.Search.EmbeddingProvider {
+	var recorder: EmbeddingTextRecorder
+	var descriptor: Lexicon.Search.EmbeddingDescriptor {
+		.init(
+			provider: "test",
+			model: "prefixed",
+			tokenizer: "test",
+			dimensions: 1,
+			normalized: false,
+			pooling: "test",
+			queryPrefix: "query: ",
+			documentPrefix: "passage: "
+		)
+	}
+
+	func embed(_ texts: [String]) async throws -> [[Double]] {
+		await recorder.record(texts)
+		return Array(repeating: [1], count: texts.count)
+	}
+}
+
 private struct RecordingEmbeddingProvider: Lexicon.Search.EmbeddingProvider {
 	var recorder: EmbeddingBatchRecorder
 	var descriptor: Lexicon.Search.EmbeddingDescriptor {
@@ -356,7 +425,7 @@ private struct KeywordEmbeddingProvider: Lexicon.Search.EmbeddingProvider {
 
 	func embed(_ texts: [String]) async throws -> [[Double]] {
 		texts.map { text in
-			if text.hasPrefix("search_query:") ||
+			if text.localizedCaseInsensitiveContains("provider query") ||
 				text.localizedCaseInsensitiveContains("semantic provider destination")
 			{
 				return [1, 0]

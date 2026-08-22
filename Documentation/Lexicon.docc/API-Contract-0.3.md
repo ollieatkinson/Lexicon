@@ -130,7 +130,9 @@ Direct bracket values are limited to values with an infallible JSON representati
 
 ## Compatibility boundaries
 
-`Lexicon`, `SwiftLexicon`, `LexiconGenerators`, and `LexiconSearchMLX` are public library products. Their public APIs follow the release's source-compatibility policy.
+`Lexicon`, `SwiftLexicon`, `LexiconGenerators`, `LexiconSearchMLX`, and `LexiconSearchONNX` are public library products. Their public APIs follow the release's source-compatibility policy.
+
+Embedding descriptors include query and document prefixes because those strings affect cache compatibility. Descriptors decoded from the earlier schema use the legacy `search_query: ` and `search_document: ` prefixes. Providers with model-specific conventions override those defaults, and semantic search never silently reuses a cache produced with different prefix semantics.
 
 Products whose names begin with an underscore are exposed for package implementation and generated-code support. They carry no independent source-compatibility promise unless a release note explicitly says otherwise.
 
