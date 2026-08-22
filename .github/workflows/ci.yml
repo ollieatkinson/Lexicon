@@ -64,6 +64,9 @@ jobs:
           swift --version
           swift --version | grep "Swift version $SWIFT_VERSION"
 
+      - name: Preserve root dependency lock
+        run: cp Package.resolved /tmp/Lexicon-Package.resolved
+
       - name: Build command-line product
         run: swift build --product lexicon -Xswiftc -warnings-as-errors
 
@@ -77,7 +80,7 @@ jobs:
         run: swift test -Xswiftc -strict-concurrency=complete -Xswiftc -warnings-as-errors
 
       - name: Verify root dependency lock
-        run: git diff --exit-code -- Package.resolved
+        run: cmp /tmp/Lexicon-Package.resolved Package.resolved
 
   onnx-linux:
     name: ONNX / Linux
@@ -93,6 +96,9 @@ jobs:
           swift --version
           swift --version | grep "Swift version $SWIFT_VERSION"
 
+      - name: Preserve root dependency lock
+        run: cp Package.resolved /tmp/Lexicon-ONNX-Package.resolved
+
       - name: Install ONNX model and Linux runtime
         run: >-
           swift package --disable-sandbox --allow-writing-to-package-directory
@@ -105,7 +111,7 @@ jobs:
         run: swift test --package-path IntegrationTests/ONNX
 
       - name: Verify root dependency lock
-        run: git -C "$GITHUB_WORKSPACE" diff --exit-code -- Package.resolved
+        run: cmp /tmp/Lexicon-ONNX-Package.resolved Package.resolved
 
   apple-integrations:
     name: Apple integrations
