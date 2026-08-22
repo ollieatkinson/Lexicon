@@ -14,27 +14,6 @@ func packagePath(_ path: String) -> String {
 let onnxRuntimeRoot = packagePath(environment["LEXICON_ONNX_RUNTIME_ROOT"] ?? ".build/onnx-runtime/current")
 let onnxRuntimePlatform = environment["LEXICON_ONNX_RUNTIME_PLATFORM"] ?? "linux-x64"
 let onnxRuntimeLibrary = packagePath(environment["LEXICON_ONNX_RUNTIME_LIB"] ?? "\(onnxRuntimeRoot)/lib/\(onnxRuntimePlatform)")
-#if os(macOS)
-let useAppleONNXRuntimeBindings = (environment["LEXICON_ONNX_USE_APPLE_BINDINGS"] ?? "1") != "0"
-	&& environment["LEXICON_ONNX_RUNTIME_PLATFORM"] == nil
-	&& environment["LEXICON_ONNX_RUNTIME_LIB"] == nil
-#else
-let useAppleONNXRuntimeBindings = false
-#endif
-let onnxRuntimeDependencies: [Target.Dependency] = useAppleONNXRuntimeBindings
-	? [
-		.product(
-			name: "onnxruntime",
-			package: "onnxruntime-swift-package-manager",
-			condition: .when(traits: ["ONNXSearch"])
-		)
-	]
-	: [
-		.target(
-			name: "CLexiconONNXRuntime",
-			condition: .when(traits: ["ONNXSearch"])
-		)
-	]
 
 let package = Package(
 	name: "Lexicon",
@@ -190,7 +169,24 @@ let package = Package(
 		),
 		.target(
 			name: "LexiconSearchONNX",
-			dependencies: ["Lexicon"] + onnxRuntimeDependencies
+			dependencies: [
+				"Lexicon",
+				.product(
+					name: "onnxruntime",
+					package: "onnxruntime-swift-package-manager",
+					condition: .when(
+						platforms: [.macOS, .iOS, .tvOS, .watchOS, .visionOS],
+						traits: ["ONNXSearch"]
+					)
+				),
+				.target(
+					name: "CLexiconONNXRuntime",
+					condition: .when(
+						platforms: [.linux, .android],
+						traits: ["ONNXSearch"]
+					)
+				),
+			]
 		),
 		.target(
 			name: "CLexiconONNXRuntime",

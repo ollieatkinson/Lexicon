@@ -4,6 +4,10 @@ import PackageDescription
 
 let package = Package(
 	name: "LexiconONNXIntegration",
+	platforms: [
+		.macOS(.v15),
+		.iOS(.v18)
+	],
 	dependencies: [
 		.package(
 			name: "Lexicon",
