@@ -279,7 +279,7 @@ Package declarations and verification evidence are deliberately separate:
 | Linux | Supported | Built and tested in CI. |
 | Android | Experimental | Not currently verified by emulator or ARM64 cross-build CI. |
 
-On Apple platforms, sentence graph generation can use NaturalLanguage. Deterministic fallbacks keep the core API available when NaturalLanguage is unavailable. MLX-backed search has narrower host support and remains opt-in. ONNX-backed search is verified on Linux and uses the package's Apple ONNX Runtime binding on supported Apple hosts; Android remains experimental.
+On Apple platforms, sentence graph generation can use NaturalLanguage. Deterministic fallbacks keep the core API available when NaturalLanguage is unavailable. MLX-backed search has narrower host support and remains opt-in. ONNX-backed search is runtime-tested on Linux; its C shim is compile-tested on macOS, while Apple runtime setup and Android remain experimental.
 
 See [Platform Support](https://github.com/ollieatkinson/Lexicon/wiki/Platform-Support).
 

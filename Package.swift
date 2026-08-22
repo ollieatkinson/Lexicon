@@ -14,6 +14,11 @@ func packagePath(_ path: String) -> String {
 let onnxRuntimeRoot = packagePath(environment["LEXICON_ONNX_RUNTIME_ROOT"] ?? ".build/onnx-runtime/current")
 let onnxRuntimePlatform = environment["LEXICON_ONNX_RUNTIME_PLATFORM"] ?? "linux-x64"
 let onnxRuntimeLibrary = packagePath(environment["LEXICON_ONNX_RUNTIME_LIB"] ?? "\(onnxRuntimeRoot)/lib/\(onnxRuntimePlatform)")
+#if os(macOS)
+let onnxRuntimeLibraryName = "libonnxruntime.dylib"
+#else
+let onnxRuntimeLibraryName = "libonnxruntime.so"
+#endif
 
 let package = Package(
 	name: "Lexicon",
@@ -51,7 +56,6 @@ let package = Package(
 		.package(url: "https://github.com/DePasqualeOrg/swift-hf-api", exact: "0.3.2"),
 		.package(url: "https://github.com/DePasqualeOrg/swift-hf-api-mlx", exact: "0.2.0"),
 		.package(url: "https://github.com/DePasqualeOrg/swift-tokenizers", from: "0.6.3"),
-		.package(url: "https://github.com/microsoft/onnxruntime-swift-package-manager", exact: "1.24.2"),
 	],
 	targets: [
 		.target(
@@ -171,14 +175,9 @@ let package = Package(
 			name: "LexiconSearchONNX",
 			dependencies: [
 				"Lexicon",
-				.product(
-					name: "onnxruntime",
-					package: "onnxruntime-swift-package-manager",
-					condition: .when(platforms: [.macOS, .iOS, .tvOS, .watchOS, .visionOS])
-				),
 				.target(
 					name: "CLexiconONNXRuntime",
-					condition: .when(platforms: [.linux, .android])
+					condition: .when(traits: ["ONNXSearch"])
 				),
 			]
 		),
@@ -186,7 +185,7 @@ let package = Package(
 			name: "CLexiconONNXRuntime",
 			publicHeadersPath: "include",
 			cSettings: [
-				.define("LEXICON_ONNX_RUNTIME_LIBRARY_PATH", to: "\"\(onnxRuntimeLibrary)/libonnxruntime.so\"")
+				.define("LEXICON_ONNX_RUNTIME_LIBRARY_PATH", to: "\"\(onnxRuntimeLibrary)/\(onnxRuntimeLibraryName)\"")
 			]
 		),
 		.testTarget(

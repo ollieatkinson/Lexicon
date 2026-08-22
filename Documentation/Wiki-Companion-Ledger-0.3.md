@@ -82,7 +82,7 @@ This ledger targets the separate wiki baseline `7fb0e3318ba02c30419bfaaf4485a964
 
 15. **`Search.md` and `Platform-Support.md`**
     - Add the `ONNXSearch` setup command, artifact location, supported presets, and CLI provider selection.
-    - Describe Linux as runtime-tested only after the required ONNX CI job is green.
+    - Describe Linux as runtime-tested only after the required ONNX CI job is green; describe macOS as compile-tested only.
     - Keep Android experimental until a matching Swift 6.3.2 SDK cross-build job exists; do not advertise Windows support.
     - Explain that model query/document prefixes are part of embedding-cache identity and that existing provider defaults retain the legacy prefixes.
 

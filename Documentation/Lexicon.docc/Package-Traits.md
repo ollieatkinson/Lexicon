@@ -31,7 +31,7 @@ Choose the smallest product and trait set that satisfies the consumer. Traits ar
 | --- | --- | --- |
 | `Editor` | Disabled | Exposes incremental graph-editing APIs in `Lexicon`; read-only clients do not compile editor-only surface. |
 | `MLXSearch` | Disabled | Links MLX/tokenizer dependencies and enables the MLX embedding provider used by semantic CLI search. |
-| `ONNXSearch` | Disabled | Enables the ONNX embedding provider and CLI selection. Linux uses the dynamically loaded C runtime; supported Apple hosts use the package binding. |
+| `ONNXSearch` | Disabled | Enables the ONNX embedding provider and CLI selection through the dynamically loaded C runtime. Linux is runtime-tested; other hosts require separately supplied runtime artifacts. |
 
 Run trait-specific validation when adopting either surface:
 
