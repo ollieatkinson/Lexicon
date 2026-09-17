@@ -172,13 +172,13 @@ See [Editor Support](https://github.com/ollieatkinson/Lexicon/wiki/Editor-Suppor
 The `lexicon` executable is designed for scripts, editors and automation.
 
 ```sh
-swift run lexicon validate commerce.lexicon
-swift run lexicon lint commerce.lexicon
-swift run lexicon inspect commerce.lexicon commerce.ui.checkout.button.primary
-swift run lexicon tree commerce.lexicon commerce --depth 4 --inherited --metadata
-swift run lexicon search commerce.lexicon order submit --mode hybrid --limit 10
-swift run lexicon refs commerce.lexicon commerce.ui.checkout.button.primary
-swift run lexicon format commerce.lexicon --write
+lexicon validate commerce.lexicon
+lexicon lint commerce.lexicon
+lexicon inspect commerce.lexicon commerce.ui.checkout.button.primary
+lexicon tree commerce.lexicon commerce --depth 4 --inherited --metadata
+lexicon search commerce.lexicon order submit --mode hybrid --limit 10
+lexicon refs commerce.lexicon commerce.ui.checkout.button.primary
+lexicon format commerce.lexicon --write
 ```
 
 Search supports hybrid, semantic, token and lexical modes. The default `hybrid` mode is the normal entry point; use narrower modes when you need deterministic ID matching or semantic ranking.
