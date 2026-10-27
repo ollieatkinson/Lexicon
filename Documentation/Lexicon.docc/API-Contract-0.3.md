@@ -111,6 +111,12 @@ These rules make replay safe and prevent invalid partial replicas.
 
 ## Runtime events
 
+String switch patterns accept generated `I` values through `~=`. Matching uses
+exact `I.__` equality: `case namespace.command:` matches that identifier, while
+descendants and similarly prefixed identifiers do not match. A bracketed `K`
+pattern includes its attached values in this string identity. Event lineage,
+type and contextual matching remain defined by the event matching APIs.
+
 `SwiftLexicon.Events` uses observer terminology:
 
 - `on` creates an `EventObserver`.
