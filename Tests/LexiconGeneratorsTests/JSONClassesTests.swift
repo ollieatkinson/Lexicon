@@ -84,7 +84,13 @@ struct JSONClasses™ {
 
 		#expect(mixin.type == "root.second")
 		#expect(Array(children.values.keys) == ["secondChild", "sharedChild"])
-		#expect(Array(children.values.values) == ["root.second.secondChild", "root.second.sharedChild"])
+		#expect(Array(children.values.values) == ["root.second.secondChild", "root.shared.sharedChild"])
+
+		// A mixin must reference emitted declarations rather than virtual
+		// inherited paths, so the composed graph can generate Swift.
+		let code = try SwiftLexiconGenerator.generateSource(json)
+		#expect(code.contains("public protocol I_root_instance"))
+
 	}
 }
 
