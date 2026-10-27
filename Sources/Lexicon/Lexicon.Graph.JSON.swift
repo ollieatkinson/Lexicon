@@ -217,7 +217,9 @@ public extension Lexicon.Graph.Node {
 			let inheritedChildren = lemma.node.protonym.isNil
 				? lemma.children
 					.filter(\.value.protonym.isNil)
-					.map { (name, lemma) in (name.rawValue, lemma.id) }
+					// Inherited children are projected into this lemma's path, but
+					// only their source declarations are emitted as classes.
+					.map { (name, lemma) in (name.rawValue, lemma.source.id) }
 					.sorted { $0.0 < $1.0 }
 					.unlessEmpty
 					.map(OrderedJSONDictionary.init(uniqueKeysWithValues:))
