@@ -105,7 +105,7 @@ public final class L_test_type_even: L, I_test_type_even {
 public protocol I_test_type_even: I {}
 public extension I_test_type_even {
 	var `no`: L_test_type_even_no { .init("\(__).no") }
-	var `bad`: L_test_type_even_bad { no.good }
+	var `bad`: L_test_type_even_bad { .init(no.good(\.id)) }
 }
 public typealias L_test_type_even_bad = L_test_type_even_no_good
 public final class L_test_type_even_no: L, I_test_type_even_no {
