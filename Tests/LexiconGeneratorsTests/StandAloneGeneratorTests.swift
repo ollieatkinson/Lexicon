@@ -148,7 +148,7 @@ struct SwiftStandAloneGeneratorTests {
 			""".lexicon().json()
 		)
 		#expect(source.contains("public typealias L_root_alias2 = L_root_target"))
-		#expect(source.contains("var `alias2`: L_root_alias2 { target }"))
+		#expect(source.contains(#"var `alias2`: L_root_alias2 { .init(target(\.id)) }"#))
 
 		let directory = FileManager.default.temporaryDirectory
 			.appendingPathComponent("LexiconSwiftStandAloneTests-\(UUID().uuidString)")
@@ -168,6 +168,44 @@ struct SwiftStandAloneGeneratorTests {
 			"swiftc -parse-as-library main.swift -o runtime && ./runtime",
 			in: directory
 		)
+	}
+
+	@Test
+	func test_inherited_synonym_getters_compile_and_keep_the_concrete_path() async throws {
+		guard Self.hasCommand("swiftc") else { return }
+		let source = try SwiftStandAloneGenerator.generateSource(try await """
+		root:
+			value:
+				text:
+			collection:
+				id:
+				+ root.value
+			entity:
+			+ root.collection
+				code:
+				= id
+				alternate:
+				= code
+		""".lexicon().json())
+		let directory = FileManager.default.temporaryDirectory
+			.appendingPathComponent("LexiconInheritedSynonymTests-\(UUID().uuidString)")
+		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+		defer { try? FileManager.default.removeItem(at: directory) }
+		try Data("""
+		\(source)
+
+		@main struct RuntimeCheck {
+			static func main() {
+				precondition(root.entity.code.__ == "root.entity.id")
+				precondition(root.entity.code == root.entity.id)
+				precondition(root.entity.alternate == root.entity.code)
+				precondition(root.entity.code.text.__ == "root.entity.id.text")
+				let rebound = L_root_entity("root.instances.Dorothy")
+				precondition(rebound.code.__ == "root.instances.Dorothy.id")
+			}
+		}
+		""".utf8).write(to: directory.appendingPathComponent("main.swift"))
+		try Self.run("swiftc -swift-version 6 -parse-as-library main.swift -o runtime && ./runtime", in: directory)
 	}
 
 	private func swiftStandAlone(prefixes: StandAloneTypePrefixes) async throws -> String {
