@@ -3,6 +3,7 @@
 //
 
 import Foundation
+import CoreFoundation
 
 public extension Lexicon.Graph.Node {
 
@@ -125,10 +126,14 @@ public extension JSONValue {
 		switch jsonObject {
 			case _ as NSNull:
 				self = .null
-			case let value as Bool:
-				self = .bool(value)
 			case let value as NSNumber:
-				self = .number(value.doubleValue)
+				// NSNumber(0/1) also bridges to Bool. Inspect the Foundation
+				// type before choosing the JSON case, including nested values.
+				if CFGetTypeID(value) == CFBooleanGetTypeID() {
+					self = .bool(value.boolValue)
+				} else {
+					self = .number(value.doubleValue)
+				}
 			case let value as String:
 				self = .string(value)
 			case let value as [Any]:
