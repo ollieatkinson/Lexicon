@@ -103,6 +103,11 @@ jobs:
           xcodebuild -version | grep -Fx "Xcode $XCODE_VERSION"
           swift --version | grep -F "Swift version $SWIFT_VERSION "
 
+      - name: Install and verify Metal toolchain
+        run: |
+          xcodebuild -downloadComponent MetalToolchain
+          xcrun --sdk macosx metal --version
+
       - name: Test MLX and build-plugin integration package
         run: swift test --package-path IntegrationTests/MLX
 
