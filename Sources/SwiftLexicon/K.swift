@@ -103,13 +103,27 @@ public extension K {
 	@inlinable static var localized: String { A.localized }
 }
 
-public struct EventDetail: Hashable, Sendable {
+public struct EventDetail: Hashable, Sendable, Codable {
 	public let id: String
 	public let data: [String: Event.Value]
 
 	public init(id: String, data: [String: Event.Value]) {
 		self.id = id
 		self.data = data
+	}
+
+	private enum CodingKeys: String, CodingKey { case id, data }
+
+	public init(from decoder: any Decoder) throws {
+		if let id = try? decoder.singleValueContainer().decode(String.self) {
+			self.init(id: id, data: [:])
+			return
+		}
+		let values = try decoder.container(keyedBy: CodingKeys.self)
+		self.init(
+			id: try values.decode(String.self, forKey: .id),
+			data: try values.contains(.data) ? values.decode([String: Event.Value].self, forKey: .data) : [:]
+		)
 	}
 }
 
