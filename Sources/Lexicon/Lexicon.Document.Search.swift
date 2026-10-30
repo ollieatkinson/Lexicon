@@ -119,6 +119,8 @@ public extension Lexicon.Search {
 		public var dimensions: Int?
 		public var normalized: Bool
 		public var pooling: String
+		public var queryPrefix: String
+		public var documentPrefix: String
 		public var identifier: String {
 			Self.identifier(
 				provider: provider,
@@ -127,7 +129,9 @@ public extension Lexicon.Search {
 				tokenizer: tokenizer,
 				dimensions: dimensions,
 				normalized: normalized,
-				pooling: pooling
+				pooling: pooling,
+				queryPrefix: queryPrefix,
+				documentPrefix: documentPrefix
 			)
 		}
 
@@ -139,6 +143,8 @@ public extension Lexicon.Search {
 			case dimensions
 			case normalized
 			case pooling
+			case queryPrefix
+			case documentPrefix
 			case identifier
 		}
 
@@ -149,7 +155,9 @@ public extension Lexicon.Search {
 			tokenizer: String,
 			dimensions: Int? = nil,
 			normalized: Bool,
-			pooling: String
+			pooling: String,
+			queryPrefix: String = "search_query: ",
+			documentPrefix: String = "search_document: "
 		) {
 			self.provider = provider
 			self.model = model
@@ -158,6 +166,8 @@ public extension Lexicon.Search {
 			self.dimensions = dimensions
 			self.normalized = normalized
 			self.pooling = pooling
+			self.queryPrefix = queryPrefix
+			self.documentPrefix = documentPrefix
 		}
 
 		public init(from decoder: Decoder) throws {
@@ -169,7 +179,9 @@ public extension Lexicon.Search {
 				tokenizer: values.decode(String.self, forKey: .tokenizer),
 				dimensions: values.decodeIfPresent(Int.self, forKey: .dimensions),
 				normalized: values.decode(Bool.self, forKey: .normalized),
-				pooling: values.decode(String.self, forKey: .pooling)
+				pooling: values.decode(String.self, forKey: .pooling),
+				queryPrefix: values.decodeIfPresent(String.self, forKey: .queryPrefix) ?? "search_query: ",
+				documentPrefix: values.decodeIfPresent(String.self, forKey: .documentPrefix) ?? "search_document: "
 			)
 		}
 
@@ -182,6 +194,8 @@ public extension Lexicon.Search {
 			try values.encodeIfPresent(dimensions, forKey: .dimensions)
 			try values.encode(normalized, forKey: .normalized)
 			try values.encode(pooling, forKey: .pooling)
+			try values.encode(queryPrefix, forKey: .queryPrefix)
+			try values.encode(documentPrefix, forKey: .documentPrefix)
 			try values.encode(identifier, forKey: .identifier)
 		}
 
@@ -192,7 +206,9 @@ public extension Lexicon.Search {
 			tokenizer: String,
 			dimensions: Int?,
 			normalized: Bool,
-			pooling: String
+			pooling: String,
+			queryPrefix: String,
+			documentPrefix: String
 		) -> String {
 			[
 				provider,
@@ -202,6 +218,8 @@ public extension Lexicon.Search {
 				dimensions.map(String.init) ?? "unknown-dimensions",
 				normalized ? "normalized" : "raw",
 				pooling,
+				queryPrefix.isEmpty ? "no-query-prefix" : queryPrefix,
+				documentPrefix.isEmpty ? "no-document-prefix" : documentPrefix,
 			].joined(separator: "/")
 		}
 	}
@@ -230,6 +248,8 @@ public extension Lexicon.Search {
 	protocol EmbeddingProvider: Sendable {
 		var descriptor: EmbeddingDescriptor { get }
 		func embed(_ texts: [String]) async throws -> [[Double]]
+		func embedQuery(_ query: String) async throws -> [Double]
+		func embedDocuments(_ texts: [String]) async throws -> [[Double]]
 	}
 
 	struct Scores: Codable, Hashable, Sendable {
@@ -320,6 +340,17 @@ public extension Lexicon.Search.EmbeddingProvider {
 
 	var identifier: String {
 		descriptor.identifier
+	}
+
+	func embedQuery(_ query: String) async throws -> [Double] {
+		guard let vector = try await embed([descriptor.queryPrefix + query]).first else {
+			throw LexiconError("Embedding provider returned no query vector.")
+		}
+		return vector
+	}
+
+	func embedDocuments(_ texts: [String]) async throws -> [[Double]] {
+		try await embed(texts.map { descriptor.documentPrefix + $0 })
 	}
 }
 
@@ -571,10 +602,7 @@ public extension Lexicon.Search {
 			else {
 				return nil
 			}
-			return try await providerEmbeddings(
-				for: ["search_query: \(query.embeddingText)"],
-				using: provider
-			).first
+			return try await provider.embedQuery(query.embeddingText)
 		}
 
 		private func providerEmbeddingCache<Provider: EmbeddingProvider>(
@@ -681,7 +709,7 @@ public extension Lexicon.Search {
 			var vectors: [Lemma.ID: [Double]] = [:]
 			for batch in entries.chunks(ofCount: 32) {
 				let embeddings = try await providerEmbeddings(
-					for: batch.map { "search_document: \($0.embeddingText)" },
+					for: batch.map(\.embeddingText),
 					using: provider
 				)
 				for (entry, vector) in zip(batch, embeddings) {
@@ -695,7 +723,7 @@ public extension Lexicon.Search {
 			for texts: [String],
 			using provider: Provider
 		) async throws -> [[Double]] {
-			let embeddings = try await provider.embed(texts)
+			let embeddings = try await provider.embedDocuments(texts)
 			guard embeddings.count == texts.count else {
 				throw LexiconError("Embedding provider returned \(embeddings.count) vectors for \(texts.count) texts.")
 			}
