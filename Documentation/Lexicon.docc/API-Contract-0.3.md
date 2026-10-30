@@ -34,6 +34,12 @@ Replacing an editor's entire document is an explicit operation. It is not an inc
 
 Textual IDs remain the durable representation for persistence and process boundaries. A handle is not a durable write capability.
 
+`lemma[id: absoluteID]` resolves an absolute `Lemma.ID` in that handle's immutable
+generation, including other roots of the same composed document. It returns
+`nil` for an unresolved ID. The result retains the same lexicon identity and
+revision even after the live `Lexicon` changes or is released. Existing unlabeled
+name/collection subscripts remain relative descendant traversal.
+
 ## Editing
 
 Incremental graph-editing APIs—such as add, rename, move, delete, type, and protonym changes—are available only with the `Editor` package trait. Explicit validated replacement of the complete document remains part of the core surface.
