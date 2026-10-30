@@ -157,6 +157,14 @@ public struct Lemma: Hashable, CustomStringConvertible, Sendable {
 		self[descendant]
 	}
 
+	/// Resolves an absolute ID in this handle's immutable generation, including
+	/// other roots in the composed document. Returns nil for an unresolved ID.
+	/// The explicit label distinguishes this from relative descendant traversal.
+	public subscript(id id: ID) -> Lemma? {
+		guard generation.resolve(id) != nil else { return nil }
+		return generation.lemma(id)
+	}
+
 	public subscript<Descendant>(descendant: Descendant) -> Lemma?
 	where Descendant: Collection, Descendant.Element == Name {
 		var current = self
