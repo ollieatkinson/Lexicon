@@ -14,26 +14,25 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SWIFT_VERSION: "6.3.2"
   NODE_VERSION: "22.20.0"
   RUST_VERSION: "1.94.0"
 
 jobs:
   swift-macos:
     name: Swift / macOS
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 45
     steps:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - name: Select Xcode 26.5
-        run: sudo xcode-select -s /Applications/Xcode_26.5.app/Contents/Developer
+      - name: Select image-default Xcode 27
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
       - name: Verify Swift version
         run: |
           swift --version
-          swift --version | grep "Swift version $SWIFT_VERSION"
+          xcodebuild -version | grep "^Xcode 27\."
 
       - name: Build command-line product
         run: swift build --product lexicon -Xswiftc -warnings-as-errors
@@ -54,6 +53,8 @@ jobs:
     name: Swift / Linux
     runs-on: ubuntu-24.04
     container: swift:6.3.2-noble
+    env:
+      SWIFT_VERSION: "6.3.2"
     timeout-minutes: 45
     steps:
       - name: Check out repository
@@ -84,20 +85,20 @@ jobs:
 
   apple-integrations:
     name: Apple integrations
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 60
     steps:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - name: Select Xcode 26.5
-        run: sudo xcode-select -s /Applications/Xcode_26.5.app/Contents/Developer
+      - name: Select image-default Xcode 27
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
       - name: Verify Swift version
         run: |
           xcodebuild -version
           swift --version
-          swift --version | grep "Swift version $SWIFT_VERSION"
+          xcodebuild -version | grep "^Xcode 27\."
 
       - name: Test MLX and build-plugin integration package
         run: swift test --package-path IntegrationTests/MLX
