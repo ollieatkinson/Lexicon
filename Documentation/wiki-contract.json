@@ -4,8 +4,8 @@
     "canonical": true,
     "repository": "https://github.com/ollieatkinson/Lexicon.wiki.git",
     "baselineRevision": "7fb0e3318ba02c30419bfaaf4485a964e20ad11b",
-    "validatedRevision": null,
-    "companionUpdateRequired": true
+    "validatedRevision": "3c0594452ef17d07ca61f98fb67ace9524b4bef1",
+    "companionUpdateRequired": false
   },
   "repositoryAssertions": [
     {
