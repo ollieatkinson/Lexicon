@@ -10,6 +10,36 @@ import Foundation
 struct DocumentMetadataTests {
 
 	@Test
+	func numeric_zero_and_one_defaults_remain_distinct_from_booleans() throws {
+		let document = try TaskPaper("""
+		root:
+			zero:
+			? 0
+			one:
+			? 1
+			decimal:
+			? 1.0
+			false:
+			? false
+			true:
+			? true
+			nested:
+			? {"numbers":[0,1,1.0],"flags":[false,true]}
+		""").decodeDocument()
+		let root = try document.roots["root"].try()
+		#expect(root.children["zero"]?.defaultValue == .literal(.number(0)))
+		#expect(root.children["one"]?.defaultValue == .literal(.number(1)))
+		#expect(root.children["decimal"]?.defaultValue == .literal(.number(1)))
+		#expect(root.children["false"]?.defaultValue == .literal(.bool(false)))
+		#expect(root.children["true"]?.defaultValue == .literal(.bool(true)))
+		#expect(root.children["nested"]?.defaultValue == .literal(.object([
+			"numbers": .array([.number(0), .number(1), .number(1)]),
+			"flags": .array([.bool(false), .bool(true)]),
+		])))
+		#expect(try TaskPaper(TaskPaper.encode(document)).decodeDocument() == document)
+	}
+
+	@Test
 	func test_taskpaper_document_metadata_round_trip() throws {
 
 		let document = try TaskPaper("""
