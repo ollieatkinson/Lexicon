@@ -140,6 +140,12 @@ Generated dotted IDs, not generated Swift type names, are the stable runtime rep
 
 Direct bracket values are limited to values with an infallible JSON representation. Floating-point and custom `Encodable` values use the throwing `encoding(_:)` path; non-finite floating-point values are rejected by the default encoder.
 
+`EventDetail` is the value representation of a contextual identifier: its `id`
+and JSON `data` retain the generated key's meaning without event-delivery identity.
+Codable uses `{ "id": "...", "data": { ... } }`. Decoding accepts an unbound
+string ID or an object without `data`; supplied malformed or null `data` fails.
+Lexicon membership and domain-specific binding constraints belong to the consumer.
+
 ## Compatibility boundaries
 
 `Lexicon`, `SwiftLexicon`, `LexiconGenerators`, and `LexiconSearchMLX` are public library products. Their public APIs follow the release's source-compatibility policy.
