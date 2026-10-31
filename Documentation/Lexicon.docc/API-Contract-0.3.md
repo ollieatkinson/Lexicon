@@ -146,6 +146,19 @@ Codable uses `{ "id": "...", "data": { ... } }`. Decoding accepts an unbound
 string ID or an object without `data`; supplied malformed or null `data` fails.
 Lexicon membership and domain-specific binding constraints belong to the consumer.
 
+`K(lemma, values:)` also accepts native scope bindings outside the lexical path.
+Construction validates JSON encoding and throws for non-finite numbers.
+Generated traversal retains all of them. Inline path values keep their existing
+bracket spelling; off-path bindings use the existing EventDetail JSON shape.
+Both round-trip through `init(bracketed:)`, without a second context grammar.
+
+`Event(key, value:)` carries an explicit JSON payload independently from the key's
+context, including a binding on the event lemma itself. Native contextual/type
+matching uses the complete original key. `event[]` reads the explicit payload;
+`event[lemma]` reads the key's attached value. `Event(key)` keeps the original
+value-at-event-lemma convention. Snapshots include the optional explicit `value`;
+an absent field and an explicit JSON null remain distinct when decoded.
+
 ## Compatibility boundaries
 
 `Lexicon`, `SwiftLexicon`, `LexiconGenerators`, and `LexiconSearchMLX` are public library products. Their public APIs follow the release's source-compatibility policy.
