@@ -9,35 +9,51 @@ import _JSON
 public struct Event: Sendable, Hashable, Identifiable, CustomStringConvertible {
 
 	private static let count = Mutex(UInt(0))
-	private let storage: Storage
 
 	public let id: UInt
 	public let description: String
 	public let values: [String: Value]
+	/// An explicit payload, independent of contextual values on the event's key.
+	/// Nil retains the original convention of reading a value at the event lemma.
+	public let value: Value?
 
-	public var l: L { storage.l }
-	public var k: any KProtocol { storage.k }
+	public var l: L { k(\.L) }
+	public let k: any KProtocol
 
 	public init(_ l: L) {
 		self.init(K(l))
 	}
 
+	public init(_ l: L, value: Value) {
+		self.init(K(l), value: value)
+	}
+
 	public init<A: L>(_ k: K<A>) {
+		self.init(k, payload: .none)
+	}
+
+	/// Keeps the complete native key for matching while carrying a separate value.
+	public init<A: L>(_ k: K<A>, value: Value) {
+		self.init(k, payload: .some(value))
+	}
+
+	private init<A: L>(_ k: K<A>, payload: Value?) {
 
 		self.id = Self.count.withLock { count in
 			count += 1
 			return count
 		}
 
-		self.description = k.__
+		self.description = payload.map { k.__ + " => " + $0.eventDescription } ?? k.__
+		self.value = payload
 		self.values = Dictionary(uniqueKeysWithValues: k.____.map { key, value in
 			(key.__, value)
 		})
-		self.storage = Storage(l: k.___, k: k)
+		self.k = k
 	}
 
 	public var snapshot: Snapshot {
-		Snapshot(id: id, description: description, lemma: l.__, values: values)
+		Snapshot(id: id, description: description, lemma: l.__, values: values, value: value)
 	}
 
 	public var detail: EventDetail {
@@ -82,6 +98,24 @@ public extension Event {
 		public var description: String
 		public var lemma: String
 		public var values: [String: Value]
+		public var value: Value?
+
+		init(id: UInt, description: String, lemma: String, values: [String: Value], value: Value?) {
+			self.id = id; self.description = description; self.lemma = lemma
+			self.values = values; self.value = value
+		}
+
+		private enum CodingKeys: String, CodingKey { case id, description, lemma, values, value }
+		public init(from decoder: any Decoder) throws {
+			let fields = try decoder.container(keyedBy: CodingKeys.self)
+			id = try fields.decode(UInt.self, forKey: .id)
+			description = try fields.decode(String.self, forKey: .description)
+			lemma = try fields.decode(String.self, forKey: .lemma)
+			values = try fields.decode([String: Value].self, forKey: .values)
+			// Explicit JSON null is a payload; an absent field uses the original
+			// value-at-lemma convention. decodeIfPresent would conflate the two.
+			value = try fields.contains(.value) ? .some(fields.decode(Value.self, forKey: .value)) : .none
+		}
 	}
 }
 
@@ -125,29 +159,20 @@ public extension JSON {
 	}
 }
 
-private extension Event {
-
-	// The Sendable event surface is id/description/values. The live lexicon
-	// objects are retained for the existing synchronous matching API.
-	final class Storage: Sendable {
-		let l: L
-		let k: any KProtocol
-
-		init(l: L, k: any KProtocol) {
-			self.l = l
-			self.k = k
-		}
-	}
-}
-
 public extension Event {
-	subscript() -> Any? { k[] }
+	subscript() -> Any? {
+		if let value { return value.base }
+		return k[]
+	}
 	subscript(key: L) -> Any? { k[key] }
 	subscript<Output>(
 		type as: Output.Type = Output.self,
 		using decoder: JSONDecoder = JSONDecoder()
 	) -> Output where Output: Decodable {
-		get throws { try k[as: Output.self, using: decoder] }
+		get throws {
+			if let value { return try value.value(as: Output.self, using: decoder) }
+			return try k[as: Output.self, using: decoder]
+		}
 	}
 	subscript<Output>(
 		key: L,
