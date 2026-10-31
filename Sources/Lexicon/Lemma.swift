@@ -178,7 +178,8 @@ public struct Lemma: Hashable, CustomStringConvertible, Sendable {
 	}
 
 	public func `is`(_ type: Lemma) -> Bool {
-		self.type[type.id] != nil
+		guard let resolution = generation.resolve(id) else { return false }
+		return generation.allTypeIDs(of: resolution).contains(type.id)
 	}
 
 	public func isAncestor(of other: Lemma) -> Bool {
@@ -257,6 +258,9 @@ extension Lexicon {
 		let revision: Revision
 		let document: Document
 		let rawNodes: [Lemma.ID: Graph.Node]
+		// A generation never changes. Store IDs rather than handles so this
+		// actor-confined memo does not retain its own generation through Lemma.
+		@LexiconActor private var typeIDs: [Resolution: [Lemma.ID]] = [:]
 
 		init(lexiconID: Identity, revision: Revision, document: Document) {
 			self.lexiconID = lexiconID
@@ -422,12 +426,15 @@ extension Lexicon {
 			return node(for: source).type.sorted()
 		}
 
-		func allTypeIDs(of resolution: Resolution) -> [Lemma.ID] {
+		@LexiconActor func allTypeIDs(of resolution: Resolution) -> [Lemma.ID] {
+			if let cached = typeIDs[resolution] { return cached }
 			guard let source = source(of: resolution) else {
 				return []
 			}
 			if source.nodeID != resolution.nodeID {
-				return allTypeIDs(of: source)
+				let result = allTypeIDs(of: source)
+				typeIDs[resolution] = result
+				return result
 			}
 			var result: Set<Lemma.ID> = [resolution.requestedID]
 			if rawNodes[resolution.requestedID] == nil {
@@ -435,7 +442,9 @@ extension Lexicon {
 			}
 			var visiting: Set<Lemma.ID> = []
 			collectTypes(of: source, into: &result, visiting: &visiting)
-			return result.sorted()
+			let sorted = result.sorted()
+			typeIDs[resolution] = sorted
+			return sorted
 		}
 
 		private func collectTypes(
