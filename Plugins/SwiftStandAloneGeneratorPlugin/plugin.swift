@@ -9,7 +9,8 @@ struct SwiftStandAloneGeneratorPlugin: BuildToolPlugin {
 			let lexicon = try context.tool(named: "lexicon-generate")
 			let outputDirectory = context.pluginWorkDirectoryURL
 				.appendingPathComponent("GeneratedSources", isDirectory: true)
-			let inputs = try lexiconInputs(in: target.directoryURL)
+			let sources = try lexiconInputs(in: target.directoryURL)
+			let inputs = sources.filter { $0.url.pathExtension == "lexicon" }
 			guard inputs.count <= 1 else {
 				throw PluginError.multipleStandaloneInputs(inputs.map(\.relativePath))
 			}
@@ -31,7 +32,7 @@ struct SwiftStandAloneGeneratorPlugin: BuildToolPlugin {
 						"--output", output.url.deletingPathExtension().path,
 						"--type", "swift-standalone"
 					],
-					inputFiles: [output.input.url],
+					inputFiles: sources.map(\.url),
 					outputFiles: [output.url]
 				)
 			}
@@ -97,7 +98,7 @@ private func lexiconInputs(in directory: URL) throws -> [LexiconInput] {
 
 	var inputs: [LexiconInput] = []
 	for case let input as URL in enumerator {
-		guard input.pathExtension == "lexicon" else {
+		guard ["lexicon", "taskpaper"].contains(input.pathExtension) else {
 			continue
 		}
 		let values = try input.resourceValues(forKeys: Set(keys))
