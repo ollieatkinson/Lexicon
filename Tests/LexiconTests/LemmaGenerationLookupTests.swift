@@ -2,6 +2,49 @@ import Testing
 
 @Suite @LexiconActor
 struct LemmaGenerationLookupTests {
+	@Test func repeated_type_queries_preserve_alias_placements_and_generation_changes() throws {
+		func document(_ role: String) throws -> Lexicon.Document {
+			try TaskPaper("""
+			shared:
+				collection:
+				ordinary:
+				template:
+				+ shared.\(role)
+					field:
+					+ shared.ordinary
+			app:
+				item:
+				+ shared.template
+				alias:
+				= item
+			""").decodeDocument()
+		}
+		var owner: Lexicon? = try Lexicon(document: document("collection"), selectedRoot: "app")
+		let original = try #require(owner?.root)
+		let collection = try #require(original[id: "shared.collection"])
+		let ordinary = try #require(original[id: "shared.ordinary"])
+		func check(_ root: Lemma, isCollection: Bool) throws {
+			for _ in 0..<3 {
+				for id: Lemma.ID in ["app.item", "app.alias"] {
+					let item = try #require(root[id: id])
+					#expect(item.is(collection) == isCollection)
+					#expect(item.is(ordinary) == !isCollection)
+				}
+				for id: Lemma.ID in ["app.item.field", "app.alias.field"] {
+					let field = try #require(root[id: id])
+					#expect(field.is(ordinary))
+					#expect(!field.is(collection))
+				}
+			}
+		}
+		try check(original, isCollection: true)
+		try owner?.replaceDocument(with: document("ordinary"), selectedRoot: "shared")
+		let current = try #require(owner?.root)
+		owner = nil
+		try check(current, isCollection: false)
+		try check(original, isCollection: true)
+	}
+
 	private func document(_ value: String, additionalField: Bool = false) throws -> Lexicon.Document {
 		try TaskPaper("""
 		shared:
