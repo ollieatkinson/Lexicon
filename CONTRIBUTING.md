@@ -15,7 +15,7 @@ Additional generator or editor work may require the target language toolchain or
 
 1. Read the relevant source and tests; do not infer behavior from the wiki alone.
 2. Check [`Documentation/Lexicon.docc/API-Contract-0.3.md`](Documentation/Lexicon.docc/API-Contract-0.3.md) for accepted 0.3 invariants.
-3. Decide whether the change affects default, `Editor`, or `MLXSearch` builds.
+3. Decide whether the change affects default, `Editor`, `MLXSearch`, or `ONNXSearch` builds.
 4. For user-visible behavior, identify the companion wiki page and any fixture in `Documentation/wiki-contract.json`.
 
 The [GitHub wiki](https://github.com/ollieatkinson/Lexicon/wiki) is canonical for narrative documentation. Public API contracts and migrations stay versioned with source.
@@ -37,6 +37,15 @@ On a supported MLX host, changes to semantic search also require:
 
 ```sh
 swift build --traits MLXSearch --product lexicon
+```
+
+ONNX provider changes also require the downstream integration build and, on Linux, the runtime-backed tests after installing the pinned artifacts:
+
+```sh
+swift package --disable-sandbox --allow-writing-to-package-directory \
+	setup-onnx-search-artifacts -- --runtime linux-x64
+swift test --traits ONNXSearch -Xswiftc -warnings-as-errors
+swift test --package-path IntegrationTests/ONNX
 ```
 
 Generator changes should generate into a temporary directory and compile the affected language outputs when that toolchain is available. LSP and CLI changes should test the built process, exit status, stdout, and stderr—not only internal functions.

@@ -13,6 +13,7 @@ let package = Package(
 		.library(name: "_JSON", targets: ["_JSON"]),
 		.library(name: "Lexicon", targets: ["Lexicon"]),
 		.library(name: "LexiconSearchMLX", targets: ["LexiconSearchMLX"]),
+		.library(name: "LexiconSearchONNX", targets: ["LexiconSearchONNX"]),
 		.library(name: "SwiftLexicon", targets: ["SwiftLexicon"]),
 		.library(name: "LexiconGenerators", targets: ["LexiconGenerators"]),
 		.executable(name: "lexicon-generate", targets: ["lexicon-generate"]),
@@ -20,10 +21,12 @@ let package = Package(
 		.executable(name: "lexicon", targets: ["lexicon-cli"]),
 		.plugin(name: "SwiftStandAloneGeneratorPlugin", targets: ["SwiftStandAloneGeneratorPlugin"]),
 		.plugin(name: "SwiftLibraryGeneratorPlugin", targets: ["SwiftLibraryGeneratorPlugin"]),
+		.plugin(name: "ONNXSearchArtifactsPlugin", targets: ["ONNXSearchArtifactsPlugin"]),
 	],
 	traits: [
 		.trait(name: "Editor"),
 		.trait(name: "MLXSearch"),
+		.trait(name: "ONNXSearch"),
 	],
 	dependencies: [
 		.package(url: "https://github.com/apple/swift-algorithms", from: "1.2.0"),
@@ -133,6 +136,7 @@ let package = Package(
 			dependencies: [
 				"Lexicon",
 				.target(name: "LexiconSearchMLX", condition: .when(traits: ["MLXSearch"])),
+				.target(name: "LexiconSearchONNX", condition: .when(traits: ["ONNXSearch"])),
 				"LexiconGenerators",
 				.product(name: "ArgumentParser", package: "swift-argument-parser"),
 			]
@@ -148,6 +152,44 @@ let package = Package(
 				.product(name: "MLXEmbeddersHFAPI", package: "swift-hf-api-mlx", condition: .when(traits: ["MLXSearch"])),
 				.product(name: "Tokenizers", package: "swift-tokenizers", condition: .when(traits: ["MLXSearch"])),
 			]
+		),
+		.target(
+			name: "LexiconSearchONNX",
+			dependencies: [
+				"Lexicon",
+				.target(
+					name: "CLexiconONNXRuntime",
+					condition: .when(traits: ["ONNXSearch"])
+				),
+			]
+		),
+		.target(
+			name: "CLexiconONNXRuntime",
+			publicHeadersPath: "include"
+		),
+		.testTarget(
+			name: "LexiconSearchONNXTests",
+			dependencies: [
+				"Lexicon",
+				"LexiconSearchONNX",
+			]
+		),
+		.executableTarget(
+			name: "onnx-search-artifacts",
+			dependencies: ["LexiconSearchONNX"]
+		),
+		.plugin(
+			name: "ONNXSearchArtifactsPlugin",
+			capability: .command(
+				intent: .custom(
+					verb: "setup-onnx-search-artifacts",
+					description: "Download ONNX search model and runtime artifacts."
+				),
+				permissions: [
+					.writeToPackageDirectory(reason: "Stores ONNX search artifacts under .build/onnx-search and .build/onnx-runtime.")
+				]
+			),
+			dependencies: ["onnx-search-artifacts"]
 		),
 		.plugin(
 			name: "SwiftStandAloneGeneratorPlugin",

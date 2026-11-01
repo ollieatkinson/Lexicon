@@ -148,11 +148,23 @@ struct Search: AsyncParsableCommand {
 	@Option(help: "Minimum cosine similarity for semantic matches.")
 	var semanticThreshold = 0.42
 
-	@Option(help: "Semantic embedding provider: auto, system, mlx, or none.")
+	@Option(help: "Semantic embedding provider: auto, system, mlx, onnx, or none.")
 	var embeddingProvider = "auto"
 
-	@Option(help: "Embedding model ID for MLX semantic search.")
-	var embeddingModel = "TaylorAI/bge-micro-v2"
+	@Option(help: "Embedding model ID for MLX, or model path for ONNX semantic search.")
+	var embeddingModel: String?
+
+	@Option(help: "ONNX embedding model preset. Defaults to all-MiniLM-L6-v2.")
+	var embeddingModelPreset: String?
+
+	@Option(help: "ONNX embedding model manifest JSON path.")
+	var embeddingModelManifest: URL?
+
+	@Option(help: "Vocabulary path for ONNX semantic search.")
+	var embeddingVocabulary: URL?
+
+	@Option(help: "Model revision used in ONNX embedding cache identity.")
+	var embeddingModelRevision: String?
 
 	@Option(help: "Embedding cache path. Defaults to the user cache directory.")
 	var embeddingCache: URL?
@@ -207,6 +219,10 @@ struct Search: AsyncParsableCommand {
 			input: input,
 			embeddingProvider: try SearchEmbeddingProviderSelection(agentArgument: embeddingProvider),
 			embeddingModel: embeddingModel,
+			embeddingModelPreset: embeddingModelPreset,
+			embeddingModelManifest: embeddingModelManifest,
+			embeddingVocabulary: embeddingVocabulary,
+			embeddingModelRevision: embeddingModelRevision,
 			embeddingCache: embeddingCache,
 			rebuildEmbeddings: rebuildEmbeddings
 		)
