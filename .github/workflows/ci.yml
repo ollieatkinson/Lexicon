@@ -108,8 +108,14 @@ jobs:
           xcodebuild -downloadComponent MetalToolchain
           xcrun --sdk macosx metal --version
 
-      - name: Test MLX and build-plugin integration package
+      - name: Test MLX integration package
         run: swift test --package-path IntegrationTests/MLX
+
+      - name: Test build-plugin integration package
+        run: swift test --package-path IntegrationTests/Plugins
+
+      - name: Check incremental TaskPaper imports in both build plugins
+        run: python3 Scripts/check_plugin_imports.py
 
       - name: Build benchmarks
         env:
@@ -135,6 +141,7 @@ jobs:
         run: |
           git diff --exit-code -- Package.resolved
           git diff --exit-code -- IntegrationTests/MLX/Package.resolved
+          git diff --exit-code -- IntegrationTests/Plugins/Package.resolved
           git diff --exit-code -- Benchmarks/Package.resolved
 
   tooling:

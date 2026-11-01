@@ -9,8 +9,9 @@ struct SwiftLibraryGeneratorPlugin: BuildToolPlugin {
 			let lexicon = try context.tool(named: "lexicon-generate")
 			let outputDirectory = context.pluginWorkDirectoryURL
 				.appendingPathComponent("GeneratedSources", isDirectory: true)
-			let inputs = try lexiconInputs(in: target.directoryURL)
-			let inputFiles = inputs.map(\.url)
+			let sources = try lexiconInputs(in: target.directoryURL)
+			let inputs = sources.filter { $0.url.pathExtension == "lexicon" }
+			let inputFiles = sources.map(\.url)
 			let outputs = try plannedOutputs(for: inputs, in: outputDirectory)
 
 			for output in outputs {
@@ -89,7 +90,7 @@ private func lexiconInputs(in directory: URL) throws -> [LexiconInput] {
 
 	var inputs: [LexiconInput] = []
 	for case let input as URL in enumerator {
-		guard input.pathExtension == "lexicon" else {
+		guard ["lexicon", "taskpaper"].contains(input.pathExtension) else {
 			continue
 		}
 		let values = try input.resourceValues(forKeys: Set(keys))
