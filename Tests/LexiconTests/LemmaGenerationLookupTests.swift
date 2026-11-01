@@ -2,6 +2,43 @@ import Testing
 
 @Suite @LexiconActor
 struct LemmaGenerationLookupTests {
+	@Test func warmed_resolution_keeps_inherited_placements_aliases_and_revisions_independent() throws {
+		func document(_ value: String, extra: Bool = false) throws -> Lexicon.Document {
+			try TaskPaper("""
+			shared:
+				template:
+					title:
+					? "\(value)"
+			\(extra ? "\t\tadded:" : "")
+			app:
+				one:
+				+ shared.template
+				two:
+				+ shared.template
+				alias:
+				= one
+			""").decodeDocument()
+		}
+		var owner: Lexicon? = try Lexicon(document: document("Dorothy"), selectedRoot: "app")
+		let old = try #require(owner?.root)
+		func check(_ root: Lemma, _ value: String, hasExtra: Bool) throws {
+			for _ in 0..<4 {
+				for id: Lemma.ID in ["app.one.title", "app.two.title", "app.alias.title"] {
+					let field = try #require(root[id: id])
+					#expect(field.id == id && field.source.id == "shared.template.title")
+					#expect(field.defaultValue == .literal(.string(value)))
+					#expect((root[id: id.parent!.appending("added" as Lemma.Name)] != nil) == hasExtra)
+				}
+			}
+		}
+		try check(old, "Dorothy", hasExtra: false)
+		try owner?.replaceDocument(with: document("Witch", extra: true), selectedRoot: "shared")
+		let current = try #require(owner?.root)
+		owner = nil
+		try check(current, "Witch", hasExtra: true)
+		try check(old, "Dorothy", hasExtra: false)
+	}
+
 	@Test func repeated_type_queries_preserve_alias_placements_and_generation_changes() throws {
 		func document(_ role: String) throws -> Lexicon.Document {
 			try TaskPaper("""

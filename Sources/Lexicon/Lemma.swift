@@ -4,6 +4,7 @@
 
 import Foundation
 import _Collections
+import Synchronization
 
 @LexiconActor
 public struct Lemma: Hashable, CustomStringConvertible, Sendable {
@@ -261,6 +262,10 @@ extension Lexicon {
 		// A generation never changes. Store IDs rather than handles so this
 		// actor-confined memo does not retain its own generation through Lemma.
 		@LexiconActor private var typeIDs: [Resolution: [Lemma.ID]] = [:]
+		// Synchronous document validation/editing also uses this generation.
+		// Cache only complete top-level successes, never recursive/cycle-local
+		// results. IDs avoid retaining the generation through a Lemma handle.
+		private let resolutions = Mutex<[Lemma.ID: Resolution]>([:])
 
 		init(lexiconID: Identity, revision: Revision, document: Document) {
 			self.lexiconID = lexiconID
@@ -287,8 +292,11 @@ extension Lexicon {
 		}
 
 		func resolve(_ id: Lemma.ID) -> Resolution? {
+			if let cached = resolutions.withLock({ $0[id] }) { return cached }
 			var visiting: Set<Visit> = []
-			return resolve(id, visiting: &visiting)
+			guard let result = resolve(id, visiting: &visiting) else { return nil }
+			resolutions.withLock { $0[id] = result }
+			return result
 		}
 
 		private func resolve(_ id: Lemma.ID, visiting: inout Set<Visit>) -> Resolution? {
