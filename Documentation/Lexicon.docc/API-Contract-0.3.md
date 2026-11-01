@@ -151,6 +151,10 @@ Construction validates JSON encoding and throws for non-finite numbers.
 Generated traversal retains all of them. Inline path values keep their existing
 bracket spelling; off-path bindings use the existing EventDetail JSON shape.
 Both round-trip through `init(bracketed:)`, without a second context grammar.
+JSON decoding accepts these native contextual strings as well as the existing
+`{id, data}` object. Plain names remain concise strings; quoted numeric-looking
+bindings retain their String type. Encoding continues to use the object form,
+including rich and off-path scope values.
 
 `Event(key, value:)` carries an explicit JSON payload independently from the key's
 context, including a binding on the event lemma itself. Native contextual/type

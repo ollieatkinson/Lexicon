@@ -131,8 +131,11 @@ public struct EventDetail: Hashable, Sendable, Codable {
 	private enum CodingKeys: String, CodingKey { case id, data }
 
 	public init(from decoder: any Decoder) throws {
-		if let id = try? decoder.singleValueContainer().decode(String.self) {
-			self.init(id: id, data: [:])
+		if let single = try? decoder.singleValueContainer(), let description = try? single.decode(String.self) {
+			do { try self.init(bracketed: description) }
+			catch {
+				throw DecodingError.dataCorruptedError(in: single, debugDescription: String(describing: error))
+			}
 			return
 		}
 		let values = try decoder.container(keyedBy: CodingKeys.self)
