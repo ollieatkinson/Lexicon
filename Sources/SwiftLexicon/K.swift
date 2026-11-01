@@ -78,6 +78,15 @@ extension UInt32: EventValueConvertible {
 		self.init(a, [:])
 	}
 
+	/// Attaches JSON scope values, including bindings outside this lexical path.
+	/// Invalid JSON, such as a non-finite number, fails before key construction.
+	public init(_ a: A, values: [L: Event.Value]) throws {
+		_ = try JSONEncoder().encode(EventDetail(id: a.__, data: Dictionary(
+			uniqueKeysWithValues: values.map { ($0.key.__, $0.value) }
+		)))
+		self.init(a, values)
+	}
+
 	internal init(_ l: A, _ d: [L: Event.Value]) {
 		self.____ = d
 		self.___ = l
@@ -86,6 +95,13 @@ extension UInt32: EventValueConvertible {
 }
 
 private func bracketedDescription(id: String, data: [L: Event.Value]) -> String {
+	guard data.keys.allSatisfy({ id == $0.__ || id.hasPrefix($0.__ + ".") }) else {
+		// Arbitrary scope bindings do not fit inline lexical brackets. Reuse the
+		// existing contextual value's JSON shape instead of inventing new syntax.
+		return JSON.object(["id": .string(id), "data": .object(Dictionary(
+			uniqueKeysWithValues: data.map { ($0.key.__, $0.value) }
+		))]).eventDescription
+	}
 	var output = ""
 	var index = id.startIndex
 	for entry in data.sorted(by: { $0.key.__.count < $1.key.__.count }) {
@@ -146,6 +162,8 @@ public enum KBracketedDescriptionError: Error, Equatable, Sendable, CustomString
 
 public extension K {
 
+	/// Inline lexical brackets, or EventDetail JSON when scope values lie off-path.
+	/// Both representations round-trip through init(bracketed:).
 	var bracketed: String { __ }
 	var description: String { bracketed }
 
@@ -169,6 +187,10 @@ public extension K {
 public extension EventDetail {
 
 	init(bracketed description: String) throws {
+		if description.first == "{" {
+			self = try JSONDecoder().decode(Self.self, from: Data(description.utf8))
+			return
+		}
 		var id = ""
 		var data: [String: Event.Value] = [:]
 		var index = description.startIndex
