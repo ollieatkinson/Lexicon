@@ -2,6 +2,19 @@
 
 This article defines the intended public behavior for the 0.3 release line. It is a release contract rather than a tutorial. While 0.3 remains unreleased, source on `trunk` may change to complete this contract; a tagged 0.3 release must not contradict it.
 
+## Numeric literal defaults
+
+Signed platform integer literals retain the existing `JSONValue.number(Double)`
+representation when exactly representable. Integer literals that would
+lose precision as Double use `JSONValue.integer(Int)`, including inside arrays
+and objects. TaskPaper output, document Codable metadata and `jsonObject` preserve
+those integers. The Codable metadata adds the optional `integer` field; existing
+`number` metadata continues to decode unchanged. Exhaustive JSONValue switches
+must handle the additional integer case. This is not an arbitrary-precision
+decimal or unsigned-integer representation. Floating-point literals retain their
+existing Double semantics. Integer/number cases compare and hash as the same
+numeric value only when the conversion is exact; booleans remain distinct.
+
 ## Identity
 
 Lexicon distinguishes three identifier roles:

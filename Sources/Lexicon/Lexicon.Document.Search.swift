@@ -1572,6 +1572,8 @@ private extension JSONValue {
 				return value
 			case .number(let value):
 				return String(value)
+			case .integer(let value):
+				return String(value)
 			case .bool(let value):
 				return String(value)
 			case .array(let values):
