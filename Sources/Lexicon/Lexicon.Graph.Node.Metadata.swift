@@ -43,6 +43,8 @@ public extension Lexicon.Graph.Node.DefaultValue {
 public enum JSONValue: Hashable, Sendable {
 	case string(String)
 	case number(Double)
+	/// A signed platform integer that cannot be represented exactly as Double.
+	case integer(Int)
 	case bool(Bool)
 	case array([JSONValue])
 	case object([String: JSONValue])
@@ -50,10 +52,50 @@ public enum JSONValue: Hashable, Sendable {
 }
 
 public extension JSONValue {
+	static func == (lhs: Self, rhs: Self) -> Bool {
+		switch (lhs, rhs) {
+			case (.string(let lhs), .string(let rhs)): return lhs == rhs
+			case (.number(let lhs), .number(let rhs)): return lhs == rhs
+			case (.integer(let lhs), .integer(let rhs)): return lhs == rhs
+			case (.integer(let integer), .number(let number)), (.number(let number), .integer(let integer)):
+				return Int(exactly: number) == integer
+			case (.bool(let lhs), .bool(let rhs)): return lhs == rhs
+			case (.array(let lhs), .array(let rhs)): return lhs == rhs
+			case (.object(let lhs), .object(let rhs)): return lhs == rhs
+			case (.null, .null): return true
+			default: return false
+		}
+	}
+
+	func hash(into hasher: inout Hasher) {
+		switch self {
+			case .string(let value):
+				hasher.combine(0)
+				hasher.combine(value)
+			case .number(let value):
+				hasher.combine(1)
+				hasher.combine(value)
+			case .integer(let value):
+				hasher.combine(1)
+				hasher.combine(Double(value))
+			case .bool(let value):
+				hasher.combine(2)
+				hasher.combine(value)
+			case .array(let value):
+				hasher.combine(3)
+				hasher.combine(value)
+			case .object(let value):
+				hasher.combine(4)
+				hasher.combine(value)
+			case .null:
+				hasher.combine(5)
+		}
+	}
 
 	struct JSON: Codable, Hashable, Sendable {
 		public var string: String?
 		public var number: Double?
+		public var integer: Int?
 		public var bool: Bool?
 		public var array: [Self]?
 		public var object: [String: Self]?
@@ -65,6 +107,8 @@ public extension JSONValue {
 					self.string = value
 				case .number(let value):
 					self.number = value
+				case .integer(let value):
+					self.integer = value
 				case .bool(let value):
 					self.bool = value
 				case .array(let value):
@@ -80,6 +124,8 @@ public extension JSONValue {
 	init(_ json: JSON) {
 		if let value = json.string {
 			self = .string(value)
+		} else if let value = json.integer {
+			self = .integer(value)
 		} else if let value = json.number {
 			self = .number(value)
 		} else if let value = json.bool {
@@ -111,6 +157,8 @@ public extension JSONValue {
 				return value
 			case .number(let value):
 				return value
+			case .integer(let value):
+				return value
 			case .bool(let value):
 				return value
 			case .array(let value):
@@ -132,7 +180,15 @@ public extension JSONValue {
 				if CFGetTypeID(value) == CFBooleanGetTypeID() {
 					self = .bool(value.boolValue)
 				} else {
-					self = .number(value.doubleValue)
+					let integer = value.int64Value
+					let decimal = (value as? NSDecimalNumber) ?? NSDecimalNumber(string: value.stringValue)
+					if let exact = Int(exactly: integer),
+					   decimal.compare(NSDecimalNumber(value: integer)) == .orderedSame,
+					   Int(exactly: Double(exact)) != exact {
+						self = .integer(exact)
+					} else {
+						self = .number(value.doubleValue)
+					}
 				}
 			case let value as String:
 				self = .string(value)

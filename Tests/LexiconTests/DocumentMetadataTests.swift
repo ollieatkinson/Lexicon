@@ -8,6 +8,41 @@ import Foundation
 @Suite
 
 struct DocumentMetadataTests {
+	@Test
+	func integer_and_number_cases_share_numeric_equality_without_rounding_large_integers() throws {
+		#expect(JSONValue.integer(1) == .number(1))
+		#expect(JSONValue.integer(1) != .bool(true))
+		#expect(Set([JSONValue.integer(1), .number(1)]).count == 1)
+		#expect(JSONValue.integer(9_007_199_254_740_993) != .number(9_007_199_254_740_992))
+		#expect(JSONValue.integer(Int.max) != .number(Double(Int.max)))
+		let document = Lexicon.Document(roots: ["root": .init(defaultValue: .literal(.integer(1)))])
+		#expect(try TaskPaper(TaskPaper.encode(document)).decodeDocument() == document)
+	}
+	@Test(arguments: [9_007_199_254_740_993, Int.max, Int.min + 1])
+	@LexiconActor
+	func large_integer_defaults_survive_taskpaper_document_coding_and_native_graphs(value: Int) throws {
+		let document = try TaskPaper("""
+		root:
+			value:
+			? \(value)
+			nested:
+			? {"minimum":\(value),"values":[\(value),true,1.5]}
+		""").decodeDocument()
+		let root = try #require(document.roots["root"])
+		#expect(root.children["value"]?.defaultValue == .literal(.integer(value)))
+		#expect(root.children["nested"]?.defaultValue == .literal(.object([
+			"minimum": .integer(value), "values": .array([.integer(value), .bool(true), .number(1.5)])
+		])))
+		#expect(try TaskPaper(TaskPaper.encode(document)).decodeDocument() == document)
+		let encoder = JSONEncoder()
+		let decoder = JSONDecoder()
+		#expect(try Lexicon.Document(decoder.decode(Lexicon.Document.JSON.self, from: encoder.encode(document.json))) == document)
+		let lexicon = try Lexicon(document: document, selectedRoot: "root")
+		#expect(lexicon.root["value"]?.defaultValue == .literal(.integer(value)))
+		let literal = JSONValue.integer(value)
+		#expect(try decoder.decode(JSONValue.JSON.self, from: encoder.encode(JSONValue.JSON(literal))).integer == value)
+		#expect(literal.jsonObject as? Int == value)
+	}
 
 	@Test
 	func numeric_zero_and_one_defaults_remain_distinct_from_booleans() throws {
