@@ -55,6 +55,19 @@ generation, including other roots of the same composed document. It returns
 revision even after the live `Lexicon` changes or is released. Existing unlabeled
 name/collection subscripts remain relative descendant traversal.
 
+`Lexicon.observe()` supplies the current selected-root `Lemma` immediately, then
+complete committed generations and changed root selections through `AsyncStream`.
+Registration and initial delivery share one `LexiconActor` turn; updates publish
+only after the complete generation is installed. Root selection retains the
+current revision. Failed edits and selecting the already selected root do not
+publish. Each consumer buffers only the newest state; this is not an edit log.
+Cancellation removes that observation without stopping other consumers. The
+stream and its handles do not retain the live `Lexicon`; releasing it finishes
+observations while previously delivered handles remain usable and immutable.
+Observation does not grant write permission or automatically adopt a generation
+in another system: each consumer must validate and activate its own coherent
+replacement graph.
+
 ## Editing
 
 Incremental graph-editing APIs—such as add, rename, move, delete, type, and protonym changes—are available only with the `Editor` package trait. Explicit validated replacement of the complete document remains part of the core surface.
