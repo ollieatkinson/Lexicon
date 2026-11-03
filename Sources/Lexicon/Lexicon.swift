@@ -57,6 +57,7 @@ public final class Lexicon: ObservableObject {
 	@Published public private(set) var revision: Revision
 
 	private var generation: Generation
+	private var observations: [UUID: AsyncStream<Lemma>.Continuation] = [:]
 
 	public init(
 		document: Document,
@@ -83,6 +84,12 @@ public final class Lexicon: ObservableObject {
 		try self.init(document: Document(graph), selectedRoot: graph.rootName)
 	}
 
+	deinit {
+		for continuation in observations.values {
+			continuation.finish()
+		}
+	}
+
 	public var graph: Graph {
 		guard let graph = try? document.graph(root: selectedRoot) else {
 			preconditionFailure("The selected root '\(selectedRoot)' is missing.")
@@ -92,6 +99,22 @@ public final class Lexicon: ObservableObject {
 
 	public var root: Lemma {
 		generation.lemma(Lemma.ID(root: selectedRoot))
+	}
+
+	/// The current selected root, then complete committed generations and root
+	/// selections. Slow consumers receive the newest state, not an edit history.
+	/// Retained handles stay frozen and do not retain this live Lexicon.
+	public func observe() -> AsyncStream<Lemma> {
+		let id = UUID()
+		let (stream, continuation) = AsyncStream<Lemma>.makeStream(bufferingPolicy: .bufferingNewest(1))
+		continuation.onTermination = { [weak self] _ in
+			Task { @LexiconActor [weak self] in
+				self?.observations.removeValue(forKey: id)
+			}
+		}
+		observations[id] = continuation
+		continuation.yield(root)
+		return stream
 	}
 
 	public var roots: SortedDictionary<Lemma.Name, Lemma> {
@@ -113,7 +136,9 @@ public final class Lexicon: ObservableObject {
 		guard document.roots[root] != nil else {
 			throw LexiconError("The document does not declare root '\(root)'")
 		}
+		let changed = selectedRoot != root
 		selectedRoot = root
+		if changed { publish() }
 	}
 
 	public func replaceDocument(
@@ -152,6 +177,14 @@ public final class Lexicon: ObservableObject {
 		self.selectedRoot = selectedRoot
 		self.revision = revision
 		self.generation = generation
+		publish()
+	}
+
+	private func publish() {
+		let root = root
+		for continuation in observations.values {
+			continuation.yield(root)
+		}
 	}
 }
 
