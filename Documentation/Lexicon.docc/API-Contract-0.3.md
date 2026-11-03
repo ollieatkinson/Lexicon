@@ -12,8 +12,10 @@ those integers. The Codable metadata adds the optional `integer` field; existing
 `number` metadata continues to decode unchanged. Exhaustive JSONValue switches
 must handle the additional integer case. This is not an arbitrary-precision
 decimal or unsigned-integer representation. Floating-point literals retain their
-existing Double semantics. Integer/number cases compare and hash as the same
-numeric value only when the conversion is exact; booleans remain distinct.
+existing Double semantics. Equality and hashing use Swift's synthesised enum
+conformances: both the case and associated value matter, so `.integer(1)` and
+`.number(1)` are distinct. Ordinary TaskPaper numbers continue to normalise to
+`.number`; the integer case is for values that would otherwise lose precision.
 
 ## Identity
 

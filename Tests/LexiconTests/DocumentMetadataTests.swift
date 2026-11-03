@@ -9,14 +9,13 @@ import Foundation
 
 struct DocumentMetadataTests {
 	@Test
-	func integer_and_number_cases_share_numeric_equality_without_rounding_large_integers() throws {
-		#expect(JSONValue.integer(1) == .number(1))
+	func integer_and_number_cases_keep_distinct_value_identity() {
+		#expect(JSONValue.integer(1) != .number(1))
 		#expect(JSONValue.integer(1) != .bool(true))
-		#expect(Set([JSONValue.integer(1), .number(1)]).count == 1)
+		#expect(Set([JSONValue.integer(1), .number(1)]).count == 2)
+		#expect(Set([JSONValue.integer(9_007_199_254_740_993), .integer(9_007_199_254_740_993)]).count == 1)
 		#expect(JSONValue.integer(9_007_199_254_740_993) != .number(9_007_199_254_740_992))
 		#expect(JSONValue.integer(Int.max) != .number(Double(Int.max)))
-		let document = Lexicon.Document(roots: ["root": .init(defaultValue: .literal(.integer(1)))])
-		#expect(try TaskPaper(TaskPaper.encode(document)).decodeDocument() == document)
 	}
 	@Test(arguments: [9_007_199_254_740_993, Int.max, Int.min + 1])
 	@LexiconActor

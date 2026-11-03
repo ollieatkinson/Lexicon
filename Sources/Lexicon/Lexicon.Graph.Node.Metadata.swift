@@ -52,45 +52,6 @@ public enum JSONValue: Hashable, Sendable {
 }
 
 public extension JSONValue {
-	static func == (lhs: Self, rhs: Self) -> Bool {
-		switch (lhs, rhs) {
-			case (.string(let lhs), .string(let rhs)): return lhs == rhs
-			case (.number(let lhs), .number(let rhs)): return lhs == rhs
-			case (.integer(let lhs), .integer(let rhs)): return lhs == rhs
-			case (.integer(let integer), .number(let number)), (.number(let number), .integer(let integer)):
-				return Int(exactly: number) == integer
-			case (.bool(let lhs), .bool(let rhs)): return lhs == rhs
-			case (.array(let lhs), .array(let rhs)): return lhs == rhs
-			case (.object(let lhs), .object(let rhs)): return lhs == rhs
-			case (.null, .null): return true
-			default: return false
-		}
-	}
-
-	func hash(into hasher: inout Hasher) {
-		switch self {
-			case .string(let value):
-				hasher.combine(0)
-				hasher.combine(value)
-			case .number(let value):
-				hasher.combine(1)
-				hasher.combine(value)
-			case .integer(let value):
-				hasher.combine(1)
-				hasher.combine(Double(value))
-			case .bool(let value):
-				hasher.combine(2)
-				hasher.combine(value)
-			case .array(let value):
-				hasher.combine(3)
-				hasher.combine(value)
-			case .object(let value):
-				hasher.combine(4)
-				hasher.combine(value)
-			case .null:
-				hasher.combine(5)
-		}
-	}
 
 	struct JSON: Codable, Hashable, Sendable {
 		public var string: String?
