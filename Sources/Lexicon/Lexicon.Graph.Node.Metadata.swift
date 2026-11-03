@@ -43,6 +43,8 @@ public extension Lexicon.Graph.Node.DefaultValue {
 public enum JSONValue: Hashable, Sendable {
 	case string(String)
 	case number(Double)
+	/// A signed platform integer that cannot be represented exactly as Double.
+	case integer(Int)
 	case bool(Bool)
 	case array([JSONValue])
 	case object([String: JSONValue])
@@ -54,6 +56,7 @@ public extension JSONValue {
 	struct JSON: Codable, Hashable, Sendable {
 		public var string: String?
 		public var number: Double?
+		public var integer: Int?
 		public var bool: Bool?
 		public var array: [Self]?
 		public var object: [String: Self]?
@@ -65,6 +68,8 @@ public extension JSONValue {
 					self.string = value
 				case .number(let value):
 					self.number = value
+				case .integer(let value):
+					self.integer = value
 				case .bool(let value):
 					self.bool = value
 				case .array(let value):
@@ -80,6 +85,8 @@ public extension JSONValue {
 	init(_ json: JSON) {
 		if let value = json.string {
 			self = .string(value)
+		} else if let value = json.integer {
+			self = .integer(value)
 		} else if let value = json.number {
 			self = .number(value)
 		} else if let value = json.bool {
@@ -111,6 +118,8 @@ public extension JSONValue {
 				return value
 			case .number(let value):
 				return value
+			case .integer(let value):
+				return value
 			case .bool(let value):
 				return value
 			case .array(let value):
@@ -132,7 +141,15 @@ public extension JSONValue {
 				if CFGetTypeID(value) == CFBooleanGetTypeID() {
 					self = .bool(value.boolValue)
 				} else {
-					self = .number(value.doubleValue)
+					let integer = value.int64Value
+					let decimal = (value as? NSDecimalNumber) ?? NSDecimalNumber(string: value.stringValue)
+					if let exact = Int(exactly: integer),
+					   decimal.compare(NSDecimalNumber(value: integer)) == .orderedSame,
+					   Int(exactly: Double(exact)) != exact {
+						self = .integer(exact)
+					} else {
+						self = .number(value.doubleValue)
+					}
 				}
 			case let value as String:
 				self = .string(value)

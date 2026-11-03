@@ -856,6 +856,8 @@ extension JSONValue: CustomStringConvertible {
 				return value
 			case .number(let value):
 				return "\(value)"
+			case .integer(let value):
+				return "\(value)"
 			case .bool(let value):
 				return "\(value)"
 			case .array(let value):
