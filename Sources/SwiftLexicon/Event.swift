@@ -11,6 +11,8 @@ public struct Event: Sendable, Hashable, Identifiable, CustomStringConvertible {
 	private static let count = Mutex(UInt(0))
 
 	public let id: UInt
+	/// Creation time belongs to the occurrence, independent of later delivery.
+	public let date: Date
 	public let description: String
 	public let values: [String: Value]
 	/// An explicit payload, independent of contextual values on the event's key.
@@ -28,24 +30,31 @@ public struct Event: Sendable, Hashable, Identifiable, CustomStringConvertible {
 		self.init(K(l), value: value)
 	}
 
+	public init(_ l: L, value: Value? = nil, date: Date) {
+		self.init(K(l), value: value, date: date)
+	}
+
 	public init<A: L>(_ k: K<A>) {
-		self.init(k, payload: .none)
+		self.init(k, date: .now)
 	}
 
 	/// Keeps the complete native key for matching while carrying a separate value.
 	public init<A: L>(_ k: K<A>, value: Value) {
-		self.init(k, payload: .some(value))
+		self.init(k, value: value, date: .now)
 	}
 
-	private init<A: L>(_ k: K<A>, payload: Value?) {
+	/// Supplies a creation date for replay or deterministic scenarios. Nil omits
+	/// the separate payload; JSON null remains an explicit payload value.
+	public init<A: L>(_ k: K<A>, value: Value? = nil, date: Date) {
 
 		self.id = Self.count.withLock { count in
 			count += 1
 			return count
 		}
 
-		self.description = payload.map { k.__ + " => " + $0.eventDescription } ?? k.__
-		self.value = payload
+		self.date = date
+		self.description = value.map { k.__ + " => " + $0.eventDescription } ?? k.__
+		self.value = value
 		self.values = Dictionary(uniqueKeysWithValues: k.____.map { key, value in
 			(key.__, value)
 		})
@@ -53,7 +62,14 @@ public struct Event: Sendable, Hashable, Identifiable, CustomStringConvertible {
 	}
 
 	public var snapshot: Snapshot {
-		Snapshot(id: id, description: description, lemma: l.__, values: values, value: value)
+		Snapshot(
+			id: id,
+			date: date,
+			description: description,
+			lemma: l.__,
+			values: values,
+			value: value
+		)
 	}
 
 	public var detail: EventDetail {
@@ -95,20 +111,34 @@ public extension Event {
 
 	struct Snapshot: Hashable, Sendable, Codable {
 		public var id: UInt
+		/// Historical snapshots may predate creation-time capture.
+		public var date: Date?
 		public var description: String
 		public var lemma: String
 		public var values: [String: Value]
 		public var value: Value?
 
-		init(id: UInt, description: String, lemma: String, values: [String: Value], value: Value?) {
-			self.id = id; self.description = description; self.lemma = lemma
-			self.values = values; self.value = value
+		init(
+			id: UInt,
+			date: Date,
+			description: String,
+			lemma: String,
+			values: [String: Value],
+			value: Value?
+		) {
+			self.id = id
+			self.date = date
+			self.description = description
+			self.lemma = lemma
+			self.values = values
+			self.value = value
 		}
 
-		private enum CodingKeys: String, CodingKey { case id, description, lemma, values, value }
+		private enum CodingKeys: String, CodingKey { case id, date, description, lemma, values, value }
 		public init(from decoder: any Decoder) throws {
 			let fields = try decoder.container(keyedBy: CodingKeys.self)
 			id = try fields.decode(UInt.self, forKey: .id)
+			date = try fields.decodeIfPresent(Date.self, forKey: .date)
 			description = try fields.decode(String.self, forKey: .description)
 			lemma = try fields.decode(String.self, forKey: .lemma)
 			values = try fields.decode([String: Value].self, forKey: .values)

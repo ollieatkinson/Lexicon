@@ -191,6 +191,14 @@ matching uses the complete original key. `event[]` reads the explicit payload;
 value-at-event-lemma convention. Snapshots include the optional explicit `value`;
 an absent field and an explicit JSON null remain distinct when decoded.
 
+An event's `date` is captured at construction, separately from its delivery ID
+and any observer's receipt time. Sending the same occurrence through another bus
+preserves its ID and date. The `date:` initializer overloads accept a supplied
+creation date for replay and deterministic scenarios; existing initializer
+function values remain available. Snapshots retain the date using the caller's
+Codable date strategy. A historical snapshot without a date decodes with
+`date == nil`, rather than inventing an occurrence time.
+
 ## Compatibility boundaries
 
 `Lexicon`, `SwiftLexicon`, `LexiconGenerators`, `LexiconSearchMLX`, and `LexiconSearchONNX` are public library products. Their public APIs follow the release's source-compatibility policy.
