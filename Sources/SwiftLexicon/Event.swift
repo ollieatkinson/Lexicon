@@ -18,6 +18,9 @@ public struct Event: Sendable, Hashable, Identifiable, CustomStringConvertible {
 	/// An explicit payload, independent of contextual values on the event's key.
 	/// Nil retains the original convention of reading a value at the event lemma.
 	public let value: Value?
+	/// Supplemental event data, separate from the key's bindings and payload.
+	/// Copying and enriching an occurrence preserves its native ID and date.
+	public var context: [String: Value] = [:]
 
 	public var l: L { k(\.L) }
 	public let k: any KProtocol
@@ -79,7 +82,8 @@ public struct Event: Sendable, Hashable, Identifiable, CustomStringConvertible {
 			description: description,
 			lemma: l.__,
 			values: values,
-			value: value
+			value: value,
+			context: context
 		)
 	}
 
@@ -128,6 +132,7 @@ public extension Event {
 		public var lemma: String
 		public var values: [String: Value]
 		public var value: Value?
+		public var context: [String: Value]
 
 		init(
 			id: UInt,
@@ -135,7 +140,8 @@ public extension Event {
 			description: String,
 			lemma: String,
 			values: [String: Value],
-			value: Value?
+			value: Value?,
+			context: [String: Value]
 		) {
 			self.id = id
 			self.date = date
@@ -143,9 +149,10 @@ public extension Event {
 			self.lemma = lemma
 			self.values = values
 			self.value = value
+			self.context = context
 		}
 
-		private enum CodingKeys: String, CodingKey { case id, date, description, lemma, values, value }
+		private enum CodingKeys: String, CodingKey { case id, date, description, lemma, values, value, context }
 		public init(from decoder: any Decoder) throws {
 			let fields = try decoder.container(keyedBy: CodingKeys.self)
 			id = try fields.decode(UInt.self, forKey: .id)
@@ -153,6 +160,7 @@ public extension Event {
 			description = try fields.decode(String.self, forKey: .description)
 			lemma = try fields.decode(String.self, forKey: .lemma)
 			values = try fields.decode([String: Value].self, forKey: .values)
+			context = try fields.contains(.context) ? fields.decode([String: Value].self, forKey: .context) : [:]
 			// Explicit JSON null is a payload; an absent field uses the original
 			// value-at-lemma convention. decodeIfPresent would conflate the two.
 			value = try fields.contains(.value) ? .some(fields.decode(Value.self, forKey: .value)) : .none

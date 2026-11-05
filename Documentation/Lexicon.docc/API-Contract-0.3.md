@@ -202,6 +202,22 @@ The dated payload overload keeps `Value` nonoptional, just like the existing
 payload overload: `value: nil` is an explicit JSON null. Omitting `value:` keeps
 the value-at-lemma convention, with or without a supplied date.
 
+An event's supplemental `context` is JSON data separate from its key bindings
+(`values`) and explicit payload (`value`). Enrich a value copy before sending it:
+
+```swift
+var occurrence = Event(key, value: payload)
+occurrence.context = ["source": ["id": "app.intent.save"]]
+try events.send(occurrence)
+```
+
+Supplemental context does not change `detail`, key/role matching, key subscripts,
+or payload decoding. Copies keep the native ID and creation date, and delivery,
+forwarding and snapshots retain the context. Historical snapshots without a
+context field decode with an empty dictionary; a present non-object is invalid.
+An event can therefore carry domain provenance without adding it to the key or
+wrapping the domain's payload in an extra envelope.
+
 ## Compatibility boundaries
 
 `Lexicon`, `SwiftLexicon`, `LexiconGenerators`, `LexiconSearchMLX`, and `LexiconSearchONNX` are public library products. Their public APIs follow the release's source-compatibility policy.
