@@ -198,6 +198,9 @@ creation date for replay and deterministic scenarios; existing initializer
 function values remain available. Snapshots retain the date using the caller's
 Codable date strategy. A historical snapshot without a date decodes with
 `date == nil`, rather than inventing an occurrence time.
+The dated payload overload keeps `Value` nonoptional, just like the existing
+payload overload: `value: nil` is an explicit JSON null. Omitting `value:` keeps
+the value-at-lemma convention, with or without a supplied date.
 
 ## Compatibility boundaries
 

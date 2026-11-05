@@ -30,7 +30,11 @@ public struct Event: Sendable, Hashable, Identifiable, CustomStringConvertible {
 		self.init(K(l), value: value)
 	}
 
-	public init(_ l: L, value: Value? = nil, date: Date) {
+	public init(_ l: L, date: Date) {
+		self.init(K(l), date: date)
+	}
+
+	public init(_ l: L, value: Value, date: Date) {
 		self.init(K(l), value: value, date: date)
 	}
 
@@ -43,9 +47,16 @@ public struct Event: Sendable, Hashable, Identifiable, CustomStringConvertible {
 		self.init(k, value: value, date: .now)
 	}
 
-	/// Supplies a creation date for replay or deterministic scenarios. Nil omits
-	/// the separate payload; JSON null remains an explicit payload value.
-	public init<A: L>(_ k: K<A>, value: Value? = nil, date: Date) {
+	/// Supplies a creation date for replay or deterministic scenarios.
+	public init<A: L>(_ k: K<A>, date: Date) {
+		self.init(k, payload: .none, date: date)
+	}
+
+	public init<A: L>(_ k: K<A>, value: Value, date: Date) {
+		self.init(k, payload: .some(value), date: date)
+	}
+
+	private init<A: L>(_ k: K<A>, payload: Value?, date: Date) {
 
 		self.id = Self.count.withLock { count in
 			count += 1
@@ -53,8 +64,8 @@ public struct Event: Sendable, Hashable, Identifiable, CustomStringConvertible {
 		}
 
 		self.date = date
-		self.description = value.map { k.__ + " => " + $0.eventDescription } ?? k.__
-		self.value = value
+		self.description = payload.map { k.__ + " => " + $0.eventDescription } ?? k.__
+		self.value = payload
 		self.values = Dictionary(uniqueKeysWithValues: k.____.map { key, value in
 			(key.__, value)
 		})

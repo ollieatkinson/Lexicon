@@ -15,9 +15,11 @@ struct EventDateTests {
 		let date = Date(timeIntervalSince1970: 1_700_000_000.125)
 		let key = test.one["Dorothy"].more
 		let value: Event.Value? = payload ? .null : nil
-		let event = keyed
-			? Event(key, value: value, date: date)
-			: Event(test.one, value: value, date: date)
+		let event = if keyed {
+			payload ? Event(key, value: nil, date: date) : Event(key, date: date)
+		} else {
+			payload ? Event(test.one, value: nil, date: date) : Event(test.one, date: date)
+		}
 		let events = Events()
 		let stream = events.stream
 		try events.send(event)
