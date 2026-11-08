@@ -170,7 +170,7 @@ public struct Lemma: Hashable, CustomStringConvertible, Sendable {
 	where Descendant: Collection, Descendant.Element == Name {
 		var current = self
 		for name in descendant {
-			guard let child = current.children[name] else {
+			guard let child = current[id: current.id.appending(name)] else {
 				return nil
 			}
 			current = child

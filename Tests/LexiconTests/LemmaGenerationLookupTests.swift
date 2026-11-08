@@ -2,6 +2,46 @@ import Testing
 
 @Suite @LexiconActor
 struct LemmaGenerationLookupTests {
+	@Test func relative_lookup_matches_visible_children_across_inheritance_and_aliases() throws {
+		let owner = try Lexicon(document: TaskPaper("""
+		shared:
+			template:
+				title:
+				? "Dorothy"
+				nested:
+					value:
+		app:
+			item:
+			+ shared.template
+				title:
+				? "Witch"
+				text:
+				= title
+			copy:
+			= item
+		"""
+		).decodeDocument(), selectedRoot: "app")
+		let original = owner.root
+		try owner.replaceDocument(with: document("Changed", additionalField: true), selectedRoot: "shared")
+		for root in [original, owner.root] {
+			for id: Lemma.ID in ["app.item", "app.copy", "shared.template"] {
+				let node = try #require(root[id: id])
+				#expect(node[[Lemma.Name]()] == node)
+				#expect(node["missing"] == nil)
+				for (name, child) in node.children {
+					#expect(node[name] == child)
+					#expect(node[name, "missing"] == nil)
+					for (grandchildName, grandchild) in child.children {
+						#expect(node[name, grandchildName] == grandchild)
+					}
+				}
+			}
+		}
+		#expect(original["item", "title"]?.defaultValue == .literal(.string("Witch")))
+		#expect(original["copy", "text"]?.source.id == "app.item.title")
+		#expect(owner.root[id: "app.item.title"]?.defaultValue == .literal(.string("Changed")))
+	}
+
 	@Test func failed_type_branches_do_not_hide_inherited_or_alias_paths() throws {
 		let document = try TaskPaper("""
 		shared:
