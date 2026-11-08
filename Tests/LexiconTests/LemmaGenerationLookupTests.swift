@@ -2,6 +2,33 @@ import Testing
 
 @Suite @LexiconActor
 struct LemmaGenerationLookupTests {
+	@Test func failed_type_branches_do_not_hide_inherited_or_alias_paths() throws {
+		let document = try TaskPaper("""
+		shared:
+			empty:
+			present:
+				title:
+				? "Dorothy"
+		app:
+			item:
+			+ shared.empty
+			+ shared.present
+			alias:
+			= item
+		""").decodeDocument()
+		let root = try Lexicon(document: document, selectedRoot: "app").root
+		for _ in 0..<4 {
+			for id: Lemma.ID in ["shared.empty.title", "app.item.missing", "app.alias.missing.title", "unknown.root"] {
+				#expect(root[id: id] == nil)
+			}
+			for id: Lemma.ID in ["app.item.title", "app.alias.title"] {
+				let title = try #require(root[id: id])
+				#expect(title.id == id && title.source.id == "shared.present.title")
+				#expect(title.defaultValue == .literal(.string("Dorothy")))
+			}
+		}
+	}
+
 	@Test func warmed_resolution_keeps_inherited_placements_aliases_and_revisions_independent() throws {
 		func document(_ value: String, extra: Bool = false) throws -> Lexicon.Document {
 			try TaskPaper("""
