@@ -55,6 +55,26 @@ public extension Lemma {
 		}
 
 		public static func isValidPrefix(_ candidate: String) -> Bool {
+			// ASCII names need no grapheme or Unicode-category inspection.
+			// Keep the complete character rules below for every non-ASCII input.
+			if candidate.utf8.allSatisfy({ $0 < 0x80 }) {
+				var isFirst = true
+				var previousWasUnderscore = false
+				for byte in candidate.utf8 {
+					switch byte {
+					case 0x41 ... 0x5A, 0x61 ... 0x7A:
+						previousWasUnderscore = false
+					case 0x30 ... 0x39 where !isFirst:
+						previousWasUnderscore = false
+					case 0x5F where !previousWasUnderscore:
+						previousWasUnderscore = true
+					default:
+						return false
+					}
+					isFirst = false
+				}
+				return !isFirst
+			}
 			guard let first = candidate.first else {
 				return false
 			}
