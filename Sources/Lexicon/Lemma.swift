@@ -330,6 +330,9 @@ extension Lexicon {
 			of resolution: Resolution,
 			visiting: inout Set<Visit>
 		) -> Resolution? {
+			// A concrete source cannot recurse. Reserve alias cycle tracking
+			// for nodes that actually declare a protonym.
+			guard node(for: resolution).protonym != nil else { return resolution }
 			let visit = Visit.source(resolution.nodeID)
 			guard visiting.insert(visit).inserted else {
 				return nil
