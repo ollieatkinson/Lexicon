@@ -452,49 +452,49 @@ extension Lexicon {
 			if rawNodes[resolution.requestedID] == nil {
 				result.insert(source.nodeID)
 			}
-			var visiting: Set<Lemma.ID> = []
-			collectTypes(of: source, into: &result, visiting: &visiting)
+			var visited: Set<Lemma.ID> = []
+			collectTypes(of: source, into: &result, visited: &visited)
 			let sorted = result.sorted()
 			typeIDs[resolution] = sorted
 			return sorted
 		}
 
+		// A shared ancestor contributes the same types on every path.
 		private func collectTypes(
 			of resolution: Resolution,
 			into result: inout Set<Lemma.ID>,
-			visiting: inout Set<Lemma.ID>
+			visited: inout Set<Lemma.ID>
 		) {
-			guard visiting.insert(resolution.nodeID).inserted else {
+			guard visited.insert(resolution.nodeID).inserted else {
 				return
 			}
-			defer { visiting.remove(resolution.nodeID) }
 			for typeID in node(for: resolution).type.sorted() {
 				result.insert(typeID)
 				if let type = resolve(typeID), let source = source(of: type) {
-					collectTypes(of: source, into: &result, visiting: &visiting)
+					collectTypes(of: source, into: &result, visited: &visited)
 				}
 			}
 		}
 
+		// Search each immutable declaration once; the set belongs to this query.
 		func defaultValue(of resolution: Resolution) -> Graph.Node.DefaultValue? {
-			var visiting: Set<Lemma.ID> = []
-			return defaultValue(of: resolution, visiting: &visiting)
+			var visited: Set<Lemma.ID> = []
+			return defaultValue(of: resolution, visited: &visited)
 		}
 
 		private func defaultValue(
 			of resolution: Resolution,
-			visiting: inout Set<Lemma.ID>
+			visited: inout Set<Lemma.ID>
 		) -> Graph.Node.DefaultValue? {
-			guard visiting.insert(resolution.nodeID).inserted else {
+			guard visited.insert(resolution.nodeID).inserted else {
 				return nil
 			}
-			defer { visiting.remove(resolution.nodeID) }
 
 			guard let source = source(of: resolution) else {
 				return nil
 			}
 			if source.nodeID != resolution.nodeID {
-				return defaultValue(of: source, visiting: &visiting)
+				return defaultValue(of: source, visited: &visited)
 			}
 			let node = node(for: source)
 			if let value = node.defaultValue {
@@ -503,7 +503,7 @@ extension Lexicon {
 			for typeID in node.type.sorted() {
 				if
 					let type = resolve(typeID),
-					let value = defaultValue(of: type, visiting: &visiting)
+					let value = defaultValue(of: type, visited: &visited)
 				{
 					return value
 				}
