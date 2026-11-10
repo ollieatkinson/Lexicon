@@ -140,14 +140,14 @@ public extension Lexicon.Document {
 			revision: .initial,
 			document: self
 		)
+		// Declarations without dependencies still get every check below, but
+		// cannot form a type/alias cycle and need no vertex in its graph.
 		var edges: [Lemma.ID: [DependencyEdge]] = [:]
 
 		for id in generation.rawNodes.keys.sorted() {
 			guard let node = generation.rawNodes[id] else {
 				continue
 			}
-			edges[id, default: []] = []
-
 			if node.protonym != nil {
 				if node.children.isNotEmpty {
 					diagnostics.append(.init(

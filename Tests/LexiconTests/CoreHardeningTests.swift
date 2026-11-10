@@ -212,6 +212,46 @@ struct StrictTaskPaperTests {
 struct CoreValidationTests {
 
 	@Test(arguments: [
+		"""
+		root:
+			a:
+			+ root.b
+			b:
+			+ root.a
+		""",
+		"""
+		root:
+			a:
+			= b
+			b:
+			= a
+		""",
+		"""
+		root:
+			a:
+			+ root.b
+			b:
+			= a
+		"""
+	])
+	func independentDeclarationsAndDependencySinksPreserveCompleteCycleDiagnostics(source: String) throws {
+		let original = try TaskPaper(source).decodeDocument()
+		let extended = try TaskPaper(source + "\n" + """
+			terminal:
+			independent:
+				child:
+			dependent:
+			+ root.terminal
+			referenced:
+			? @ root.terminal
+		""").decodeDocument()
+
+		let diagnostics = original.validate()
+		#expect(!diagnostics.isEmpty)
+		#expect(extended.validate() == diagnostics)
+	}
+
+	@Test(arguments: [
 		("""
 		root:
 			a:
