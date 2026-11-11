@@ -106,6 +106,50 @@ struct LemmaGenerationLookupTests {
 		try check(old, "Dorothy", hasExtra: false)
 	}
 
+	@Test func type_dictionaries_keep_sorted_unique_members_and_generation_handles() throws {
+		func document(_ name: String) throws -> Lexicon.Document {
+			try TaskPaper("""
+			shared:
+				base:
+				\(name):
+				+ shared.base
+				zeta:
+				+ shared.base
+			app:
+				item:
+				+ shared.zeta
+				+ shared.\(name)
+				alias:
+				= item
+			""").decodeDocument()
+		}
+		var owner: Lexicon? = try Lexicon(document: document("alpha"), selectedRoot: "app")
+		let original = try #require(owner?.root)
+		try owner?.replaceDocument(with: document("beta"), selectedRoot: "shared")
+		let current = try #require(owner?.root)
+		owner = nil
+		for (root, name) in [(original, "alpha"), (current, "beta")] {
+			let selected = try Lemma.ID(parsing: "shared.\(name)")
+			let all: [Lemma.ID] = ["app.item", selected, "shared.base", "shared.zeta"].sorted()
+			let direct: [Lemma.ID] = [selected, "shared.zeta"]
+			for _ in 0..<3 {
+				let item = try #require(root[id: "app.item"])
+				let alias = try #require(root[id: "app.alias"])
+				#expect(Array(item.type.keys) == all)
+				#expect(Array(alias.type.keys) == all)
+				#expect(Array(item.ownType.keys) == direct)
+				#expect(Array(alias.ownType.keys) == direct)
+				for types in [item.type, item.ownType, alias.type, alias.ownType] {
+					for (id, value) in types {
+						#expect(value.id == id)
+						#expect(value == root[id: id])
+						#expect(value.revision == root.revision)
+					}
+				}
+			}
+		}
+	}
+
 	@Test func repeated_type_queries_preserve_alias_placements_and_generation_changes() throws {
 		func document(_ role: String) throws -> Lexicon.Document {
 			try TaskPaper("""

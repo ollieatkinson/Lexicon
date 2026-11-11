@@ -117,22 +117,18 @@ public struct Lemma: Hashable, CustomStringConvertible, Sendable {
 		guard let resolution = generation.resolve(id) else {
 			return [:]
 		}
-		var types: Types = [:]
-		for type in generation.directTypeIDs(of: resolution) {
-			types[type] = generation.lemma(type)
-		}
-		return types
+		return Types(uniqueKeysWithValues: generation.directTypeIDs(of: resolution).map {
+			(key: $0, value: generation.lemma($0))
+		})
 	}
 
 	public var type: Types {
 		guard let resolution = generation.resolve(id) else {
 			return [:]
 		}
-		var types: Types = [:]
-		for type in generation.allTypeIDs(of: resolution) {
-			types[type] = generation.lemma(type)
-		}
-		return types
+		return Types(uniqueKeysWithValues: generation.allTypeIDs(of: resolution).map {
+			(key: $0, value: generation.lemma($0))
+		})
 	}
 
 	public var defaultValue: Lexicon.Graph.Node.DefaultValue? {
