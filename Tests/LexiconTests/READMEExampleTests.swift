@@ -86,8 +86,8 @@ struct READMEExampleTests {
 		)
 		let enabledLemma = try #require(await lexicon["commerce.ui.product.card.buy.enabled"])
 		let submitLemma = try #require(await lexicon["commerce.api.storefront.order.create.can.submit"])
-		let enabledDefault = await enabledLemma.defaultValue
-		let enabledIsSubmitCapability = await enabledLemma.is(submitLemma)
+		let enabledDefault = enabledLemma.defaultValue
+		let enabledIsSubmitCapability = enabledLemma.is(submitLemma)
 		let json = await lexicon.json()
 
 		#expect(enabledDefault == .literal(.bool(true)))

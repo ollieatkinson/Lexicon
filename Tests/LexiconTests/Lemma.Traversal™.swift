@@ -23,7 +23,7 @@ struct Lemma_Traversal™ {
 		
 		var hierarchy: [Lemma] = []
 		
-		await lemma.graphTraversal(.breadthFirst) { lemma in
+		lemma.graphTraversal(.breadthFirst) { lemma in
 			hierarchy.append(lemma)
 		}
 		
@@ -56,7 +56,7 @@ struct Lemma_Traversal™ {
 		
 		var hierarchy: [Lemma] = []
 		
-		await lemma.graphTraversal(.depthFirst) { lemma in
+		lemma.graphTraversal(.depthFirst) { lemma in
 			hierarchy.append(lemma)
 		}
 

@@ -6,7 +6,6 @@ import Foundation
 import _Collections
 import Synchronization
 
-@LexiconActor
 public struct Lemma: Hashable, CustomStringConvertible, Sendable {
 
 	public typealias Description = String
@@ -256,8 +255,8 @@ extension Lexicon {
 		let document: Document
 		let rawNodes: [Lemma.ID: Graph.Node]
 		// A generation never changes. Store IDs rather than handles so this
-		// actor-confined memo does not retain its own generation through Lemma.
-		@LexiconActor private var typeIDs: [Resolution: [Lemma.ID]] = [:]
+		// synchronized memo does not retain its own generation through Lemma.
+		private let typeIDs = Mutex<[Resolution: [Lemma.ID]]>([:])
 		// Synchronous document validation/editing also uses this generation.
 		// Cache complete top-level results, never recursive/cycle-local results.
 		// A stored nil is a definitive miss in this immutable generation.
@@ -434,14 +433,14 @@ extension Lexicon {
 			return node(for: source).type.sorted()
 		}
 
-		@LexiconActor func allTypeIDs(of resolution: Resolution) -> [Lemma.ID] {
-			if let cached = typeIDs[resolution] { return cached }
+		func allTypeIDs(of resolution: Resolution) -> [Lemma.ID] {
+			if let cached = typeIDs.withLock({ $0[resolution] }) { return cached }
 			guard let source = source(of: resolution) else {
 				return []
 			}
 			if source.nodeID != resolution.nodeID {
 				let result = allTypeIDs(of: source)
-				typeIDs[resolution] = result
+				typeIDs.withLock { $0[resolution] = result }
 				return result
 			}
 			var result: Set<Lemma.ID> = [resolution.requestedID]
@@ -451,7 +450,7 @@ extension Lexicon {
 			var visited: Set<Lemma.ID> = []
 			collectTypes(of: source, into: &result, visited: &visited)
 			let sorted = result.sorted()
-			typeIDs[resolution] = sorted
+			typeIDs.withLock { $0[resolution] = sorted }
 			return sorted
 		}
 

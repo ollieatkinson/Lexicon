@@ -88,7 +88,7 @@ struct InteractiveSession {
 				case "excerpt":
 					let id = try rest.required(0, named: "id")
 					let lemma = try await composedDocument().lemma(id)
-					let export = await lemma.exportBranchDocument()
+					let export = lemma.exportBranchDocument()
 					try emit(ExcerptOutput(export))
 				case "add":
 					let parent = try rest.required(0, named: "parent")

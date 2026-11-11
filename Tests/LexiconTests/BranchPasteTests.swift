@@ -29,7 +29,7 @@ struct BranchPasteTests {
 		let lexicon = try await Lexicon(document: document, selectedRoot: "root")
 
 		let branch = try #require(await lexicon["root.branch"])
-		let exported = await branch.exportBranchDocument()
+		let exported = branch.exportBranchDocument()
 
 		#expect(exported.diagnostics == [
 			.init(kind: .externalType, path: "branch.external", reference: "root.shared.kind"),

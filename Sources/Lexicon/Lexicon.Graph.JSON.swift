@@ -113,7 +113,7 @@ public extension Sequence where Element == Lexicon.Graph.Node.Class {
 
 private extension Sequence where Element == Lemma {
 	
-	@LexiconActor func sortedByChildCount() -> [Element] {
+	func sortedByChildCount() -> [Element] {
 		sorted{ l, r in
 			guard l.ownChildren.count != r.ownChildren.count else {
 				return l.id < r.id
@@ -204,7 +204,7 @@ public extension Lexicon.Graph.Node {
 		public var kind: Set<Lemma.ID>
 		fileprivate let synthesizedMixinTypes: [Lemma.ID]?
 
-		@LexiconActor init(lemma: Lemma) {
+		init(lemma: Lemma) {
 			let type = lemma.ownType
 				.keys
 				.unlessEmpty
@@ -398,7 +398,7 @@ private extension Lemma {
 
 private extension JSONValue {
 
-	@LexiconActor func filtered(matching lemma: Lemma) -> JSONValue? {
+	func filtered(matching lemma: Lemma) -> JSONValue? {
 		let fields = lemma.jsonFields
 
 		switch self {

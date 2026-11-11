@@ -199,7 +199,7 @@ struct DocumentMetadataTests {
 		let sharedKind = try #require(await lexicon["shared.kind"])
 		let item = try #require(await lexicon["app.item"])
 		let zetaChild = try #require(await lexicon["zeta.child"])
-		let itemIsSharedKind = await item.is(sharedKind)
+		let itemIsSharedKind = item.is(sharedKind)
 		let json = await lexicon.json()
 
 		#expect(rootNames == ["app", "shared", "zeta"])
@@ -275,19 +275,19 @@ struct DocumentMetadataTests {
 			selectedRoot: "root"
 		).root
 
-		let instance = try #require(await root["instance"])
-		let inheritedUnique = try #require(await instance["unique"])
-		let ownShared = try #require(await instance["shared"])
-		let own = try #require(await root["own"])
-		let alias = try await root.ownChildren["alias"].try()
-		let multiShared = try #require(await root["multi", "shared"])
+		let instance = try #require(root["instance"])
+		let inheritedUnique = try #require(instance["unique"])
+		let ownShared = try #require(instance["shared"])
+		let own = try #require(root["own"])
+		let alias = try root.ownChildren["alias"].try()
+		let multiShared = try #require(root["multi", "shared"])
 
-		let instanceDefault = await instance.defaultValue
-		let inheritedUniqueDefault = await inheritedUnique.defaultValue
-		let ownSharedDefault = await ownShared.defaultValue
-		let ownDefault = await own.defaultValue
-		let aliasDefault = await alias.defaultValue
-		let multiSharedDefault = await multiShared.defaultValue
+		let instanceDefault = instance.defaultValue
+		let inheritedUniqueDefault = inheritedUnique.defaultValue
+		let ownSharedDefault = ownShared.defaultValue
+		let ownDefault = own.defaultValue
+		let aliasDefault = alias.defaultValue
+		let multiSharedDefault = multiShared.defaultValue
 
 		#expect(instanceDefault == .literal(.string("kind default")))
 		#expect(inheritedUniqueDefault == .literal(.string("kind unique")))

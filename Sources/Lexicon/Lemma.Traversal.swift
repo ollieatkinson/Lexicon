@@ -12,7 +12,7 @@ public extension Lemma {
 			return
 		}
 		
-		let next: @LexiconActor () -> Lemma?
+		let next: () -> Lemma?
 		
 		switch traversal {
 			

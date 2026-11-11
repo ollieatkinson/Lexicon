@@ -39,10 +39,10 @@ struct Lemma™ {
 			selectedRoot: "root"
 		).root
 
-		let userId = try #require(await root["user", "id"])
-		let collectionId = try #require(await root["db", "collection", "id"])
+		let userId = try #require(root["user", "id"])
+		let collectionId = try #require(root["db", "collection", "id"])
 
-		let isCollectionId = await userId.is(collectionId)
+		let isCollectionId = userId.is(collectionId)
 
 		#expect(isCollectionId == true)
 	}
@@ -57,16 +57,16 @@ struct Lemma™ {
 		).root
 
 		do {
-			let a = try #require(await root["user", "b", "c"])
-			let b = try #require(await root["a", "b", "c"])
-			let matches = await a.is(b)
+			let a = try #require(root["user", "b", "c"])
+			let b = try #require(root["a", "b", "c"])
+			let matches = a.is(b)
 			#expect(matches == true)
 		}
 
 		do {
-			let a = try #require(await root["a", "two", "two", "two", "three"])
-			let b = try #require(await root["one", "two", "three"])
-			let matches = await a.is(b)
+			let a = try #require(root["a", "two", "two", "two", "three"])
+			let b = try #require(root["one", "two", "three"])
+			let matches = a.is(b)
 			#expect(matches == true)
 		}
 	}
@@ -108,16 +108,16 @@ struct Lemma™ {
 		let synonym = try #require(await lexicon["root.synonym"])
 		let proposed = try #require(await lexicon["root.proposed"])
 
-		#expect(await synonym.protonym == target)
-		#expect(await synonym.source == target)
-		#expect(await proposed.protonym == nil)
+		#expect(synonym.protonym == target)
+		#expect(synonym.source == target)
+		#expect(proposed.protonym == nil)
 
 		#if EDITOR
 		let updated = try await lexicon.setProtonym(synonym, of: proposed)
 		let currentTarget = try #require(await lexicon["root.target"])
 
-		#expect(await updated.node.protonym == "synonym")
-		#expect(await updated.source == currentTarget)
+		#expect(updated.node.protonym == "synonym")
+		#expect(updated.source == currentTarget)
 		#endif
 	}
 

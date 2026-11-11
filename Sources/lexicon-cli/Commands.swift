@@ -269,7 +269,7 @@ struct Excerpt: AsyncParsableCommand {
 	mutating func run() async throws {
 		let document = try sourceOnly ? input.lexiconDocument() : input.composedLexiconDocument()
 		let lemma = try await document.lemma(id)
-		let export = await lemma.exportBranchDocument()
+		let export = lemma.exportBranchDocument()
 		try AgentJSON.print(ExcerptOutput(export))
 	}
 }

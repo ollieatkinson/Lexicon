@@ -14,28 +14,28 @@ struct Lemma_Find™ {
 	@Test
 	func test_() async throws {
 		let lemma = try await sentenceRoot(sentences)
-		let o = await lemma.find("").map(\.id)
+		let o = lemma.find("").map(\.id)
 		#expect(o == [])
 	}
 	
 	@Test
 	func test_c() async throws {
 		let lemma = try await sentenceRoot(sentences)
-		let o = await lemma.find("c").map(\.id)
+		let o = lemma.find("c").map(\.id)
 		#expect(o == ["a.sentence.a.b.c"])
 	}
 	
 	@Test
 	func test_C() async throws {
 		let lemma = try await sentenceRoot(sentences)
-		let o = await lemma.find("c").map(\.id)
+		let o = lemma.find("c").map(\.id)
 		#expect(o == ["a.sentence.a.b.c"])
 	}
 	
 	@Test
 	func test_n() async throws {
 		let lemma = try await sentenceRoot(sentences)
-		let o = await lemma.find("n").map(\.id).sorted()
+		let o = lemma.find("n").map(\.id).sorted()
 		#expect(o == [
 			"a.word.noun",
 			"a.word.number",
@@ -45,7 +45,7 @@ struct Lemma_Find™ {
 	@Test
 	func test_w_n() async throws {
 		let lemma = try await sentenceRoot(sentences)
-		let o = await lemma.find("w", "n").map(\.id).sorted()
+		let o = lemma.find("w", "n").map(\.id).sorted()
 		#expect(o == [
 			"a.word.noun",
 			"a.word.number",
@@ -55,7 +55,7 @@ struct Lemma_Find™ {
 	@Test
 	func test_w__n() async throws {
 		let lemma = try await sentenceRoot(sentences)
-		let o = await lemma.find("w", "", "n").map(\.id).sorted()
+		let o = lemma.find("w", "", "n").map(\.id).sorted()
 		#expect(o == [
 			"a.word.noun",
 			"a.word.number",
@@ -65,7 +65,7 @@ struct Lemma_Find™ {
 	@Test
 	func test_a_b() async throws {
 		let lemma = try await sentenceRoot(sentences)
-		let o = await lemma.find("a", "b").map(\.id)
+		let o = lemma.find("a", "b").map(\.id)
 		#expect(o == [
 			"a.sentence.a.b",
 		])
@@ -81,7 +81,7 @@ struct Lemma_Find™ {
 		"""
 		
 		let lemma = try await sentenceRoot(sentences)
-		let o = await lemma.find("b", "d").map(\.id).sorted()
+		let o = lemma.find("b", "d").map(\.id).sorted()
 		#expect(o == [
 			"a.sentence.a.b.c.d",
 			"a.sentence.b.c.d",
@@ -98,14 +98,14 @@ struct Lemma_Find™ {
 		"""
 		let lemma = try await sentenceRoot(sentences)
 		do {
-			let o = await lemma.find("a", "d").map(\.id).sorted()
+			let o = lemma.find("a", "d").map(\.id).sorted()
 			#expect(o == [
 				"a.sentence.a.b.c.d",
 				"a.sentence.b.c.d.a.b.c.d",
 			])
 		}
 		do {
-			let o = await lemma.find("b", "d").map(\.id).sorted()
+			let o = lemma.find("b", "d").map(\.id).sorted()
 			#expect(o == [
 				"a.sentence.a.b.c.d",
 				"a.sentence.b.c.d",

@@ -49,6 +49,11 @@ Replacing an editor's entire document is an explicit operation. It is not an inc
 
 Textual IDs remain the durable representation for persistence and process boundaries. A handle is not a durable write capability.
 
+Captured handles can be queried synchronously from any actor. Their document and
+generation do not change; internal lookup memos synchronize their own access.
+Reading or editing the live `Lexicon`, including acquiring its current root,
+remains isolated to `LexiconActor`.
+
 `lemma[id: absoluteID]` resolves an absolute `Lemma.ID` in that handle's immutable
 generation, including other roots of the same composed document. It returns
 `nil` for an unresolved ID. The result retains the same lexicon identity and

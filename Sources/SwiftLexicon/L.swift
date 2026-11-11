@@ -6,7 +6,7 @@ import Lexicon
 
 @LexiconActor open class L: Hashable, I {
 	nonisolated open class var localized: String { "" }
-	public let __: String
+	nonisolated public let __: String
 	nonisolated public required init(_ id: String) { __ = id }
 }
 
