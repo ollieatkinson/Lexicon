@@ -121,11 +121,15 @@ public struct Lemma: Hashable, CustomStringConvertible, Sendable {
 		})
 	}
 
+	/// Complete type identifiers in the same order as `type.keys`, without
+	/// materializing a sorted dictionary of handles.
+	public var typeIDs: [ID] {
+		guard let resolution = generation.resolve(id) else { return [] }
+		return generation.allTypeIDs(of: resolution)
+	}
+
 	public var type: Types {
-		guard let resolution = generation.resolve(id) else {
-			return [:]
-		}
-		return Types(uniqueKeysWithValues: generation.allTypeIDs(of: resolution).map {
+		Types(uniqueKeysWithValues: typeIDs.map {
 			(key: $0, value: generation.lemma($0))
 		})
 	}
