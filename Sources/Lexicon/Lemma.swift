@@ -40,6 +40,13 @@ public struct Lemma: Hashable, CustomStringConvertible, Sendable {
 	}
 
 	public var graphNode: Lexicon.Graph.Node? {
+		graphNode(at: id)
+	}
+
+	/// An explicit declaration in this handle's immutable generation, including
+	/// other roots. Returns nil for inherited placements and undeclared IDs;
+	/// does not follow aliases or materialize a resolved Lemma.
+	public func graphNode(at id: ID) -> Lexicon.Graph.Node? {
 		generation.rawNodes[id]
 	}
 

@@ -60,6 +60,13 @@ generation, including other roots of the same composed document. It returns
 revision even after the live `Lexicon` changes or is released. Existing unlabeled
 name/collection subscripts remain relative descendant traversal.
 
+`lemma.graphNode(at: absoluteID)` reads an explicit graph declaration from that
+same captured generation, including other roots. It does not resolve inherited
+placements or follow aliases: those require the handle lookup above. An alias's
+own declaration remains visible; inherited-only and undeclared IDs return `nil`.
+`lemma.graphNode` is the same query for the handle's own ID. These are read-only
+values, not write capabilities or observations of the live owner.
+
 `Lexicon.observe()` supplies the current selected-root `Lemma` immediately, then
 complete committed generations and changed root selections through `AsyncStream`.
 Registration and initial delivery share one `LexiconActor` turn; updates publish
